@@ -287,6 +287,114 @@ Requirements:
   getModelName(): string {
     return this.modelName
   }
+
+  /**
+   * Analyze an image or PDF using Gemini Vision API
+   */
+  async analyzeImageWithVision(options: {
+    image: { data: string; mimeType: string }
+    prompt: string
+  }): Promise<{ text: string; summary?: string; insights?: string[] }> {
+    if (!this.apiKey) {
+      throw new Error('Google Gemini API key not initialized. Set GOOGLE_GEMINI_API_KEY')
+    }
+
+    try {
+      // Use REST API v1 with vision capabilities
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent?key=${this.apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: options.prompt,
+                  },
+                  {
+                    inlineData: {
+                      mimeType: options.image.mimeType,
+                      data: options.image.data,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: response.statusText }))
+        throw new Error(error.error?.message || `API request failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No analysis available'
+
+      // Parse the response to extract summary and insights
+      const lines = text.split('\n').filter((line: string) => line.trim().length > 0)
+      const summary = lines[0] || text.substring(0, 200)
+      const insights = lines.slice(1).filter((line: string) => line.trim().length > 20)
+
+      return {
+        text,
+        summary,
+        insights: insights.length > 0 ? insights : undefined,
+      }
+    } catch (error) {
+      console.error('Gemini Vision API error:', error)
+      throw new Error(`Failed to analyze image: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Generate text using Gemini (for text document analysis)
+   */
+  async generateText(prompt: string): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error('Google Gemini API key not initialized. Set GOOGLE_GEMINI_API_KEY')
+    }
+
+    try {
+      // Use REST API v1
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent?key=${this.apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt,
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: response.statusText }))
+        throw new Error(error.error?.message || `API request failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated'
+    } catch (error) {
+      console.error('Gemini Text API error:', error)
+      throw new Error(`Failed to generate text: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
 }
 
 export const googleGeminiClient = new GoogleGeminiClient()

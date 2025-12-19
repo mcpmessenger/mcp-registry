@@ -416,6 +416,69 @@ export async function transcribeAudio(request: TranscribeAudioRequest): Promise<
 }
 
 /**
+ * Analyze a document using Gemini Vision API
+ */
+export interface AnalyzeDocumentRequest {
+  file: File
+  query?: string
+}
+
+export interface AnalyzeDocumentResponse {
+  success: boolean
+  analysis: {
+    text?: string
+    summary?: string
+    insights?: string[]
+    labels?: Array<{ description: string; score: number }>
+    error?: string
+  }
+}
+
+export async function analyzeDocument(request: AnalyzeDocumentRequest): Promise<AnalyzeDocumentResponse> {
+  const formData = new FormData()
+  formData.append('document', request.file)
+  
+  const url = `${API_BASE_URL}/api/documents/analyze${request.query ? `?query=${encodeURIComponent(request.query)}` : ''}`
+  console.log('Analyzing document at:', url)
+  console.log('File:', request.file.name, request.file.type, request.file.size, 'bytes')
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    })
+
+    console.log('Document analysis response status:', response.status, response.statusText)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      let error: any
+      try {
+        error = JSON.parse(errorText)
+      } catch {
+        error = { error: errorText || response.statusText }
+      }
+      
+      if (response.status === 404) {
+        throw new Error(`Document analysis endpoint not found. Make sure the backend is running on ${API_BASE_URL}`)
+      }
+      
+      throw new Error(error.error || error.message || `Document analysis failed: ${response.status} ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    console.log('Document analysis result:', result)
+    return result
+  } catch (error) {
+    console.error('Document analysis fetch error:', error)
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error(`Cannot connect to backend at ${API_BASE_URL}. Make sure the backend server is running.`)
+    }
+    throw error
+  }
+}
+
+/**
  * Health check
  */
 export async function healthCheck(): Promise<{ status: string; timestamp: string; environment: string }> {

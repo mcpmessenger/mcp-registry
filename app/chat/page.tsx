@@ -9,7 +9,7 @@ import { VoiceInputDialog } from "@/components/voice-input-dialog"
 import { FileUploadDialog } from "@/components/file-upload-dialog"
 import { GlazyrCaptureDialog } from "@/components/glazyr-capture-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { getServers, invokeMCPTool, generateSVG, getJobStatus, createJobProgressStream } from "@/lib/api"
+import { getServers, invokeMCPTool, generateSVG, getJobStatus, createJobProgressStream, analyzeDocument } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
 import { useToast } from "@/hooks/use-toast"
 
@@ -410,24 +410,89 @@ export default function ChatPage() {
             variant: "destructive",
           })
         }
+      } else if (attachment && (attachment.type === "image" || attachment.type === "glazyr")) {
+        // Handle image/glazyr attachments - analyze with vision API
+        try {
+          // If attachment has a URL (data URL), convert to File for analysis
+          if (attachment.url) {
+            const loadingMessage: ChatMessage = {
+              id: `loading-${Date.now()}`,
+              role: "assistant",
+              content: `Analyzing ${attachment.name || 'image'}...`,
+              timestamp: new Date(),
+              agentName: "Vision Agent",
+            }
+            setMessages((prev) => [...prev, loadingMessage])
+
+            // Convert data URL to File if needed
+            let file: File
+            if (attachment.url.startsWith('data:')) {
+              const response = await fetch(attachment.url)
+              const blob = await response.blob()
+              file = new File([blob], attachment.name || 'image.png', { type: blob.type })
+            } else {
+              // If it's already a URL, fetch it
+              const response = await fetch(attachment.url)
+              const blob = await response.blob()
+              file = new File([blob], attachment.name || 'image.png', { type: blob.type })
+            }
+
+            const result = await analyzeDocument({
+              file,
+              query: content || "What do you see in this image? Provide a detailed analysis.",
+            })
+
+            const analysisText = result.analysis.summary || result.analysis.text || 'Analysis completed.'
+            const insights = result.analysis.insights 
+              ? `\n\nKey Insights:\n${result.analysis.insights.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`
+              : ''
+
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === loadingMessage.id
+                  ? {
+                      ...msg,
+                      content: analysisText + insights,
+                    }
+                  : msg
+              )
+            )
+            setIsLoading(false)
+          } else {
+            // Fallback if no URL
+            throw new Error('No image data available for analysis')
+          }
+        } catch (error) {
+          console.error('Image analysis error:', error)
+          const errorMessage: ChatMessage = {
+            id: `error-${Date.now()}`,
+            role: "assistant",
+            content: `Sorry, I encountered an error analyzing the image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            timestamp: new Date(),
+            agentName: "Vision Agent",
+          }
+          setMessages((prev) => [...prev, errorMessage])
+          setIsLoading(false)
+          toast({
+            title: "Analysis failed",
+            description: error instanceof Error ? error.message : "Unknown error",
+            variant: "destructive",
+          })
+        }
       } else {
-        // Handle other requests (fallback to simulated response for now)
+        // Handle other requests (fallback to generic response)
         await new Promise((resolve) => setTimeout(resolve, 1000))
 
         const agentName = isRouter
-          ? attachment?.type === "image" || attachment?.type === "glazyr"
-            ? "Vision Agent"
-            : attachment?.type === "document"
-              ? "Document Processing"
-              : "Data Analysis Agent"
+          ? attachment?.type === "document"
+            ? "Document Processing"
+            : "Data Analysis Agent"
           : selectedAgent?.name
 
         const assistantMessage: ChatMessage = {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          content: attachment
-            ? `I've analyzed the ${attachment.type} you provided. Here are my findings: The content shows comprehensive data patterns with key insights about performance metrics and trends. Would you like me to elaborate on any specific aspect?`
-            : `I understand you asked: "${content}". Let me help you with that. Based on my analysis, here are the key points you should consider...`,
+          content: `I understand you asked: "${content}". Let me help you with that. Based on my analysis, here are the key points you should consider...`,
           timestamp: new Date(),
           agentName: isRouter ? agentName : undefined,
         }
@@ -458,14 +523,76 @@ export default function ChatPage() {
     setFileDialogOpen(true)
   }
 
-  const handleFileSelected = (file: File, preview?: string) => {
+  const handleFileSelected = async (file: File, preview?: string) => {
     const attachment: ChatMessage["contextAttachment"] = {
       type: file.type.startsWith("image/") ? "image" : "document",
       name: file.name,
       preview,
+      url: preview, // Use preview URL for images
     }
 
-    handleSendMessage(`Can you analyze this ${attachment.type}?`, attachment)
+    // Add user message with attachment
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: `Can you analyze this ${attachment.type}?`,
+      timestamp: new Date(),
+      contextAttachment: attachment,
+    }
+    setMessages((prev) => [...prev, userMessage])
+    setIsLoading(true)
+
+    try {
+      // Add loading message
+      const loadingMessage: ChatMessage = {
+        id: `loading-${Date.now()}`,
+        role: "assistant",
+        content: `Analyzing ${file.name}...`,
+        timestamp: new Date(),
+        agentName: attachment.type === "image" || attachment.type === "glazyr" ? "Vision Agent" : "Document Processing",
+      }
+      setMessages((prev) => [...prev, loadingMessage])
+
+      // Analyze the document using backend
+      const result = await analyzeDocument({
+        file,
+        query: `Can you analyze this ${attachment.type} and provide key insights?`,
+      })
+
+      // Update loading message with analysis results
+      const analysisText = result.analysis.summary || result.analysis.text || 'Analysis completed.'
+      const insights = result.analysis.insights 
+        ? `\n\nKey Insights:\n${result.analysis.insights.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`
+        : ''
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === loadingMessage.id
+            ? {
+                ...msg,
+                content: analysisText + insights,
+              }
+            : msg
+        )
+      )
+      setIsLoading(false)
+    } catch (error) {
+      console.error('Document analysis error:', error)
+      const errorMessage: ChatMessage = {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: `Sorry, I encountered an error analyzing the document: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+        agentName: "Document Processing",
+      }
+      setMessages((prev) => [...prev, errorMessage])
+      setIsLoading(false)
+      toast({
+        title: "Analysis failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleGlazyrCapture = () => {

@@ -15,6 +15,7 @@ import v0InvokeRouter from './routes/v0/invoke'
 import mcpToolsRouter from './routes/mcp/tools'
 import streamsRouter from './routes/streams/jobs'
 import audioRouter from './routes/audio/transcribe'
+import documentsRouter from './routes/documents/analyze'
 import debugRouter from './routes/debug'
 
 const app = express()
@@ -46,6 +47,7 @@ app.use('/v0', v0InvokeRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/streams', streamsRouter)
 app.use('/api/audio', audioRouter)
+app.use('/api/documents', documentsRouter)
 app.use('/api/debug', debugRouter)
 
 // 404 handler
@@ -116,6 +118,7 @@ async function startServer() {
       console.log(`🛠️  MCP Tools: http://localhost:${PORT}/api/mcp/tools`)
       console.log(`📊 Streams: http://localhost:${PORT}/api/streams/jobs/:jobId`)
       console.log(`🎤 Audio Transcription: POST http://localhost:${PORT}/api/audio/transcribe`)
+      console.log(`📄 Document Analysis: POST http://localhost:${PORT}/api/documents/analyze`)
       console.log(`\n🔑 API Keys Status:`)
       console.log(`   Gemini API: ${env.google.geminiApiKey ? '✅ Set' : '❌ Not set'}`)
       console.log(`   Vision API: ${env.google.visionApiKey ? '✅ Set' : '⚠️  Not set (optional)'}`)
