@@ -6,8 +6,16 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
+// Job status enum
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 // Model Context Protocol (MCP) Service Registry
@@ -20,4 +28,69 @@ model Service {
   owner       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// MCP Server Registry Entry (enhanced version for MCP v0.1 spec)
+model McpServer {
+  id              String   @id @default(cuid())
+  serverId        String   @unique // e.g., "io.github.mcpmessenger/mcp-server"
+  name            String
+  description     String?
+  version         String   @default("v0.1")
+  command         String?  // Execution command
+  args            String?  // JSON array of arguments
+  env             String?  // JSON object of environment variables
+  manifest        String?  // JSON string of full MCP manifest
+  capabilities    String?  // JSON array of capabilities
+  tools           String?  // JSON array of tool definitions
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  designJobs      DesignJob[]
+  
+  @@index([serverId])
+  @@index([isActive])
+}
+
+// Design Job for tracking SVG generation requests
+model DesignJob {
+  id              String    @id @default(cuid())
+  status          JobStatus @default(PENDING)
+  description     String    // Natural language description
+  refinementNotes String?   // Iterative refinement instructions
+  progress        Int       @default(0) // 0-100 percentage
+  progressMessage String?   // Current status message
+  errorMessage    String?   // Error details if failed
+  serverId        String?   // Associated MCP server
+  server          McpServer? @relation(fields: [serverId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  completedAt     DateTime?
+  
+  // Relations
+  assets          Asset[]
+  
+  @@index([status])
+  @@index([createdAt])
+  @@index([serverId])
+}
+
+// Generated assets (SVGs, images, etc.)
+model Asset {
+  id              String    @id @default(cuid())
+  jobId           String
+  job             DesignJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  assetType       String    // "svg", "png", "jpg", etc.
+  content         String?   // SVG content or file path
+  filePath        String?   // Path to stored file
+  url             String?   // Public URL if hosted
+  version         Int       @default(1) // For tracking iterations
+  isLatest        Boolean   @default(true)
+  metadata        String?   // JSON string for additional metadata
+  createdAt       DateTime  @default(now())
+  
+  @@index([jobId])
+  @@index([isLatest])
 }

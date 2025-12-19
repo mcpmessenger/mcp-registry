@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { mockAgents } from "@/lib/mock-data"
+import { useState, useEffect } from "react"
+import { getServers } from "@/lib/api"
+import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPAgent } from "@/types/agent"
 import { AgentCard } from "@/components/agent-card"
 import { AgentDetailsDialog } from "@/components/agent-details-dialog"
@@ -14,7 +15,9 @@ import { Plus, Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function RegistryPage() {
-  const [agents, setAgents] = useState<MCPAgent[]>(mockAgents)
+  const [agents, setAgents] = useState<MCPAgent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [selectedAgent, setSelectedAgent] = useState<MCPAgent | null>(null)
@@ -24,6 +27,48 @@ export default function RegistryPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deletingAgent, setDeletingAgent] = useState<MCPAgent | null>(null)
   const { toast } = useToast()
+
+  // Fetch servers from backend API
+  useEffect(() => {
+    let isMounted = true
+    
+    async function fetchServers() {
+      try {
+        setIsLoading(true)
+        setError(null)
+        console.log('Fetching servers from backend...')
+        const servers = await getServers()
+        console.log('Received servers:', servers)
+        
+        if (isMounted) {
+          const transformedAgents = transformServersToAgents(servers)
+          setAgents(transformedAgents)
+          console.log('Transformed agents:', transformedAgents)
+        }
+      } catch (err) {
+        if (isMounted) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to fetch servers'
+          console.error('Error fetching servers:', err)
+          setError(errorMessage)
+          toast({
+            title: "Error loading servers",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    fetchServers()
+    
+    return () => {
+      isMounted = false
+    }
+  }, [toast])
 
   const filteredAgents = agents.filter((agent) => {
     const matchesSearch =
@@ -170,22 +215,41 @@ export default function RegistryPage() {
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredAgents.map((agent) => (
-          <AgentCard
-            key={agent.id}
-            agent={agent}
-            onViewDetails={handleViewDetails}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
-
-      {filteredAgents.length === 0 && (
+      {isLoading && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No agents found matching your filters.</p>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+          <p className="text-muted-foreground">Loading servers from backend...</p>
+          <p className="text-muted-foreground text-sm mt-2">If this takes too long, check that the backend is running on http://localhost:3001</p>
         </div>
+      )}
+
+      {error && (
+        <div className="text-center py-12">
+          <p className="text-destructive">Error: {error}</p>
+          <p className="text-muted-foreground text-sm mt-2">Make sure the backend server is running on http://localhost:3001</p>
+        </div>
+      )}
+
+      {!isLoading && !error && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredAgents.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onViewDetails={handleViewDetails}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+
+          {filteredAgents.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No agents found matching your filters.</p>
+            </div>
+          )}
+        </>
       )}
 
       <AgentDetailsDialog agent={selectedAgent} open={detailsOpen} onOpenChange={setDetailsOpen} />
