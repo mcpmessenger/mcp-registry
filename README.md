@@ -65,29 +65,34 @@ mcp-registry/
 
 ### Frontend Setup
 
-The frontend is a Next.js application located in the root directory.
+The frontend is a Next.js application located in the `mcp-registry-main/` directory.
 
-1. **Install dependencies:**
+1. **Navigate to the frontend directory:**
+   ```bash
+   cd mcp-registry-main
+   ```
+
+2. **Install dependencies:**
    ```bash
    pnpm install
    ```
 
-2. **Run the development server:**
+3. **Run the development server:**
    ```bash
    pnpm dev
    ```
 
-3. **Build for production:**
+4. **Build for production:**
    ```bash
    pnpm build
    ```
 
-4. **Start production server:**
+5. **Start production server:**
    ```bash
    pnpm start
    ```
 
-5. **Lint the code:**
+6. **Lint the code:**
    ```bash
    pnpm lint
    ```
@@ -157,6 +162,7 @@ You can run both services simultaneously by opening two terminal windows:
 
 **Terminal 1 - Frontend:**
 ```bash
+cd mcp-registry-main
 pnpm dev
 ```
 
