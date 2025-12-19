@@ -28,6 +28,9 @@ The MCP Registry is a platform designed to help developers discover, register, a
 - **Service Management**: Create, update, and delete service entries
 - **Service Details**: View comprehensive information about each service
 - **Chat Interface**: Interact with MCP agents through a chat interface
+- **Voice Transcription**: Real-time voice-to-text using OpenAI Whisper API
+- **Document Analysis**: AI-powered analysis of PDFs, images, and text files using Google Gemini Vision
+- **Screen Capture**: Capture and analyze screen content using browser APIs
 - **SVG Generation**: Generate SVG graphics from natural language descriptions using Google Gemini AI
 - **Visual SVG Rendering**: View generated SVGs directly in the chat with code toggle
 - **Real-time Progress**: Server-Sent Events (SSE) for live job progress updates
@@ -123,6 +126,18 @@ The backend is an Express.js API with Prisma ORM, located in the `backend/` dire
    DATABASE_URL="file:./dev.db"
    PORT=3001
    NODE_ENV=development
+   
+   # Google Gemini API (required for document analysis and SVG generation)
+   GEMINI_API_KEY="your-gemini-api-key"
+   
+   # Google Vision API (optional, for enhanced image analysis)
+   GOOGLE_VISION_API_KEY="your-vision-api-key"
+   
+   # OpenAI API (required for Whisper voice transcription)
+   OPENAI_API_KEY="your-openai-api-key"
+   
+   # Kafka Configuration (for event-driven architecture)
+   KAFKA_BROKERS="localhost:9092"
    ```
 
 4. **Run Prisma migrations:**
@@ -146,6 +161,27 @@ The backend is an Express.js API with Prisma ORM, located in the `backend/` dire
    ```
 
 The backend API will be available at `http://localhost:3001` (or the port specified in your `.env` file)
+
+### API Endpoints
+
+The backend provides the following key endpoints:
+
+- **Registry API**:
+  - `GET /v0/servers` - List all registered MCP servers
+  - `POST /v0/publish` - Register a new MCP server
+  - `PUT /v0/servers/:serverId` - Update an existing server
+  - `DELETE /v0/servers/:serverId` - Delete a server
+  - `POST /v0/invoke` - Invoke an MCP tool via backend proxy
+
+- **Audio Transcription**:
+  - `POST /api/audio/transcribe` - Transcribe audio files using Whisper
+
+- **Document Analysis**:
+  - `POST /api/documents/analyze` - Analyze documents (PDFs, images, text) using Gemini Vision
+
+- **Streaming & WebSocket**:
+  - `GET /api/streams/jobs/:jobId` - Get job status via SSE
+  - `ws://localhost:3001/ws` - WebSocket for real-time updates
 
 ### Event-Driven Architecture Components
 
@@ -228,11 +264,14 @@ Make sure to:
 - **Prisma** - ORM and database toolkit
 - **TypeScript** - Type safety
 - **PostgreSQL** - Database (production), SQLite (development)
-- **Google Gemini API** - AI-powered SVG generation
+- **Google Gemini API** - AI-powered SVG generation and document analysis
 - **Google Vision API** - Image analysis capabilities
+- **OpenAI Whisper API** - Voice-to-text transcription
+- **Apache Kafka** - Event-driven architecture for async processing
 - **Server-Sent Events (SSE)** - Real-time progress streaming
 - **WebSocket** - Bidirectional communication
 - **ts-node** - TypeScript execution
+- **Multer** - File upload handling
 
 ## 🤝 Contributing
 

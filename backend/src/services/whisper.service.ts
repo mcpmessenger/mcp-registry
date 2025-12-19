@@ -27,27 +27,38 @@ export class WhisperService {
 
     try {
       // OpenAI SDK accepts File, Blob, Buffer, or ReadStream
-      // For Node.js, we can use the buffer directly with proper metadata
-      let file: any = audioBuffer
+      // For Node.js, create a File-like object that works with the SDK
+      let file: any
       
       // Try to use Node.js File API if available (Node 18+)
       try {
         const { File: NodeFile } = await import('node:buffer')
-        // Convert Buffer to Uint8Array for File constructor compatibility
-        const uint8Array = new Uint8Array(audioBuffer)
-        file = new NodeFile([uint8Array], 'audio.webm', {
+        // Convert Buffer to a proper ArrayBuffer first, then to Uint8Array
+        const arrayBuffer = audioBuffer.buffer instanceof ArrayBuffer
+          ? audioBuffer.buffer.slice(audioBuffer.byteOffset, audioBuffer.byteOffset + audioBuffer.byteLength)
+          : new ArrayBuffer(audioBuffer.length)
+        
+        // If we had to create a new ArrayBuffer, copy the data
+        if (!(audioBuffer.buffer instanceof ArrayBuffer)) {
+          const view = new Uint8Array(arrayBuffer)
+          view.set(audioBuffer)
+        } else {
+          // Use the sliced buffer
+          const view = new Uint8Array(arrayBuffer)
+          view.set(new Uint8Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength))
+        }
+        
+        const uint8Array = new Uint8Array(arrayBuffer)
+        file = new NodeFile([uint8Array as any], 'audio.webm', {
           type: 'audio/webm',
         })
       } catch {
         // Fallback: create a file-like object with required properties
+        // OpenAI SDK should accept Buffer directly
         file = Object.assign(audioBuffer, {
           name: 'audio.webm',
           type: 'audio/webm',
-          stream: () => {
-            const { Readable } = require('stream')
-            return Readable.from([audioBuffer])
-          },
-        })
+        }) as any
       }
 
       const transcription = await this.client.audio.transcriptions.create({
@@ -90,28 +101,38 @@ export class WhisperService {
 
     try {
       // OpenAI SDK accepts File, Blob, Buffer, or ReadStream
-      // For Node.js, we can use the buffer directly with proper metadata
-      // Create a File-like object that the SDK can handle
-      let file: any = audioBuffer
+      // For Node.js, create a File-like object that works with the SDK
+      let file: any
       
       // Try to use Node.js File API if available (Node 18+)
       try {
         const { File: NodeFile } = await import('node:buffer')
-        // Convert Buffer to Uint8Array for File constructor compatibility
-        const uint8Array = new Uint8Array(audioBuffer)
-        file = new NodeFile([uint8Array], 'audio.webm', {
+        // Convert Buffer to a proper ArrayBuffer first, then to Uint8Array
+        const arrayBuffer = audioBuffer.buffer instanceof ArrayBuffer
+          ? audioBuffer.buffer.slice(audioBuffer.byteOffset, audioBuffer.byteOffset + audioBuffer.byteLength)
+          : new ArrayBuffer(audioBuffer.length)
+        
+        // If we had to create a new ArrayBuffer, copy the data
+        if (!(audioBuffer.buffer instanceof ArrayBuffer)) {
+          const view = new Uint8Array(arrayBuffer)
+          view.set(audioBuffer)
+        } else {
+          // Use the sliced buffer
+          const view = new Uint8Array(arrayBuffer)
+          view.set(new Uint8Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength))
+        }
+        
+        const uint8Array = new Uint8Array(arrayBuffer)
+        file = new NodeFile([uint8Array as any], 'audio.webm', {
           type: 'audio/webm',
         })
       } catch {
         // Fallback: create a file-like object with required properties
+        // OpenAI SDK should accept Buffer directly
         file = Object.assign(audioBuffer, {
           name: 'audio.webm',
           type: 'audio/webm',
-          stream: () => {
-            const { Readable } = require('stream')
-            return Readable.from([audioBuffer])
-          },
-        })
+        }) as any
       }
 
       const transcription = await this.client.audio.transcriptions.create({
