@@ -217,6 +217,24 @@ Instead of a generic 404, provide:
 ### Fix 5: Model Name Validation
 Validate model names at initialization time and provide immediate feedback if a model is unavailable.
 
+## Implementation Workaround (Applied)
+
+We have implemented a comprehensive workaround in `mcpmessenger/mcp-registry` that:
+
+1. **Uses REST API v1 Endpoint**: Bypasses SDK entirely and calls the stable v1 API directly
+   - Endpoint: `https://generativelanguage.googleapis.com/v1/models/{model}:generateContent`
+   - Authentication: `x-goog-api-key` header
+   - This approach is provider-agnostic and works reliably
+
+2. **Multi-Tier Fallback Strategy**:
+   - Tier 1: Attempts new `@google/genai` SDK if available
+   - Tier 2: Falls back to REST API v1 (most reliable)
+   - Tier 3: Tries alternative model if primary fails
+
+3. **Version-Specific Model Names**: Uses specific version tags (e.g., `gemini-1.5-flash-001`) rather than generic aliases, as v1beta is sensitive to version specificity.
+
+This workaround ensures the application continues to function while waiting for Google to resolve the SDK compatibility issues.
+
 ## Workarounds
 
 ### Workaround 1: Use REST API Directly

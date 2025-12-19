@@ -5,7 +5,7 @@ Backend API server for the MCP Registry platform, implementing the Core Registry
 ## Features
 
 - **Core Registry v0.1 API** - `/v0/servers` endpoint for discovering MCP servers
-- **MCP Tools Service** - Generate and refine SVGs using Google Gemini
+- **MCP Tools Service** - Generate and refine SVGs using Google Gemini with multi-tier fallback strategy
 - **Job Tracking** - Persistent job status tracking with progress updates
 - **SSE Streaming** - Server-Sent Events for real-time progress updates
 - **WebSocket Support** - Bidirectional communication for interactive refinement
@@ -35,9 +35,13 @@ Backend API server for the MCP Registry platform, implementing the Core Registry
    CORS_ORIGIN=http://localhost:3000
    GOOGLE_VISION_API_KEY=your_google_vision_api_key_here
    GOOGLE_GEMINI_API_KEY=your_google_gemini_api_key_here
+   GEMINI_MODEL_NAME=gemini-1.5-flash-001
    ```
 
-   **Note:** For Google Vision API, you may need to use service account credentials instead of an API key. Set `GOOGLE_APPLICATION_CREDENTIALS` to the path of your service account JSON file.
+   **Note:** 
+   - For Google Vision API, you may need to use service account credentials instead of an API key. Set `GOOGLE_APPLICATION_CREDENTIALS` to the path of your service account JSON file.
+   - `GEMINI_MODEL_NAME` is optional. Use specific version tags (e.g., `gemini-1.5-flash-001`) for better compatibility. Default: `gemini-1.5-flash-001`
+   - The backend uses a multi-tier fallback strategy: tries new `@google/genai` SDK if available, falls back to REST API v1 endpoint (most reliable), and can retry with alternative models if needed.
 
 3. **Run database migrations:**
    ```bash

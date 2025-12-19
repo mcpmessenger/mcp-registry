@@ -219,7 +219,12 @@ export default function RegistryPage() {
         <div className="text-center py-12">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
           <p className="text-muted-foreground">Loading servers from backend...</p>
-          <p className="text-muted-foreground text-sm mt-2">If this takes too long, check that the backend is running on http://localhost:3001</p>
+          <p className="text-muted-foreground text-sm mt-2">
+            If this takes too long, check:
+            <br />1. Backend is running on http://localhost:3001
+            <br />2. Open browser console (F12) for errors
+            <br />3. Check Network tab for failed requests
+          </p>
         </div>
       )}
 

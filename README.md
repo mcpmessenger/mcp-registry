@@ -28,6 +28,10 @@ The MCP Registry is a platform designed to help developers discover, register, a
 - **Service Management**: Create, update, and delete service entries
 - **Service Details**: View comprehensive information about each service
 - **Chat Interface**: Interact with MCP agents through a chat interface
+- **SVG Generation**: Generate SVG graphics from natural language descriptions using Google Gemini AI
+- **Visual SVG Rendering**: View generated SVGs directly in the chat with code toggle
+- **Real-time Progress**: Server-Sent Events (SSE) for live job progress updates
+- **Multi-Tier Fallback**: Robust API fallback strategy for reliable AI generation
 - **Modern UI**: Built with Next.js and Tailwind CSS for a responsive experience
 
 ## 📁 Repository Structure
@@ -214,7 +218,11 @@ Make sure to:
 - **Express.js 5** - Web framework
 - **Prisma** - ORM and database toolkit
 - **TypeScript** - Type safety
-- **SQLite** - Database (development)
+- **PostgreSQL** - Database (production), SQLite (development)
+- **Google Gemini API** - AI-powered SVG generation
+- **Google Vision API** - Image analysis capabilities
+- **Server-Sent Events (SSE)** - Real-time progress streaming
+- **WebSocket** - Bidirectional communication
 - **ts-node** - TypeScript execution
 
 ## 🤝 Contributing

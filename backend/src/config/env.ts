@@ -16,6 +16,7 @@ interface EnvConfig {
   google: {
     visionApiKey: string
     geminiApiKey: string
+    geminiModelName?: string
   }
 }
 
@@ -40,6 +41,8 @@ export const env: EnvConfig = {
     // Use separate keys if provided, otherwise fall back to a single key
     visionApiKey: process.env.GOOGLE_VISION_API_KEY || process.env.GOOGLE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
     geminiApiKey: process.env.GOOGLE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
+    // Model name with specific version for better compatibility (e.g., gemini-1.5-flash-001)
+    geminiModelName: process.env.GEMINI_MODEL_NAME,
   },
 }
 

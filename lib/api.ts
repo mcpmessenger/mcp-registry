@@ -104,20 +104,26 @@ export async function getServers(): Promise<MCPServer[]> {
   
   const controller = new AbortController()
   const timeoutId = setTimeout(() => {
-    console.warn('Request timeout after 10 seconds')
+    console.warn('Request timeout after 5 seconds')
     controller.abort()
-  }, 10000) // 10 second timeout
+  }, 5000) // 5 second timeout (reduced from 10)
   
   try {
     const response = await fetch(url, {
       signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // Add cache control to prevent hanging
+      cache: 'no-cache',
     })
     
     clearTimeout(timeoutId)
     console.log('Response status:', response.status, response.statusText)
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch servers: ${response.statusText}`)
+      const errorText = await response.text()
+      throw new Error(`Failed to fetch servers: ${response.status} ${response.statusText} - ${errorText}`)
     }
     
     const data = await response.json()
@@ -128,6 +134,9 @@ export async function getServers(): Promise<MCPServer[]> {
     console.error('Fetch error:', error)
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('Request timeout: Backend server may not be responding. Check that http://localhost:3001 is running.')
+    }
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error: Cannot connect to backend. Make sure http://localhost:3001 is running.')
     }
     throw error
   }

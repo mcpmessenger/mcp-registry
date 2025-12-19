@@ -30,6 +30,9 @@
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
+  "optionalDependencies": {
+    "@google/genai": "^1.0.0"
+  },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
