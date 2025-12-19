@@ -4,18 +4,48 @@ import type { MCPServer, MCPTool } from '../types/mcp'
 export class RegistryService {
   /**
    * Get all available MCP servers in v0.1 format
+   * Supports filtering and searching as per MCP v0.1 specification
    */
-  async getServers(): Promise<MCPServer[]> {
+  async getServers(options?: {
+    search?: string
+    capability?: string
+  }): Promise<MCPServer[]> {
+    const where: any = {
+      isActive: true,
+    }
+
+    // Add search filter if provided
+    if (options?.search) {
+      const searchTerm = options.search
+      // Use case-insensitive mode for PostgreSQL (schema default), fallback for SQLite
+      where.OR = [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { description: { contains: searchTerm, mode: 'insensitive' } },
+        { serverId: { contains: searchTerm, mode: 'insensitive' } },
+      ]
+    }
+
     const servers = await prisma.mcpServer.findMany({
-      where: {
-        isActive: true,
-      },
+      where,
       orderBy: {
         createdAt: 'desc',
       },
     })
 
-    return servers.map((server) => this.transformToMCPFormat(server))
+    // Transform and filter by capability if provided (post-query filter for JSON fields)
+    let transformedServers = servers.map((server) => this.transformToMCPFormat(server))
+
+    // Filter by capability if provided (capabilities is stored as JSON string)
+    if (options?.capability) {
+      transformedServers = transformedServers.filter((server) => {
+        if (!server.capabilities || !Array.isArray(server.capabilities)) {
+          return false
+        }
+        return server.capabilities.includes(options.capability!)
+      })
+    }
+
+    return transformedServers
   }
 
   /**

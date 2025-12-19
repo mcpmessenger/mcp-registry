@@ -46,7 +46,7 @@ function Test-Endpoint {
 Test-Endpoint -Name "Health Check" -Url "$baseUrl/health"
 
 # Test 2: List All Servers
-$serversResponse = Test-Endpoint -Name "List All Servers" -Url "$baseUrl/v0/servers"
+$serversResponse = Test-Endpoint -Name "List All Servers" -Url "$baseUrl/v0.1/servers"
 if ($serversResponse) {
     $servers = $serversResponse.Content | ConvertFrom-Json
     Write-Host "  Found $($servers.Count) server(s)" -ForegroundColor Cyan
@@ -54,7 +54,7 @@ if ($serversResponse) {
 
 # Test 3: Get Specific Server
 $encodedId = [System.Web.HttpUtility]::UrlEncode("io.github.mcpmessenger/mcp-server")
-Test-Endpoint -Name "Get Specific Server" -Url "$baseUrl/v0/servers/$encodedId"
+Test-Endpoint -Name "Get Specific Server" -Url "$baseUrl/v0.1/servers/$encodedId"
 
 # Test 4: SVG Generation (may fail if API keys not set)
 Write-Host ""

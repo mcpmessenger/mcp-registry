@@ -4,6 +4,14 @@ All notable changes to the MCP Registry project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **API Version Migration**: Updated all API endpoints from `/v0/` to `/v0.1/` to align with official MCP Registry specification
+  - All registry endpoints now use `/v0.1/` prefix (e.g., `/v0.1/servers`, `/v0.1/publish`)
+  - Added query parameter support for server discovery: `?search=<term>` and `?capability=<name>`
+  - Enhanced CORS configuration with documentation references to official guide
+  - Updated all frontend API calls to use new v0.1 endpoints
+  - See [MIGRATION_V0.1.md](./MIGRATION_V0.1.md) for migration details
+
 ### Added
 - **Voice Transcription**: Real-time voice-to-text transcription using OpenAI Whisper API
   - Browser-based audio recording with MediaRecorder API
@@ -20,9 +28,9 @@ All notable changes to the MCP Registry project will be documented in this file.
   - Captured images can be analyzed via document analysis
   - Visual display in chat with screen capture badge
 - **Agent Persistence**: Fixed agent registration and persistence
-  - Agents now properly save to database via `/v0/publish` endpoint
+  - Agents now properly save to database via `/v0.1/publish` endpoint
   - Endpoint extraction from metadata and manifest
-  - Backend proxy for MCP tool invocation (`POST /v0/invoke`)
+  - Backend proxy for MCP tool invocation (`POST /v0.1/invoke`)
 - **SVG Visual Rendering in Chat**: SVGs are now rendered visually in the chat interface with a toggle to view raw code
 - **Multi-Tier Fallback Strategy**: Implemented robust fallback system for Gemini API:
   - Tier 1: New `@google/genai` SDK (optional)

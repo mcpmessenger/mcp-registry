@@ -41,9 +41,9 @@ app.get('/health', (req, res) => {
   })
 })
 
-// API Routes
-app.use('/v0', v0ServersRouter)
-app.use('/v0', v0InvokeRouter)
+// API Routes - MCP v0.1 specification
+app.use('/v0.1', v0ServersRouter)
+app.use('/v0.1', v0InvokeRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/streams', streamsRouter)
 app.use('/api/audio', audioRouter)
@@ -113,8 +113,8 @@ async function startServer() {
       console.log(`📡 Kafka Brokers: ${env.kafka.brokers.join(', ')}`)
       console.log(`📡 Kafka Topics: ${env.kafka.topics.designRequests}, ${env.kafka.topics.designReady}`)
       console.log(`🔌 WebSocket: ws://localhost:${PORT}/ws`)
-      console.log(`📋 Registry API: http://localhost:${PORT}/v0/servers`)
-      console.log(`📤 Publish API: POST http://localhost:${PORT}/v0/publish`)
+      console.log(`📋 Registry API: http://localhost:${PORT}/v0.1/servers`)
+      console.log(`📤 Publish API: POST http://localhost:${PORT}/v0.1/publish`)
       console.log(`🛠️  MCP Tools: http://localhost:${PORT}/api/mcp/tools`)
       console.log(`📊 Streams: http://localhost:${PORT}/api/streams/jobs/:jobId`)
       console.log(`🎤 Audio Transcription: POST http://localhost:${PORT}/api/audio/transcribe`)

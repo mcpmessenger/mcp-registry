@@ -12,7 +12,7 @@ const invokeToolSchema = z.object({
 })
 
 /**
- * POST /v0/invoke
+ * POST /v0.1/invoke
  * Invoke a tool on a registered MCP server
  * This acts as a proxy to handle CORS and provide a unified interface
  */

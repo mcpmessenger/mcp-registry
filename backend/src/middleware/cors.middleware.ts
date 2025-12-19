@@ -2,7 +2,13 @@ import cors from 'cors'
 import { env } from '../config/env'
 
 /**
- * CORS configuration for Vercel frontend
+ * CORS configuration for MCP Registry API
+ * 
+ * Per MCP v0.1 specification, browser-based tools need CORS support to fetch
+ * registry metadata from different domains. This configuration ensures proper
+ * cross-origin resource sharing for the registry API endpoints.
+ * 
+ * Reference: Official MCP Registry Developer Guide
  */
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
@@ -18,7 +24,7 @@ export const corsMiddleware = cors({
       // Add production frontend URL when available
     ]
 
-    // In development, allow all origins
+    // In development, allow all origins (per MCP spec recommendation for browser tools)
     if (env.server.nodeEnv === 'development') {
       return callback(null, true)
     }
@@ -32,6 +38,6 @@ export const corsMiddleware = cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Id'],
   exposedHeaders: ['Content-Type', 'X-Total-Count'],
 })

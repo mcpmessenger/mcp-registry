@@ -97,9 +97,21 @@ export interface JobResponse {
 
 /**
  * Fetch all available MCP servers
+ * Supports query parameters for filtering and searching (MCP v0.1 specification)
  */
-export async function getServers(): Promise<MCPServer[]> {
-  const url = `${API_BASE_URL}/v0/servers`
+export async function getServers(options?: {
+  search?: string
+  capability?: string
+}): Promise<MCPServer[]> {
+  const params = new URLSearchParams()
+  if (options?.search) {
+    params.append('search', options.search)
+  }
+  if (options?.capability) {
+    params.append('capability', options.capability)
+  }
+  const queryString = params.toString()
+  const url = `${API_BASE_URL}/v0.1/servers${queryString ? `?${queryString}` : ''}`
   console.log('Fetching from:', url)
   
   const controller = new AbortController()
@@ -246,7 +258,7 @@ export interface PublishServerResponse {
 }
 
 export async function publishServer(request: PublishServerRequest): Promise<PublishServerResponse> {
-  const response = await fetch(`${API_BASE_URL}/v0/publish`, {
+  const response = await fetch(`${API_BASE_URL}/v0.1/publish`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -267,7 +279,7 @@ export async function publishServer(request: PublishServerRequest): Promise<Publ
  */
 export async function updateServer(serverId: string, request: Partial<PublishServerRequest>): Promise<PublishServerResponse> {
   const encodedId = encodeURIComponent(serverId)
-  const response = await fetch(`${API_BASE_URL}/v0/servers/${encodedId}`, {
+  const response = await fetch(`${API_BASE_URL}/v0.1/servers/${encodedId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -300,7 +312,7 @@ export async function updateServer(serverId: string, request: Partial<PublishSer
  */
 export async function deleteServer(serverId: string): Promise<{ success: boolean; message: string }> {
   const encodedId = encodeURIComponent(serverId)
-  const response = await fetch(`${API_BASE_URL}/v0/servers/${encodedId}`, {
+  const response = await fetch(`${API_BASE_URL}/v0.1/servers/${encodedId}`, {
     method: 'DELETE',
   })
   
@@ -334,7 +346,7 @@ export interface InvokeMCPToolResponse {
 
 export async function invokeMCPTool(request: InvokeMCPToolRequest): Promise<InvokeMCPToolResponse> {
   // Use backend proxy endpoint to avoid CORS and handle different MCP server types
-  const response = await fetch(`${API_BASE_URL}/v0/invoke`, {
+  const response = await fetch(`${API_BASE_URL}/v0.1/invoke`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

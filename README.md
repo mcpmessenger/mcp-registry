@@ -166,12 +166,13 @@ The backend API will be available at `http://localhost:3001` (or the port specif
 
 The backend provides the following key endpoints:
 
-- **Registry API**:
-  - `GET /v0/servers` - List all registered MCP servers
-  - `POST /v0/publish` - Register a new MCP server
-  - `PUT /v0/servers/:serverId` - Update an existing server
-  - `DELETE /v0/servers/:serverId` - Delete a server
-  - `POST /v0/invoke` - Invoke an MCP tool via backend proxy
+- **Registry API** (MCP v0.1 specification):
+  - `GET /v0.1/servers` - List all registered MCP servers (supports `?search=` and `?capability=` query parameters)
+  - `GET /v0.1/servers/:serverId` - Get a specific server by ID
+  - `POST /v0.1/publish` - Register a new MCP server
+  - `PUT /v0.1/servers/:serverId` - Update an existing server
+  - `DELETE /v0.1/servers/:serverId` - Delete a server
+  - `POST /v0.1/invoke` - Invoke an MCP tool via backend proxy
 
 - **Audio Transcription**:
   - `POST /api/audio/transcribe` - Transcribe audio files using Whisper

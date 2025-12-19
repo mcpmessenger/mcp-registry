@@ -62,10 +62,15 @@ The server will start on `http://localhost:3001`
 
 ## API Endpoints
 
-### Registry API
+### Registry API (MCP v0.1 specification)
 
-- `GET /v0/servers` - List all available MCP servers
-- `GET /v0/servers/:serverId` - Get a specific server by ID
+- `GET /v0.1/servers` - List all available MCP servers
+  - Query parameters: `?search=<term>` - Filter by name/description, `?capability=<name>` - Filter by capability
+- `GET /v0.1/servers/:serverId` - Get a specific server by ID
+- `POST /v0.1/publish` - Publish/register a new MCP server
+- `PUT /v0.1/servers/:serverId` - Update an existing server
+- `DELETE /v0.1/servers/:serverId` - Delete a server
+- `POST /v0.1/invoke` - Invoke an MCP tool on a registered server
 
 ### MCP Tools API
 

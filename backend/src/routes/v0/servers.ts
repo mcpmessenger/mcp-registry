@@ -6,14 +6,23 @@ import type { MCPServer, MCPTool, MCPToolInputProperty } from '../../types/mcp'
 const router = Router()
 
 /**
- * GET /v0/servers
- * Returns a JSON list of available design-capable MCP servers
+ * GET /v0.1/servers
+ * Returns a JSON list of available MCP servers
+ * Supports query parameters for filtering and searching
  * This is the "App Store" entry point for the frontend
  * Complies with MCP v0.1 specification
+ * 
+ * Query parameters:
+ * - search: Search term to filter servers by name or description
+ * - capability: Filter by capability (e.g., "tools", "resources", "prompts")
  */
 router.get('/servers', async (req, res, next) => {
   try {
-    const servers = await registryService.getServers()
+    const { search, capability } = req.query
+    const servers = await registryService.getServers({
+      search: typeof search === 'string' ? search : undefined,
+      capability: typeof capability === 'string' ? capability : undefined,
+    })
     res.json(servers)
   } catch (error) {
     next(error)
@@ -21,7 +30,7 @@ router.get('/servers', async (req, res, next) => {
 })
 
 /**
- * GET /v0/servers/:serverId
+ * GET /v0.1/servers/:serverId
  * Get a specific server by ID
  * Complies with MCP v0.1 specification
  */
@@ -44,12 +53,15 @@ router.get('/servers/:serverId', async (req, res, next) => {
 })
 
 /**
- * POST /v0/publish
+ * POST /v0.1/publish
  * Publish/register a new MCP server to the registry
  * 
  * This endpoint strictly adheres to the MCP v0.1 specification and acts as
  * the canonical "App Store" publishing endpoint. It validates tool schemas
  * and ensures compatibility with major AI hosts like VS Code and Claude Desktop.
+ * 
+ * Note: The official registry uses GitHub OAuth for authentication via mcp-publisher CLI.
+ * This implementation supports both CLI and direct API access.
  * 
  * Request body must conform to MCPServer interface:
  * {
@@ -154,7 +166,7 @@ router.post('/publish', async (req, res, next) => {
 })
 
 /**
- * PUT /v0/servers/:serverId
+ * PUT /v0.1/servers/:serverId
  * Update an existing MCP server
  */
 router.put('/servers/:serverId', async (req, res, next) => {
@@ -237,7 +249,7 @@ router.put('/servers/:serverId', async (req, res, next) => {
 })
 
 /**
- * DELETE /v0/servers/:serverId
+ * DELETE /v0.1/servers/:serverId
  * Delete an MCP server from the registry
  */
 router.delete('/servers/:serverId', async (req, res, next) => {
