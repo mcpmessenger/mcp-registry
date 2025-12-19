@@ -3,6 +3,7 @@ import { googleVisionClient } from '../integrations/google-vision'
 import { jobTrackerService } from './job-tracker.service'
 import { assetRepository } from '../repositories/asset.repository'
 import { designJobRepository } from '../repositories/design-job.repository'
+import { kafkaProducerService } from './kafka-producer.service'
 
 export interface GenerateSVGOptions {
   description: string
@@ -10,6 +11,8 @@ export interface GenerateSVGOptions {
   colorPalette?: string[]
   size?: { width: number; height: number }
   serverId?: string
+  userId?: string
+  clientId?: string
 }
 
 export interface RefineDesignOptions {
@@ -20,6 +23,14 @@ export interface RefineDesignOptions {
 export class McpToolsService {
   /**
    * Generate an SVG from a natural language description
+   * 
+   * This now uses the event-driven architecture:
+   * 1. Creates a job
+   * 2. Publishes DESIGN_REQUEST_RECEIVED event to Kafka
+   * 3. Returns immediately (non-blocking)
+   * 4. The Multimodal Worker processes the event asynchronously
+   * 5. DESIGN_READY event is published when complete
+   * 6. Frontend receives updates via WebSocket
    */
   async generateSVG(options: GenerateSVGOptions): Promise<{
     jobId: string
@@ -32,75 +43,39 @@ export class McpToolsService {
       serverId: options.serverId,
     })
 
-    try {
-      // Update progress
-      await jobTrackerService.updateProgress(
-        job.id,
-        'PROCESSING',
-        10,
-        'Analyzing design requirements...'
-      )
+    // Update initial progress
+    await jobTrackerService.updateProgress(
+      job.id,
+      'PENDING',
+      5,
+      'Design request received, queued for processing...'
+    )
 
-      // Generate SVG using Gemini
-      await jobTrackerService.updateProgress(
-        job.id,
-        'PROCESSING',
-        30,
-        'Generating SVG design...'
-      )
-
-      let svg: string
-      try {
-        svg = await googleGeminiClient.generateSVG({
-          description: options.description,
-          style: options.style,
-          colorPalette: options.colorPalette,
-          size: options.size || { width: 512, height: 512 },
-        })
-      } catch (error) {
-        console.error('Error generating SVG:', error)
-        throw new Error(`SVG generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      }
-
-      await jobTrackerService.updateProgress(
-        job.id,
-        'PROCESSING',
-        70,
-        'Validating and storing design...'
-      )
-
-      // Store asset
-      const asset = await assetRepository.create({
-        job: {
-          connect: {
-            id: job.id,
-          },
-        },
-        assetType: 'svg',
-        content: svg,
-        version: 1,
-        isLatest: true,
-      })
-
-      await jobTrackerService.updateProgress(
-        job.id,
-        'PROCESSING',
-        90,
-        'Finalizing...'
-      )
-
-      // Complete job
-      await jobTrackerService.completeJob(job.id, 'SVG generated successfully')
-
-      return {
+    // Publish DESIGN_REQUEST_RECEIVED event to Kafka
+    // This is the "central nervous system" - the event triggers async processing
+    await kafkaProducerService.publishDesignRequestReceived(
+      {
         jobId: job.id,
-        assetId: asset.id,
-        svg,
+        description: options.description,
+        style: options.style,
+        colorPalette: options.colorPalette,
+        size: options.size || { width: 512, height: 512 },
+        serverId: options.serverId,
+        userId: options.userId,
+        clientId: options.clientId,
+      },
+      {
+        userId: options.userId,
+        clientId: options.clientId,
+        correlationId: job.id,
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      await jobTrackerService.failJob(job.id, errorMessage)
-      throw error
+    )
+
+    // Return immediately - the actual work happens asynchronously
+    // Frontend will receive updates via WebSocket/SSE
+    return {
+      jobId: job.id,
+      // svg and assetId will be available once DESIGN_READY event is processed
     }
   }
 

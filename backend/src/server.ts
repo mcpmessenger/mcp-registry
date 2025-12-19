@@ -5,6 +5,9 @@ import { errorMiddleware, notFoundMiddleware } from './middleware/error.middlewa
 import { env } from './config/env'
 import { prisma } from './config/database'
 import { webSocketService } from './services/websocket.service'
+import { initializeKafka, shutdownKafka, kafka } from './config/kafka'
+import { kafkaConsumerService } from './services/kafka-consumer.service'
+import { DesignRequestConsumerService } from './services/design-request-consumer.service'
 
 // Routes
 import v0ServersRouter from './routes/v0/servers'
@@ -17,6 +20,9 @@ const server = http.createServer(app)
 
 // Initialize WebSocket server
 webSocketService.initialize(server)
+
+// Initialize Kafka and consumers
+let designRequestConsumer: DesignRequestConsumerService | null = null
 
 // Middleware
 app.use(corsMiddleware)
@@ -48,6 +54,15 @@ app.use(errorMiddleware)
 const gracefulShutdown = async () => {
   console.log('Shutting down gracefully...')
   
+  // Stop Kafka consumers
+  if (designRequestConsumer) {
+    await designRequestConsumer.stop()
+  }
+  await kafkaConsumerService.stop()
+  
+  // Close Kafka connections
+  await shutdownKafka()
+  
   // Close WebSocket server
   webSocketService.close()
   
@@ -66,20 +81,49 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown)
 process.on('SIGINT', gracefulShutdown)
 
-// Start server
+// Start server with Kafka initialization
 const PORT = env.server.port
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📡 Environment: ${env.server.nodeEnv}`)
-  console.log(`🗄️  Database: ${env.database.provider}`)
-  console.log(`🔌 WebSocket: ws://localhost:${PORT}/ws`)
-  console.log(`📋 Registry API: http://localhost:${PORT}/v0/servers`)
-  console.log(`🛠️  MCP Tools: http://localhost:${PORT}/api/mcp/tools`)
-  console.log(`📊 Streams: http://localhost:${PORT}/api/streams/jobs/:jobId`)
-  console.log(`\n🔑 API Keys Status:`)
-  console.log(`   Gemini API: ${env.google.geminiApiKey ? '✅ Set' : '❌ Not set'}`)
-  console.log(`   Vision API: ${env.google.visionApiKey ? '✅ Set' : '⚠️  Not set (optional)'}`)
-})
+async function startServer() {
+  try {
+    // Initialize Kafka (central nervous system)
+    console.log('🔄 Initializing Kafka...')
+    await initializeKafka()
+
+    // Start design request consumer (multimodal worker)
+    console.log('🔄 Starting design request consumer...')
+    designRequestConsumer = new DesignRequestConsumerService(kafka)
+    await designRequestConsumer.start()
+
+    // Start design ready consumer (for WebSocket push)
+    console.log('🔄 Starting design ready consumer...')
+    await kafkaConsumerService.start()
+
+    // Start HTTP server
+    server.listen(PORT, () => {
+      console.log(`\n🚀 Server running on port ${PORT}`)
+      console.log(`📡 Environment: ${env.server.nodeEnv}`)
+      console.log(`🗄️  Database: ${env.database.provider}`)
+      console.log(`📡 Kafka Brokers: ${env.kafka.brokers.join(', ')}`)
+      console.log(`📡 Kafka Topics: ${env.kafka.topics.designRequests}, ${env.kafka.topics.designReady}`)
+      console.log(`🔌 WebSocket: ws://localhost:${PORT}/ws`)
+      console.log(`📋 Registry API: http://localhost:${PORT}/v0/servers`)
+      console.log(`📤 Publish API: POST http://localhost:${PORT}/v0/publish`)
+      console.log(`🛠️  MCP Tools: http://localhost:${PORT}/api/mcp/tools`)
+      console.log(`📊 Streams: http://localhost:${PORT}/api/streams/jobs/:jobId`)
+      console.log(`\n🔑 API Keys Status:`)
+      console.log(`   Gemini API: ${env.google.geminiApiKey ? '✅ Set' : '❌ Not set'}`)
+      console.log(`   Vision API: ${env.google.visionApiKey ? '✅ Set' : '⚠️  Not set (optional)'}`)
+      console.log(`\n✨ Event-Driven Architecture (EDA) Active`)
+      console.log(`   Design requests are processed asynchronously via Kafka`)
+      console.log(`   Frontend receives real-time updates via WebSocket`)
+    })
+  } catch (error) {
+    console.error('❌ Failed to start server:', error)
+    process.exit(1)
+  }
+}
+
+startServer()
 
 export default app

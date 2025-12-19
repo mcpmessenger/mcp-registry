@@ -42,8 +42,15 @@ model McpServer {
   env             String?  // JSON object of environment variables
   manifest        String?  // JSON string of full MCP manifest
   capabilities    String?  // JSON array of capabilities
-  tools           String?  // JSON array of tool definitions
+  tools           String?  // JSON array of tool definitions (pre-validated schemas)
+  toolSchemas     String?  // JSON object mapping tool names to full JSON schemas for validation
   isActive        Boolean  @default(true)
+  isPublic        Boolean  @default(true) // Public registry vs private sub-registry
+  federationId    String?  // For private sub-registries
+  federation      Federation? @relation(fields: [federationId], references: [id])
+  publishedBy     String?  // User/owner who published this server
+  publishedAt     DateTime @default(now())
+  metadata        String?  // JSON string for additional metadata
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -52,6 +59,9 @@ model McpServer {
   
   @@index([serverId])
   @@index([isActive])
+  @@index([isPublic])
+  @@index([federationId])
+  @@index([publishedBy])
 }
 
 // Design Job for tracking SVG generation requests
@@ -93,4 +103,58 @@ model Asset {
   
   @@index([jobId])
   @@index([isLatest])
+}
+
+// Registry Federation - for private sub-registries
+model Federation {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String?
+  organizationId  String   @unique // Organization identifier
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  servers         McpServer[]
+  
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+// OAuth 2.1 Client Registry
+model OAuthClient {
+  id                String   @id @default(cuid())
+  clientId          String   @unique
+  clientSecret      String   // Hashed
+  clientName        String
+  redirectUris      String   // JSON array of allowed redirect URIs
+  scopes            String   // JSON array of allowed scopes
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  consents          OAuthConsent[]
+  
+  @@index([clientId])
+  @@index([isActive])
+}
+
+// OAuth 2.1 Consent Storage - per-client, per-user consent tracking
+model OAuthConsent {
+  id                String   @id @default(cuid())
+  clientId          String
+  client            OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId            String   // User identifier
+  scopes            String   // JSON array of consented scopes
+  grantedAt         DateTime @default(now())
+  expiresAt         DateTime? // Optional expiration
+  revokedAt         DateTime? // Revocation timestamp
+  isActive          Boolean  @default(true)
+  
+  @@unique([clientId, userId])
+  @@index([userId])
+  @@index([clientId])
+  @@index([isActive])
 }

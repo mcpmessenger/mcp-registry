@@ -51,25 +51,26 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-border bg-card/50 p-4">
-      <div className="flex items-end gap-2">
-        <div className="flex gap-2">
+    <div className="border-t border-border bg-card/50 p-4 sticky bottom-0 z-40 backdrop-blur-sm w-full">
+      <div className="flex items-end gap-2 max-w-full w-full">
+        {/* Left side buttons - microphone first, shifted right to avoid logo */}
+        <div className="flex gap-2 shrink-0 relative z-50 ml-12">
           <Button
             type="button"
             variant="outline"
             size="icon"
             onClick={onVoiceInput}
-            className={cn("shrink-0 bg-transparent")}
+            className={cn("shrink-0 bg-transparent relative z-50 min-w-[44px] h-[44px]")}
             title="Voice input"
           >
-            <Mic className={cn("h-4 w-4")} />
+            <Mic className={cn("h-4 w-4 shrink-0")} />
           </Button>
           <Button
             type="button"
             variant="outline"
             size="icon"
             onClick={onFileUpload}
-            className="shrink-0 bg-transparent"
+            className="shrink-0 bg-transparent min-w-[44px] h-[44px]"
             title="Upload file"
           >
             <Paperclip className="h-4 w-4" />
@@ -79,24 +80,26 @@ export function ChatInput({
             variant="outline"
             size="icon"
             onClick={onGlazyrCapture}
-            className="shrink-0 bg-transparent"
+            className="shrink-0 bg-transparent min-w-[44px] h-[44px]"
             title="Capture screen (Glazyr)"
           >
             <Monitor className="h-4 w-4" />
           </Button>
         </div>
 
+        {/* Text input - takes remaining space */}
         <Textarea
           ref={textareaRef}
           value={message}
           onChange={handleTextareaChange}
           onKeyDown={handleKeyDown}
           placeholder="Type your message... (Shift+Enter for new line)"
-          className="min-h-[44px] max-h-[200px] resize-none"
+          className="min-h-[44px] max-h-[200px] resize-none flex-1"
           disabled={isLoading}
         />
 
-        <Button onClick={handleSubmit} disabled={!message.trim() || isLoading} className="shrink-0 h-[44px]">
+        {/* Send button */}
+        <Button onClick={handleSubmit} disabled={!message.trim() || isLoading} className="shrink-0 h-[44px] min-w-[44px]">
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>

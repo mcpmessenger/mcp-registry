@@ -147,6 +147,15 @@ The backend is an Express.js API with Prisma ORM, located in the `backend/` dire
 
 The backend API will be available at `http://localhost:3001` (or the port specified in your `.env` file)
 
+### Event-Driven Architecture Components
+
+- **Kafka**: A local Kafka broker powers the async design pipeline. Start it with `docker compose -f docker-compose.kafka.yml up -d`, which spins up Zookeeper and Kafka via the provided compose file. Shut it down with `docker compose -f docker-compose.kafka.yml down`.
+- **Topics**: `design-requests` receives `DESIGN_REQUEST_RECEIVED` events; `design-ready` carries `DESIGN_READY`/`DESIGN_FAILED` results. The backend consumes both topics internally.
+- **Backend Flow**: `POST /api/mcp/tools/generate` queues a request (publishes `DESIGN_REQUEST_RECEIVED`), a multimodal worker consumes it, and the backend pushes progress/completions through its WebSocket (`ws://localhost:3001/ws`).
+- **WebSocket Testing**: You can watch jobs with `npx wscat -c ws://localhost:3001/ws` and send `{ "type": "subscribe", "jobId": "<id>" }` to receive `job_status` updates and the resulting SVG payload.
+
+By wiring Kafka to the Prisma-backed backend we now preserve a responsive frontend while heavy LLM work happens asynchronously in the background.
+
 ### Database
 
 The backend uses **SQLite** by default (configured in `prisma/schema.prisma`). For production deployments, you may want to switch to PostgreSQL or another database by updating the `datasource` in `prisma/schema.prisma` and providing the appropriate `DATABASE_URL` in your `.env` file.

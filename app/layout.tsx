@@ -43,7 +43,7 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <ThemeProvider defaultTheme="dark">
           <Navigation />
-          <main className="min-h-[calc(100vh-4rem)]">{children}</main>
+          <main className="min-h-[calc(100vh-4rem)] relative">{children}</main>
           <Toaster />
         </ThemeProvider>
         <Analytics />

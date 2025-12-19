@@ -18,6 +18,15 @@ interface EnvConfig {
     geminiApiKey: string
     geminiModelName?: string
   }
+  kafka: {
+    brokers: string[]
+    clientId: string
+    groupId: string
+    topics: {
+      designRequests: string
+      designReady: string
+    }
+  }
 }
 
 function getDatabaseProvider(url: string): 'sqlite' | 'postgresql' {
@@ -43,6 +52,15 @@ export const env: EnvConfig = {
     geminiApiKey: process.env.GOOGLE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
     // Model name with specific version for better compatibility (e.g., gemini-1.5-flash-001)
     geminiModelName: process.env.GEMINI_MODEL_NAME,
+  },
+  kafka: {
+    brokers: process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'],
+    clientId: process.env.KAFKA_CLIENT_ID || 'mcp-registry-api-gateway',
+    groupId: process.env.KAFKA_GROUP_ID || 'mcp-registry-workers',
+    topics: {
+      designRequests: process.env.KAFKA_TOPIC_DESIGN_REQUESTS || 'design-requests',
+      designReady: process.env.KAFKA_TOPIC_DESIGN_READY || 'design-ready',
+    },
   },
 }
 

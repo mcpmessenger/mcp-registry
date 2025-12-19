@@ -97,7 +97,107 @@ export class RegistryService {
   }
 
   /**
-   * Register a new MCP server
+   * Register/Publish a new MCP server to the registry
+   * This implements the MCP v0.1 specification for publishing servers
+   */
+  async publishServer(serverData: {
+    serverId: string
+    name: string
+    description?: string
+    version?: string
+    command?: string
+    args?: string[]
+    env?: Record<string, string>
+    tools?: MCPTool[]
+    capabilities?: string[]
+    manifest?: Record<string, unknown>
+    publishedBy?: string
+    federationId?: string
+    isPublic?: boolean
+    metadata?: Record<string, unknown>
+  }): Promise<MCPServer> {
+    // Validate serverId format (should be like "io.github.mcpmessenger/mcp-server")
+    if (!serverData.serverId || !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(serverData.serverId)) {
+      throw new Error('Invalid serverId format. Expected format: "org.name/server-name"')
+    }
+
+    // Validate tools and extract schemas for pre-validation
+    const toolSchemas: Record<string, unknown> = {}
+    if (serverData.tools && Array.isArray(serverData.tools)) {
+      for (const tool of serverData.tools) {
+        // Validate tool structure
+        if (!tool.name || !tool.description || !tool.inputSchema) {
+          throw new Error(`Invalid tool definition: ${tool.name || 'unnamed'}. Tools must have name, description, and inputSchema.`)
+        }
+
+        // Validate inputSchema is a valid JSON Schema
+        if (tool.inputSchema.type !== 'object') {
+          throw new Error(`Tool ${tool.name} inputSchema must have type "object"`)
+        }
+
+        // Store full schema for pre-validation
+        toolSchemas[tool.name] = tool.inputSchema
+      }
+    }
+
+    // Check if server already exists
+    const existing = await prisma.mcpServer.findUnique({
+      where: { serverId: serverData.serverId },
+    })
+
+    if (existing) {
+      // Update existing server
+      const updated = await prisma.mcpServer.update({
+        where: { serverId: serverData.serverId },
+        data: {
+          name: serverData.name,
+          description: serverData.description,
+          version: serverData.version || existing.version,
+          command: serverData.command ?? existing.command,
+          args: serverData.args ? JSON.stringify(serverData.args) : existing.args,
+          env: serverData.env ? JSON.stringify(serverData.env) : existing.env,
+          tools: serverData.tools ? JSON.stringify(serverData.tools) : existing.tools,
+          toolSchemas: Object.keys(toolSchemas).length > 0 ? JSON.stringify(toolSchemas) : existing.toolSchemas,
+          capabilities: serverData.capabilities ? JSON.stringify(serverData.capabilities) : existing.capabilities,
+          manifest: serverData.manifest ? JSON.stringify(serverData.manifest) : existing.manifest,
+          isPublic: serverData.isPublic ?? existing.isPublic,
+          federationId: serverData.federationId ?? existing.federationId,
+          publishedBy: serverData.publishedBy ?? existing.publishedBy,
+          publishedAt: new Date(),
+          metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : existing.metadata,
+        },
+      })
+
+      return this.transformToMCPFormat(updated)
+    } else {
+      // Create new server
+      const server = await prisma.mcpServer.create({
+        data: {
+          serverId: serverData.serverId,
+          name: serverData.name,
+          description: serverData.description,
+          version: serverData.version || 'v0.1',
+          command: serverData.command,
+          args: serverData.args ? JSON.stringify(serverData.args) : null,
+          env: serverData.env ? JSON.stringify(serverData.env) : null,
+          tools: serverData.tools ? JSON.stringify(serverData.tools) : null,
+          toolSchemas: Object.keys(toolSchemas).length > 0 ? JSON.stringify(toolSchemas) : null,
+          capabilities: serverData.capabilities ? JSON.stringify(serverData.capabilities) : null,
+          manifest: serverData.manifest ? JSON.stringify(serverData.manifest) : null,
+          isPublic: serverData.isPublic ?? true,
+          federationId: serverData.federationId ?? null,
+          publishedBy: serverData.publishedBy ?? null,
+          metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : null,
+        },
+      })
+
+      return this.transformToMCPFormat(server)
+    }
+  }
+
+  /**
+   * Register a new MCP server (legacy method, kept for backward compatibility)
+   * @deprecated Use publishServer instead
    */
   async registerServer(serverData: {
     serverId: string
@@ -110,21 +210,7 @@ export class RegistryService {
     tools?: MCPTool[]
     capabilities?: string[]
   }): Promise<MCPServer> {
-    const server = await prisma.mcpServer.create({
-      data: {
-        serverId: serverData.serverId,
-        name: serverData.name,
-        description: serverData.description,
-        version: serverData.version || 'v0.1',
-        command: serverData.command,
-        args: serverData.args ? JSON.stringify(serverData.args) : null,
-        env: serverData.env ? JSON.stringify(serverData.env) : null,
-        tools: serverData.tools ? JSON.stringify(serverData.tools) : null,
-        capabilities: serverData.capabilities ? JSON.stringify(serverData.capabilities) : null,
-      },
-    })
-
-    return this.transformToMCPFormat(server)
+    return this.publishServer(serverData)
   }
 }
 
