@@ -27,6 +27,8 @@
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
     "kafkajs": "^2.2.4",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.28.0",
     "prisma": "^6.0.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
@@ -37,6 +39,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
+    "@types/multer": "^1.4.11",
     "@types/node": "^25.0.3",
     "@types/ws": "^8.5.10",
     "ts-node": "^10.9.2",

@@ -9,9 +9,8 @@ import { VoiceInputDialog } from "@/components/voice-input-dialog"
 import { FileUploadDialog } from "@/components/file-upload-dialog"
 import { GlazyrCaptureDialog } from "@/components/glazyr-capture-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { getServers } from "@/lib/api"
+import { getServers, invokeMCPTool, generateSVG, getJobStatus, createJobProgressStream } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
-import { generateSVG, getJobStatus, createJobProgressStream } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
 // Agent options will be loaded from backend
@@ -33,6 +32,7 @@ const initialMessages: ChatMessage[] = [
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [agentOptions, setAgentOptions] = useState<AgentOption[]>(defaultAgentOptions)
+  const [agents, setAgents] = useState<ReturnType<typeof transformServersToAgents>>([])
   const [selectedAgentId, setSelectedAgentId] = useState("router")
   const [isLoading, setIsLoading] = useState(false)
   const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
@@ -46,11 +46,24 @@ export default function ChatPage() {
     async function loadAgents() {
       try {
         const servers = await getServers()
-        const agents = transformServersToAgents(servers)
+        console.log('Raw servers from backend:', servers)
+        
+        // Filter out empty or invalid servers
+        const validServers = servers.filter((s) => s && s.serverId && s.name)
+        console.log('Valid servers after filtering:', validServers)
+        
+        if (validServers.length === 0) {
+          console.warn('No valid servers found in backend response')
+          return
+        }
+        
+        const transformedAgents = transformServersToAgents(validServers)
+        console.log('Transformed agents:', transformedAgents)
+        setAgents(transformedAgents)
         const options: AgentOption[] = [
           { id: "router", name: "Auto-Route (Recommended)", type: "router" },
-          ...agents
-            .filter((a) => a.status === "online")
+          ...transformedAgents
+            .filter((a) => a.status === "online" && a.endpoint)
             .map((a) => ({
               id: a.id,
               name: a.name,
@@ -296,6 +309,103 @@ export default function ChatPage() {
           setIsLoading(false)
           toast({
             title: "Generation failed",
+            description: error instanceof Error ? error.message : "Unknown error",
+            variant: "destructive",
+          })
+        }
+      } else if (!isRouter && selectedAgent && selectedAgent.type === "agent") {
+        // Handle MCP agent invocation
+        try {
+          const agent = agents.find((a) => a.id === selectedAgentId)
+          if (!agent) {
+            throw new Error(`Agent ${selectedAgent.name} (ID: ${selectedAgentId}) not found in agents list. Available agents: ${agents.map(a => a.id).join(', ')}`)
+          }
+          if (!agent.endpoint || agent.endpoint.trim() === '' || agent.endpoint === agent.id) {
+            // If endpoint is missing or equals serverId (fallback), provide helpful error
+            const errorMsg = agent.endpoint === agent.id
+              ? `Agent "${selectedAgent.name}" is missing an endpoint URL. Please edit the agent in the Registry page and add the endpoint (e.g., https://langchain-agent-mcp-server-554655392699.us-central1.run.app)`
+              : `Agent "${selectedAgent.name}" does not have a valid endpoint configured. Please edit the agent and add an endpoint URL.`
+            
+            throw new Error(errorMsg)
+          }
+
+          // Add loading message
+          const loadingMessage: ChatMessage = {
+            id: `loading-${Date.now()}`,
+            role: "assistant",
+            content: `Processing your request with ${selectedAgent.name}...`,
+            timestamp: new Date(),
+            agentName: selectedAgent.name,
+          }
+          setMessages((prev) => [...prev, loadingMessage])
+
+          // Parse agent manifest to find available tools
+          let manifestData: any = {}
+          try {
+            manifestData = agent.manifest ? JSON.parse(agent.manifest) : {}
+          } catch (e) {
+            console.error('Failed to parse agent manifest:', e)
+          }
+
+          // Find the main tool (usually "agent_executor" for LangChain or first tool)
+          const tools = manifestData.tools || []
+          const mainTool = tools.find((t: any) => t.name === "agent_executor") || tools[0]
+
+          if (!mainTool) {
+            throw new Error(`No tools available for agent ${selectedAgent.name}`)
+          }
+
+          // Extract API key from agent metadata if available
+          const apiKey = manifestData.metadata?.apiKey || agent.manifest ? 
+            (() => {
+              try {
+                const m = JSON.parse(agent.manifest)
+                return m.metadata?.apiKey
+              } catch {
+                return undefined
+              }
+            })() : undefined
+
+          // Invoke the MCP tool via backend proxy
+          const result = await invokeMCPTool({
+            serverId: agent.id, // Use agent.id (which is serverId) instead of endpoint
+            tool: mainTool.name,
+            arguments: {
+              query: content,
+              ...(attachment && { attachment }),
+            },
+            apiKey,
+          })
+
+          // Update loading message with result
+          const responseText = result.content
+            .map((c) => c.text || c.data || '')
+            .join('\n\n')
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === loadingMessage.id
+                ? {
+                    ...msg,
+                    content: responseText || "Request completed successfully.",
+                  }
+                : msg
+            )
+          )
+          setIsLoading(false)
+        } catch (error) {
+          console.error('Agent invocation error:', error)
+          const errorMessage: ChatMessage = {
+            id: `error-${Date.now()}`,
+            role: "assistant",
+            content: `Sorry, I encountered an error calling ${selectedAgent.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            timestamp: new Date(),
+            agentName: selectedAgent.name,
+          }
+          setMessages((prev) => [...prev, errorMessage])
+          setIsLoading(false)
+          toast({
+            title: "Agent invocation failed",
             description: error instanceof Error ? error.message : "Unknown error",
             variant: "destructive",
           })

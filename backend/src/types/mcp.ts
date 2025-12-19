@@ -10,6 +10,8 @@ export interface MCPServer {
   env?: Record<string, string>
   tools: MCPTool[]
   capabilities?: string[]
+  manifest?: Record<string, unknown> // Extended field for full manifest
+  metadata?: Record<string, unknown> // Extended field for metadata (endpoint, etc.)
 }
 
 export interface MCPTool {

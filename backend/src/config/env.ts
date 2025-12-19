@@ -18,6 +18,9 @@ interface EnvConfig {
     geminiApiKey: string
     geminiModelName?: string
   }
+  openai: {
+    apiKey: string
+  }
   kafka: {
     brokers: string[]
     clientId: string
@@ -53,6 +56,9 @@ export const env: EnvConfig = {
     // Model name with specific version for better compatibility (e.g., gemini-1.5-flash-001)
     geminiModelName: process.env.GEMINI_MODEL_NAME,
   },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+  },
   kafka: {
     brokers: process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'],
     clientId: process.env.KAFKA_CLIENT_ID || 'mcp-registry-api-gateway',
@@ -71,6 +77,10 @@ if (!env.google.visionApiKey && env.server.nodeEnv === 'production') {
 
 if (!env.google.geminiApiKey && env.server.nodeEnv === 'production') {
   console.warn('Warning: GOOGLE_GEMINI_API_KEY is not set')
+}
+
+if (!env.openai.apiKey && env.server.nodeEnv === 'production') {
+  console.warn('Warning: OPENAI_API_KEY is not set (required for Whisper transcription)')
 }
 
 export default env

@@ -46,11 +46,20 @@ export class RegistryService {
     env: string | null
     tools: string | null
     capabilities: string | null
+    manifest: string | null
+    metadata: string | null
   }): MCPServer {
+    // Validate required fields
+    if (!server.serverId || !server.name) {
+      console.error('Invalid server data in transformToMCPFormat:', server)
+      throw new Error(`Server missing required fields: serverId=${server.serverId}, name=${server.name}`)
+    }
+
     let tools: MCPTool[] = []
     if (server.tools) {
       try {
-        tools = JSON.parse(server.tools) as MCPTool[]
+        const parsed = JSON.parse(server.tools)
+        tools = Array.isArray(parsed) ? parsed : []
       } catch (error) {
         console.error(`Failed to parse tools for server ${server.serverId}:`, error)
       }
@@ -59,7 +68,8 @@ export class RegistryService {
     let capabilities: string[] = []
     if (server.capabilities) {
       try {
-        capabilities = JSON.parse(server.capabilities) as string[]
+        const parsed = JSON.parse(server.capabilities)
+        capabilities = Array.isArray(parsed) ? parsed : []
       } catch (error) {
         console.error(`Failed to parse capabilities for server ${server.serverId}:`, error)
       }
@@ -68,7 +78,8 @@ export class RegistryService {
     let args: string[] = []
     if (server.args) {
       try {
-        args = JSON.parse(server.args) as string[]
+        const parsed = JSON.parse(server.args)
+        args = Array.isArray(parsed) ? parsed : []
       } catch (error) {
         console.error(`Failed to parse args for server ${server.serverId}:`, error)
       }
@@ -77,23 +88,56 @@ export class RegistryService {
     let env: Record<string, string> = {}
     if (server.env) {
       try {
-        env = JSON.parse(server.env) as Record<string, string>
+        const parsed = JSON.parse(server.env)
+        env = parsed && typeof parsed === 'object' ? parsed : {}
       } catch (error) {
         console.error(`Failed to parse env for server ${server.serverId}:`, error)
       }
     }
 
-    return {
+    let manifest: Record<string, unknown> | undefined
+    if (server.manifest) {
+      try {
+        const parsed = JSON.parse(server.manifest)
+        manifest = parsed && typeof parsed === 'object' ? parsed : undefined
+      } catch (error) {
+        console.error(`Failed to parse manifest for server ${server.serverId}:`, error)
+      }
+    }
+
+    let metadata: Record<string, unknown> | undefined
+    if (server.metadata) {
+      try {
+        const parsed = JSON.parse(server.metadata)
+        metadata = parsed && typeof parsed === 'object' ? parsed : undefined
+      } catch (error) {
+        console.error(`Failed to parse metadata for server ${server.serverId}:`, error)
+      }
+    }
+
+    const result: MCPServer = {
       serverId: server.serverId,
       name: server.name,
       description: server.description || undefined,
-      version: server.version,
+      version: server.version || 'v0.1',
       command: server.command || undefined,
       args: args.length > 0 ? args : undefined,
       env: Object.keys(env).length > 0 ? env : undefined,
-      tools,
+      tools: tools.length > 0 ? tools : [],
       capabilities: capabilities.length > 0 ? capabilities : undefined,
+      manifest,
+      metadata,
     }
+
+    // Log transformation for debugging
+    console.log(`Transformed server ${server.serverId}:`, {
+      hasTools: result.tools.length > 0,
+      hasManifest: !!result.manifest,
+      hasMetadata: !!result.metadata,
+      metadataEndpoint: result.metadata?.endpoint,
+    })
+
+    return result
   }
 
   /**
@@ -193,6 +237,26 @@ export class RegistryService {
 
       return this.transformToMCPFormat(server)
     }
+  }
+
+  /**
+   * Delete an MCP server from the registry
+   * Soft delete by setting isActive to false
+   */
+  async deleteServer(serverId: string): Promise<void> {
+    const server = await prisma.mcpServer.findUnique({
+      where: { serverId },
+    })
+
+    if (!server) {
+      throw new Error(`Server ${serverId} not found`)
+    }
+
+    // Soft delete by setting isActive to false
+    await prisma.mcpServer.update({
+      where: { serverId },
+      data: { isActive: false },
+    })
   }
 
   /**
