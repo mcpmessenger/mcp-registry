@@ -224,6 +224,198 @@ export function createJobProgressStream(jobId: string): EventSource {
 }
 
 /**
+ * Publish/register a new MCP server to the registry
+ */
+export interface PublishServerRequest {
+  serverId: string
+  name: string
+  description?: string
+  version?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  tools?: MCPTool[]
+  capabilities?: string[]
+  manifest?: Record<string, unknown>
+}
+
+export interface PublishServerResponse {
+  success: boolean
+  message: string
+  server: MCPServer
+}
+
+export async function publishServer(request: PublishServerRequest): Promise<PublishServerResponse> {
+  const response = await fetch(`${API_BASE_URL}/v0/publish`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to publish server: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Update an existing MCP server
+ */
+export async function updateServer(serverId: string, request: Partial<PublishServerRequest>): Promise<PublishServerResponse> {
+  const encodedId = encodeURIComponent(serverId)
+  const response = await fetch(`${API_BASE_URL}/v0/servers/${encodedId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+  
+  if (!response.ok) {
+    const errorText = await response.text()
+    let error: any
+    try {
+      error = JSON.parse(errorText)
+    } catch {
+      error = { error: errorText || response.statusText }
+    }
+    
+    // Provide more helpful error message
+    if (response.status === 404) {
+      throw new Error(`Server not found: ${serverId}. The server may have been deleted or the ID is incorrect.`)
+    }
+    
+    throw new Error(error.message || error.error || `Failed to update server: ${response.status} ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Delete an MCP server from the registry
+ */
+export async function deleteServer(serverId: string): Promise<{ success: boolean; message: string }> {
+  const encodedId = encodeURIComponent(serverId)
+  const response = await fetch(`${API_BASE_URL}/v0/servers/${encodedId}`, {
+    method: 'DELETE',
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to delete server: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Invoke an MCP tool on a registered agent
+ */
+export interface InvokeMCPToolRequest {
+  serverId: string
+  tool: string
+  arguments: Record<string, unknown>
+  apiKey?: string
+}
+
+export interface InvokeMCPToolResponse {
+  content: Array<{
+    type: 'text' | 'image' | 'resource'
+    text?: string
+    data?: string
+    mimeType?: string
+  }>
+  isError?: boolean
+}
+
+export async function invokeMCPTool(request: InvokeMCPToolRequest): Promise<InvokeMCPToolResponse> {
+  // Use backend proxy endpoint to avoid CORS and handle different MCP server types
+  const response = await fetch(`${API_BASE_URL}/v0/invoke`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      serverId: request.serverId || '', // We'll need to pass serverId instead of agentEndpoint
+      tool: request.tool,
+      arguments: request.arguments,
+    }),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.error || error.message || `Failed to invoke tool: ${response.statusText}`)
+  }
+  
+  const result = await response.json()
+  return result.result || result
+}
+
+/**
+ * Transcribe audio using Whisper API
+ */
+export interface TranscribeAudioRequest {
+  audioBlob: Blob
+  language?: string
+}
+
+export interface TranscribeAudioResponse {
+  success: boolean
+  text: string
+  language?: string
+  error?: string
+}
+
+export async function transcribeAudio(request: TranscribeAudioRequest): Promise<TranscribeAudioResponse> {
+  const formData = new FormData()
+  formData.append('audio', request.audioBlob, 'audio.webm')
+  
+  const url = `${API_BASE_URL}/api/audio/transcribe${request.language ? `?language=${request.language}` : ''}`
+  console.log('Transcribing audio at:', url)
+  console.log('Audio blob size:', request.audioBlob.size, 'bytes')
+  console.log('Audio blob type:', request.audioBlob.type)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    })
+
+    console.log('Transcription response status:', response.status, response.statusText)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      let error: any
+      try {
+        error = JSON.parse(errorText)
+      } catch {
+        error = { error: errorText || response.statusText }
+      }
+      
+      if (response.status === 404) {
+        throw new Error(`Transcription endpoint not found. Make sure the backend is running on ${API_BASE_URL}`)
+      }
+      
+      throw new Error(error.error || error.message || `Transcription failed: ${response.status} ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    console.log('Transcription result:', result)
+    return result
+  } catch (error) {
+    console.error('Transcription fetch error:', error)
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error(`Cannot connect to backend at ${API_BASE_URL}. Make sure the backend server is running.`)
+    }
+    throw error
+  }
+}
+
+/**
  * Health check
  */
 export async function healthCheck(): Promise<{ status: string; timestamp: string; environment: string }> {

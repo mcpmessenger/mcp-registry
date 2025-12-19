@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { MCPAgent } from "@/types/agent"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -40,6 +40,27 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
   const isEditing = !!agent
+
+  // Update form data when agent prop changes (e.g., when editing)
+  useEffect(() => {
+    if (agent) {
+      setFormData({
+        name: agent.name || "",
+        endpoint: agent.endpoint || "",
+        manifest: agent.manifest || "",
+        apiKey: "", // Never show API key for security
+      })
+    } else {
+      // Reset form when creating new agent
+      setFormData({
+        name: "",
+        endpoint: "",
+        manifest: "",
+        apiKey: "",
+      })
+    }
+    setConnectionStatus("idle")
+  }, [agent, open])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

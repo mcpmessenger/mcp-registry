@@ -1,0 +1,169 @@
+import { Router } from 'express'
+import { z } from 'zod'
+import { registryService } from '../../services/registry.service'
+import type { MCPToolResult } from '../../types/mcp'
+
+const router = Router()
+
+const invokeToolSchema = z.object({
+  serverId: z.string().min(1),
+  tool: z.string().min(1),
+  arguments: z.record(z.any()),
+})
+
+/**
+ * POST /v0/invoke
+ * Invoke a tool on a registered MCP server
+ * This acts as a proxy to handle CORS and provide a unified interface
+ */
+router.post('/invoke', async (req, res, next) => {
+  try {
+    const validated = invokeToolSchema.parse(req.body)
+
+    // Get the server from registry
+    const server = await registryService.getServerById(validated.serverId)
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        error: `Server ${validated.serverId} not found`,
+      })
+    }
+
+    // Extract endpoint from metadata or manifest
+    let endpoint: string | undefined
+    if (server.metadata && typeof server.metadata === 'object') {
+      const metadata = server.metadata as Record<string, unknown>
+      endpoint = typeof metadata.endpoint === 'string' && metadata.endpoint.trim() !== '' 
+        ? metadata.endpoint.trim() 
+        : undefined
+    }
+    if (!endpoint && server.manifest && typeof server.manifest === 'object') {
+      const manifest = server.manifest as Record<string, unknown>
+      endpoint = typeof manifest.endpoint === 'string' && manifest.endpoint.trim() !== ''
+        ? manifest.endpoint.trim()
+        : undefined
+    }
+
+    if (!endpoint || endpoint === '') {
+      console.error(`Server ${validated.serverId} missing endpoint. Metadata:`, server.metadata, 'Manifest:', server.manifest)
+      return res.status(400).json({
+        success: false,
+        error: `Server ${validated.serverId} does not have an endpoint configured. Please edit the agent and add an endpoint URL.`,
+        details: {
+          hasMetadata: !!server.metadata,
+          hasManifest: !!server.manifest,
+          metadataEndpoint: server.metadata && typeof server.metadata === 'object' 
+            ? (server.metadata as Record<string, unknown>).endpoint 
+            : undefined,
+        },
+      })
+    }
+
+    // Find the tool in the server's tools list
+    const tool = server.tools.find((t) => t.name === validated.tool)
+    if (!tool) {
+      return res.status(404).json({
+        success: false,
+        error: `Tool ${validated.tool} not found on server ${validated.serverId}`,
+      })
+    }
+
+    // Try different MCP invocation patterns
+    // Pattern 1: Direct HTTP POST to /mcp/invoke (if it's an HTTP-based MCP server)
+    try {
+      const response = await fetch(`${endpoint}/mcp/invoke`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tool: validated.tool,
+          arguments: validated.arguments,
+        }),
+      })
+
+      if (!response.ok) {
+        // Try alternative endpoint patterns
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      
+      // Transform to MCPToolResult format if needed
+      const toolResult: MCPToolResult = {
+        content: Array.isArray(result.content)
+          ? result.content
+          : typeof result.content === 'string'
+          ? [{ type: 'text', text: result.content }]
+          : [{ type: 'text', text: JSON.stringify(result) }],
+        isError: result.isError || false,
+      }
+
+      return res.json({
+        success: true,
+        result: toolResult,
+      })
+    } catch (fetchError) {
+      // Try alternative endpoint: /tools/call or /api/tools/call
+      const alternativeEndpoints = [
+        `${endpoint}/tools/call`,
+        `${endpoint}/api/tools/call`,
+        `${endpoint}/invoke`,
+      ]
+
+      for (const altEndpoint of alternativeEndpoints) {
+        try {
+          const response = await fetch(altEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              tool: validated.tool,
+              arguments: validated.arguments,
+            }),
+          })
+
+          if (response.ok) {
+            const result = await response.json()
+            const toolResult: MCPToolResult = {
+              content: Array.isArray(result.content)
+                ? result.content
+                : typeof result.content === 'string'
+                ? [{ type: 'text', text: result.content }]
+                : [{ type: 'text', text: JSON.stringify(result) }],
+              isError: result.isError || false,
+            }
+
+            return res.json({
+              success: true,
+              result: toolResult,
+            })
+          }
+        } catch {
+          // Continue to next endpoint
+          continue
+        }
+      }
+
+      // If all endpoints fail, return error
+      return res.status(502).json({
+        success: false,
+        error: `Failed to invoke tool on server: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
+        details: `Tried endpoints: /mcp/invoke, /tools/call, /api/tools/call, /invoke`,
+      })
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details: error.errors,
+      })
+    }
+
+    next(error)
+  }
+})
+
+export default router

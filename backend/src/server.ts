@@ -11,8 +11,10 @@ import { DesignRequestConsumerService } from './services/design-request-consumer
 
 // Routes
 import v0ServersRouter from './routes/v0/servers'
+import v0InvokeRouter from './routes/v0/invoke'
 import mcpToolsRouter from './routes/mcp/tools'
 import streamsRouter from './routes/streams/jobs'
+import audioRouter from './routes/audio/transcribe'
 import debugRouter from './routes/debug'
 
 const app = express()
@@ -40,8 +42,10 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/v0', v0ServersRouter)
+app.use('/v0', v0InvokeRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/streams', streamsRouter)
+app.use('/api/audio', audioRouter)
 app.use('/api/debug', debugRouter)
 
 // 404 handler
@@ -111,9 +115,11 @@ async function startServer() {
       console.log(`📤 Publish API: POST http://localhost:${PORT}/v0/publish`)
       console.log(`🛠️  MCP Tools: http://localhost:${PORT}/api/mcp/tools`)
       console.log(`📊 Streams: http://localhost:${PORT}/api/streams/jobs/:jobId`)
+      console.log(`🎤 Audio Transcription: POST http://localhost:${PORT}/api/audio/transcribe`)
       console.log(`\n🔑 API Keys Status:`)
       console.log(`   Gemini API: ${env.google.geminiApiKey ? '✅ Set' : '❌ Not set'}`)
       console.log(`   Vision API: ${env.google.visionApiKey ? '✅ Set' : '⚠️  Not set (optional)'}`)
+      console.log(`   OpenAI API: ${env.openai.apiKey ? '✅ Set' : '❌ Not set (required for Whisper transcription)'}`)
       console.log(`\n✨ Event-Driven Architecture (EDA) Active`)
       console.log(`   Design requests are processed asynchronously via Kafka`)
       console.log(`   Frontend receives real-time updates via WebSocket`)

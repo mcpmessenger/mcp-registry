@@ -153,4 +153,118 @@ router.post('/publish', async (req, res, next) => {
   }
 })
 
+/**
+ * PUT /v0/servers/:serverId
+ * Update an existing MCP server
+ */
+router.put('/servers/:serverId', async (req, res, next) => {
+  try {
+    const { serverId } = req.params
+    const decodedServerId = decodeURIComponent(serverId)
+    
+    // Get existing server to ensure we have required fields
+    const existingServer = await registryService.getServerById(decodedServerId)
+    if (!existingServer) {
+      return res.status(404).json({
+        success: false,
+        error: `Server ${decodedServerId} not found`,
+      })
+    }
+    
+    // Validate request body (all fields optional for update)
+    const updateData = publishServerSchema.partial().parse(req.body)
+    
+    // Ensure serverId matches
+    if (updateData.serverId && updateData.serverId !== decodedServerId) {
+      return res.status(400).json({
+        success: false,
+        error: 'serverId in body must match URL parameter',
+      })
+    }
+
+    const headerUserId = req.headers['x-user-id']
+    const normalizedUserId = Array.isArray(headerUserId) ? headerUserId[0] : headerUserId
+    const publishedBy = updateData.publishedBy || normalizedUserId || 'anonymous'
+
+    const normalizedTools: MCPTool[] | undefined = updateData.tools?.map((tool) => ({
+      ...tool,
+      inputSchema: {
+        ...tool.inputSchema,
+        properties:
+          (tool.inputSchema.properties as Record<string, MCPToolInputProperty>) || undefined,
+      },
+    }))
+
+    // Merge update data with existing server data, ensuring required fields are present
+    const server = await registryService.publishServer({
+      serverId: decodedServerId,
+      name: updateData.name || existingServer.name, // Ensure name is always provided
+      description: updateData.description ?? existingServer.description,
+      version: updateData.version || existingServer.version,
+      command: updateData.command ?? existingServer.command,
+      args: updateData.args ?? existingServer.args,
+      env: updateData.env ?? existingServer.env,
+      tools: normalizedTools ?? existingServer.tools,
+      capabilities: updateData.capabilities ?? existingServer.capabilities,
+      manifest: updateData.manifest ?? existingServer.manifest,
+      metadata: updateData.metadata ?? existingServer.metadata,
+      publishedBy,
+    })
+
+    res.status(200).json({
+      success: true,
+      message: 'Server updated successfully',
+      server,
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details: error.errors,
+      })
+    }
+
+    if (error instanceof Error && error.message.includes('not found')) {
+      return res.status(404).json({
+        success: false,
+        error: error.message,
+      })
+    }
+
+    next(error)
+  }
+})
+
+/**
+ * DELETE /v0/servers/:serverId
+ * Delete an MCP server from the registry
+ */
+router.delete('/servers/:serverId', async (req, res, next) => {
+  try {
+    const { serverId } = req.params
+    const decodedServerId = decodeURIComponent(serverId)
+
+    // Check if server exists
+    const server = await registryService.getServerById(decodedServerId)
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        error: 'Server not found',
+        serverId: decodedServerId,
+      })
+    }
+
+    // Delete server (soft delete by setting isActive to false, or hard delete)
+    await registryService.deleteServer(decodedServerId)
+
+    res.status(200).json({
+      success: true,
+      message: 'Server deleted successfully',
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 export default router

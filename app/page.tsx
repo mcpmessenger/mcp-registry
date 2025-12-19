@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getServers } from "@/lib/api"
+import { getServers, publishServer, updateServer, deleteServer } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPAgent } from "@/types/agent"
 import { AgentCard } from "@/components/agent-card"
@@ -98,58 +98,118 @@ export default function RegistryPage() {
     setFormOpen(true)
   }
 
-  const handleSaveAgent = (data: Partial<MCPAgent>) => {
-    if (editingAgent) {
-      setAgents((prev) =>
-        prev.map((agent) =>
-          agent.id === editingAgent.id
-            ? {
-                ...agent,
-                ...data,
-                capabilities: data.manifest
-                  ? JSON.parse(data.manifest).capabilities || agent.capabilities
-                  : agent.capabilities,
-              }
-            : agent,
-        ),
-      )
-      toast({
-        title: "Agent updated",
-        description: `${data.name || editingAgent.name} has been successfully updated.`,
-      })
-    } else {
-      const newAgent: MCPAgent = {
-        id: (agents.length + 1).toString(),
-        name: data.name || "New Agent",
-        endpoint: data.endpoint || "",
-        status: "online",
-        lastActive: new Date(),
-        capabilities: data.manifest ? JSON.parse(data.manifest).capabilities || [] : [],
-        manifest: data.manifest || "{}",
-        metrics: {
-          avgLatency: 0,
-          p95Latency: 0,
-          uptime: 100,
-        },
+  const handleSaveAgent = async (data: Partial<MCPAgent>) => {
+    try {
+      // Validate endpoint is provided
+      if (!data.endpoint || data.endpoint.trim() === '') {
+        toast({
+          title: "Endpoint required",
+          description: "Please provide an endpoint URL for the MCP agent.",
+          variant: "destructive",
+        })
+        return
       }
-      setAgents((prev) => [...prev, newAgent])
+
+      // Parse manifest JSON
+      let manifestData: any = {}
+      try {
+        manifestData = data.manifest ? JSON.parse(data.manifest) : {}
+      } catch (e) {
+        toast({
+          title: "Invalid manifest",
+          description: "The manifest must be valid JSON.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Generate serverId from name if not provided
+      const name = data.name || editingAgent?.name || "New Agent"
+      // Remove trailing dashes and ensure valid format
+      const baseServerId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '').replace(/^-+/, '')
+      const serverId = manifestData.serverId || editingAgent?.id || 
+        `com.mcp-registry/${baseServerId}`
+
+      // Ensure endpoint is stored in both metadata and manifest
+      const endpoint = data.endpoint.trim()
+      
+      // Transform form data to backend schema
+      const publishData = {
+        serverId,
+        name,
+        description: manifestData.description || data.endpoint || undefined,
+        version: manifestData.version || "v0.1",
+        tools: manifestData.tools || [],
+        capabilities: manifestData.capabilities || [],
+        manifest: {
+          ...manifestData,
+          endpoint: endpoint, // Store endpoint in manifest
+          serverId: serverId, // Ensure serverId is in manifest too
+        },
+        metadata: {
+          endpoint: endpoint, // Store endpoint in metadata (primary location)
+          apiKey: data.apiKey ? '***' : undefined, // Don't store actual key, just flag
+        },
+        env: data.apiKey ? { API_KEY: data.apiKey } : undefined,
+      }
+
+      if (editingAgent) {
+        // Update existing server
+        await updateServer(editingAgent.id, publishData)
+        toast({
+          title: "Agent updated",
+          description: `${name} has been successfully updated.`,
+        })
+      } else {
+        // Create new server
+        await publishServer(publishData)
+        toast({
+          title: "Agent registered",
+          description: `${name} has been successfully registered.`,
+        })
+      }
+
+      // Refresh agents list from backend
+      const servers = await getServers()
+      const transformedAgents = transformServersToAgents(servers)
+      setAgents(transformedAgents)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save agent'
+      console.error('Error saving agent:', error)
       toast({
-        title: "Agent registered",
-        description: `${newAgent.name} has been successfully registered.`,
+        title: editingAgent ? "Update failed" : "Registration failed",
+        description: errorMessage,
+        variant: "destructive",
       })
     }
   }
 
-  const handleConfirmDelete = () => {
-    if (deletingAgent) {
-      setAgents((prev) => prev.filter((agent) => agent.id !== deletingAgent.id))
+  const handleConfirmDelete = async () => {
+    if (!deletingAgent) return
+
+    try {
+      await deleteServer(deletingAgent.id)
       toast({
         title: "Agent deleted",
         description: `${deletingAgent.name} has been removed from the registry.`,
         variant: "destructive",
       })
+      
+      // Refresh agents list from backend
+      const servers = await getServers()
+      const transformedAgents = transformServersToAgents(servers)
+      setAgents(transformedAgents)
+      
       setDeleteOpen(false)
       setDeletingAgent(null)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete agent'
+      console.error('Error deleting agent:', error)
+      toast({
+        title: "Delete failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     }
   }
 
