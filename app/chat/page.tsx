@@ -472,10 +472,12 @@ export default function ChatPage() {
     setGlazyrDialogOpen(true)
   }
 
-  const handleGlazyrCaptured = () => {
+  const handleGlazyrCaptured = (imageDataUrl: string) => {
     const attachment: ChatMessage["contextAttachment"] = {
       type: "glazyr",
       name: "Screen capture",
+      url: imageDataUrl, // Base64 data URL
+      preview: imageDataUrl, // Use same for preview
     }
 
     handleSendMessage("What do you see in this screenshot?", attachment)

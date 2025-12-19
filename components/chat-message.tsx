@@ -98,6 +98,44 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
 
 export function ChatMessageComponent({ message }: ChatMessageProps) {
   const isUser = message.role === "user"
+  
+  // Render attachment preview if present
+  const renderAttachment = () => {
+    if (!message.contextAttachment) return null
+
+    const { type, url, preview, name } = message.contextAttachment
+
+    if (type === "image" || type === "glazyr") {
+      const imageUrl = url || preview
+      if (!imageUrl) return null
+
+      return (
+        <div className="mt-2 rounded-lg border border-border overflow-hidden">
+          <img
+            src={imageUrl}
+            alt={name || "Attachment"}
+            className="max-w-full max-h-96 object-contain"
+          />
+          {type === "glazyr" && (
+            <div className="px-3 py-2 bg-muted/50 text-xs text-muted-foreground">
+              📸 Screen capture
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (type === "document") {
+      return (
+        <div className="mt-2 flex items-center gap-2 p-3 bg-muted/50 rounded-lg border border-border">
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm">{name || "Document"}</span>
+        </div>
+      )
+    }
+
+    return null
+  }
 
   return (
     <div className={cn("flex gap-3 py-4", isUser ? "justify-end" : "justify-start")}>
@@ -116,13 +154,30 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
         )}
 
         {message.contextAttachment && (
-          <div className="rounded-lg border border-border bg-muted/30 p-2 flex items-center gap-2 text-xs">
-            {message.contextAttachment.type === "image" ? (
-              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+          <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+            {(message.contextAttachment.type === "image" || message.contextAttachment.type === "glazyr") && message.contextAttachment.url ? (
+              <div className="relative">
+                <img
+                  src={message.contextAttachment.url}
+                  alt={message.contextAttachment.name || "Attachment"}
+                  className="max-w-full max-h-64 object-contain w-full"
+                />
+                {message.contextAttachment.type === "glazyr" && (
+                  <div className="absolute top-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+                    📸 Screen Capture
+                  </div>
+                )}
+              </div>
             ) : (
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <div className="p-2 flex items-center gap-2 text-xs">
+                {message.contextAttachment.type === "image" || message.contextAttachment.type === "glazyr" ? (
+                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                )}
+                <span className="text-muted-foreground">{message.contextAttachment.name || "Attachment"}</span>
+              </div>
             )}
-            <span className="text-muted-foreground">{message.contextAttachment.name || "Attachment"}</span>
           </div>
         )}
 
