@@ -5,6 +5,24 @@ All notable changes to the MCP Registry project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Voice Transcription**: Real-time voice-to-text transcription using OpenAI Whisper API
+  - Browser-based audio recording with MediaRecorder API
+  - Backend endpoint: `POST /api/audio/transcribe`
+  - Support for multiple audio formats (webm, mp3, wav, etc.)
+  - Automatic language detection
+- **Document Analysis**: AI-powered document analysis using Google Gemini Vision API
+  - Support for PDFs, images (PNG, JPEG, GIF), and text files
+  - Backend endpoint: `POST /api/documents/analyze`
+  - Extracts text, summaries, and insights from documents
+  - Integrated into chat interface for file uploads
+- **Screen Capture**: Real browser-based screen capture functionality
+  - Uses `getDisplayMedia` API for screen/window capture
+  - Captured images can be analyzed via document analysis
+  - Visual display in chat with screen capture badge
+- **Agent Persistence**: Fixed agent registration and persistence
+  - Agents now properly save to database via `/v0/publish` endpoint
+  - Endpoint extraction from metadata and manifest
+  - Backend proxy for MCP tool invocation (`POST /v0/invoke`)
 - **SVG Visual Rendering in Chat**: SVGs are now rendered visually in the chat interface with a toggle to view raw code
 - **Multi-Tier Fallback Strategy**: Implemented robust fallback system for Gemini API:
   - Tier 1: New `@google/genai` SDK (optional)
@@ -26,6 +44,9 @@ All notable changes to the MCP Registry project will be documented in this file.
 - **Backend Architecture**: Migrated from SDK-dependent to REST API-first approach
 
 ### Fixed
+- **Agent Persistence**: Fixed agents not saving to database - now properly persists via registry API
+- **Agent Invocation**: Fixed "Not Found" errors when invoking MCP tools - added backend proxy endpoint
+- **TypeScript Compilation**: Fixed Buffer to File conversion issues in Whisper service
 - **Gemini API Compatibility**: Resolved 404 errors by using REST API v1 endpoint and current model names
 - **Frontend Hanging**: Fixed infinite loading by adding timeouts and better error handling
 - **Port Conflicts**: Added scripts to handle port conflicts gracefully
