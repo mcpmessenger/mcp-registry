@@ -121,26 +121,31 @@ The backend is an Express.js API with Prisma ORM, located in the `backend/` dire
    ```
 
 3. **Set up environment variables:**
-   Create a `.env` file in the `backend/` directory:
+   Create a `.env` file in the `backend/` directory (see `env.example.txt` for the canonical template):
    ```env
-   DATABASE_URL="file:./dev.db"
+   DATABASE_URL="postgresql://mcp_registry:your_secure_password@localhost:5432/mcp_registry"
    PORT=3001
    NODE_ENV=development
-   
-   # Google Gemini API (required for document analysis and SVG generation)
-   GEMINI_API_KEY="your-gemini-api-key"
-   
-   # Google Vision API (optional, for enhanced image analysis)
-   GOOGLE_VISION_API_KEY="your-vision-api-key"
-   
-   # OpenAI API (required for Whisper voice transcription)
-   OPENAI_API_KEY="your-openai-api-key"
-   
-   # Kafka Configuration (for event-driven architecture)
-   KAFKA_BROKERS="localhost:9092"
+   CORS_ORIGIN="http://localhost:3000"
+
+   # Google Gemini + Vision APIs (needed for document analysis & SVG generation)
+   GOOGLE_GEMINI_API_KEY=
+   GOOGLE_VISION_API_KEY=
+
+   # OpenAI Whisper transcription (voice features)
+   OPENAI_API_KEY=
+
+   # LangChain MCP manifest (optional if you host your own service)
+   LANGCHAIN_API_KEY=
+   LANGCHAIN_ENDPOINT=
+
+   # Kafka & encryption
+   KAFKA_BROKERS=localhost:9092
+   ENCRYPTION_SECRET=...
+   ENCRYPTION_SALT=...
    ```
 
-4. **Run Prisma migrations:**
+4. **Run Prisma migrations (Postgres):**
    ```bash
    npx prisma migrate dev
    ```
@@ -150,12 +155,18 @@ The backend is an Express.js API with Prisma ORM, located in the `backend/` dire
    npx prisma generate
    ```
 
-6. **Start the development server:**
+6. **Seed official MCP agents (Playwright + LangChain):**
+   ```bash
+   npm run register-official
+   ```
+   This publishes the Playwright agent plus the hosted `langchain-agent-mcp-server` manifest/endpoint so they are always available in the registry.
+
+7. **Start the development server:**
    ```bash
    npm start
    ```
 
-7. **Build TypeScript:**
+8. **Build TypeScript:**
    ```bash
    npm run build
    ```
@@ -193,9 +204,11 @@ The backend provides the following key endpoints:
 
 By wiring Kafka to the Prisma-backed backend we now preserve a responsive frontend while heavy LLM work happens asynchronously in the background.
 
-### Database
+### Database & Memory
 
-The backend uses **SQLite** by default (configured in `prisma/schema.prisma`). For production deployments, you may want to switch to PostgreSQL or another database by updating the `datasource` in `prisma/schema.prisma` and providing the appropriate `DATABASE_URL` in your `.env` file.
+The backend now ships with PostgreSQL (recommended for production) plus a Prisma `Memory` model that persists conversation history, tool invocations, and memories. The `memory.service.ts` exposes helpers such as `searchHistory`, `storeMemory`, and `getMemories`, while the `invoke` endpoint exposes a `search_history` tool so agents can look up relevant context before responding. Keep your Postgres container running (or point `DATABASE_URL` at a managed instance) to retain agent state between restarts.
+
+Prisma automatically maintains migration history in `backend/prisma/migrations`; rerun `npx prisma migrate dev` whenever you change the schema.
 
 ## 💻 Development
 

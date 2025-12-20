@@ -52,4 +52,6 @@ backend/*.db
 
 # Prisma
 backend/prisma/migrations/
+backend/prisma/data/
+
 
