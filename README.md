@@ -161,7 +161,17 @@ The backend is an Express.js API with Prisma ORM, located in the `backend/` dire
    ```
    This publishes the Playwright agent plus the hosted `langchain-agent-mcp-server` manifest/endpoint so they are always available in the registry.
 
-7. **Start the development server:**
+7. **Restore or switch Playwright agent (optional)**
+
+   If the Playwright entry was deleted or you want to route through your own HTTP server, run these helper scripts from the `backend/` directory:
+   ```bash
+   npm run fix-playwright
+   npm run update-playwright-http https://your-playwright-host/mcp
+   ```
+   The first creates/reactivates `com.microsoft.playwright/mcp` with the full tool list. The second clears the STDIO command/args and points metadata at your HTTP endpoint.
+   See [`CONNECT_PLAYWRIGHT_HTTP_SERVER.md`](CONNECT_PLAYWRIGHT_HTTP_SERVER.md) for curl snippets and troubleshooting tips.
+
+8. **Start the development server:**
    ```bash
    npm start
    ```
