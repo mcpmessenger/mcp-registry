@@ -54,6 +54,12 @@ model McpServer {
   authConfig      String?  // JSON: OAuth2 configuration for third-party servers
   encryptedTokens String?  // Encrypted OAuth tokens (encrypted at rest)
   tokenExpiresAt  DateTime? // Token expiration
+  // Workflow state machine fields
+  workflowState   String?  // Current workflow state (e.g., "VisionAnalyzing", "ResearcherQueued", "Completed")
+  lockedBy        String?  // Agent/server currently processing this workflow
+  workflowAttempts Int     @default(0) // Number of retry attempts
+  contextId       String?  // Link to conversation/memory for this workflow
+  workflowUpdatedAt DateTime? // Last workflow state update
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
