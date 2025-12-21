@@ -24,7 +24,7 @@ The Dockerfile has been updated to install Playwright browsers during the build.
 ```powershell
 cd backend
 
-# Deploy to Cloud Run (will rebuild with Playwright browsers)
+# Deploy to Cloud Run (will rebuild with Playwright browsers installed)
 gcloud run deploy mcp-registry-backend `
   --source . `
   --region us-central1 `
@@ -33,6 +33,25 @@ gcloud run deploy mcp-registry-backend `
   --add-cloudsql-instances slashmcp:us-central1:mcp-registry-db `
   --set-env-vars RUN_MIGRATIONS_ON_STARTUP=true,REGISTER_OFFICIAL_SERVERS_ON_STARTUP=true,CORS_ORIGIN=https://v0-logo-design-ashen-mu.vercel.app
 ```
+
+### 2. Point Playwright at the installed Chromium
+
+Cloud Run already installs Chromium via `apk add chromium`, but Playwright needs to know where that binary lives. Set the environment variable so the `chrome` channel uses `/usr/bin/chromium-browser`:
+
+```powershell
+gcloud run services update mcp-registry-backend `
+  --region us-central1 `
+  --platform managed `
+  --set-env-vars PLAYWRIGHT_CHROME_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+  --quiet
+```
+
+This creates revision `mcp-registry-backend-00034-krr` (or similar) and routes 100% of traffic to it. After this, the Playwright MCP server should be able to launch Chrome and process screenshot requests.
+
+## Notes
+- `PLAYWRIGHT_BROWSERS_PATH` tells Playwright where to expect the downloaded browsers.
+- The Dockerfile now installs `playwright` globally and runs `npx playwright install chromium --with-deps` during the build, ensuring the binary exists inside `/ms-playwright-browsers`.
+- The image now creates `/ms-playwright-browsers` as root and chowns it to `nodejs`, so the service can write browser artifacts at runtime without `EACCES`.
 
 ### 2. Verify Installation
 
