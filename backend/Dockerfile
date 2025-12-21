@@ -72,22 +72,28 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
 # Prepare Playwright browsers directory and hand ownership to node user
+# Playwright expects browsers in ~/.cache/ms-playwright/chromium-<version>/chrome-linux/chrome
+# We'll create this structure and symlink to system Chromium
 RUN mkdir -p /ms-playwright-browsers && \
-    chown -R nodejs:nodejs /ms-playwright-browsers
+    mkdir -p /home/node/.cache/ms-playwright && \
+    chown -R nodejs:nodejs /ms-playwright-browsers && \
+    chown -R nodejs:nodejs /home/node/.cache
 
-# Create symlink for Playwright to use system Chromium
-# System Chromium is installed at /usr/bin/chromium-browser on Alpine
-# We symlink it to the path Playwright expects
-RUN mkdir -p /opt/google/chrome && \
+# Create Playwright browser directory structure and symlink to system Chromium
+# Playwright looks for browsers in ~/.cache/ms-playwright/chromium-<version>/chrome-linux/chrome
+# We create a version directory (using "system" as version) and symlink to system Chromium
+RUN PLAYWRIGHT_DIR="/home/node/.cache/ms-playwright/chromium-system/chrome-linux" && \
+    mkdir -p "$PLAYWRIGHT_DIR" && \
     if [ -f /usr/bin/chromium-browser ]; then \
-      ln -sf /usr/bin/chromium-browser /opt/google/chrome/chrome && \
-      echo "Created symlink: /usr/bin/chromium-browser -> /opt/google/chrome/chrome"; \
+      ln -sf /usr/bin/chromium-browser "$PLAYWRIGHT_DIR/chrome" && \
+      echo "Created symlink: /usr/bin/chromium-browser -> $PLAYWRIGHT_DIR/chrome"; \
     elif [ -f /usr/bin/chromium ]; then \
-      ln -sf /usr/bin/chromium /opt/google/chrome/chrome && \
-      echo "Created symlink: /usr/bin/chromium -> /opt/google/chrome/chrome"; \
+      ln -sf /usr/bin/chromium "$PLAYWRIGHT_DIR/chrome" && \
+      echo "Created symlink: /usr/bin/chromium -> $PLAYWRIGHT_DIR/chrome"; \
     else \
       echo "Warning: Chromium not found at expected locations"; \
-    fi
+    fi && \
+    chown -R nodejs:nodejs /home/node/.cache
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
