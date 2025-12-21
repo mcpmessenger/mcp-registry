@@ -34,6 +34,20 @@ gcloud run deploy mcp-registry-backend `
   --set-env-vars RUN_MIGRATIONS_ON_STARTUP=true,REGISTER_OFFICIAL_SERVERS_ON_STARTUP=true,CORS_ORIGIN=https://v0-logo-design-ashen-mu.vercel.app
 ```
 
+### 2. Point Playwright at the installed Chromium
+
+Cloud Run already installs Chromium via `apk add chromium`, but Playwright needs to know where that binary lives. Set the environment variable so the `chrome` channel uses `/usr/bin/chromium-browser`:
+
+```powershell
+gcloud run services update mcp-registry-backend `
+  --region us-central1 `
+  --platform managed `
+  --set-env-vars PLAYWRIGHT_CHROME_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+  --quiet
+```
+
+This creates revision `mcp-registry-backend-00034-krr` (or similar) and routes 100% of traffic to it. After this, the Playwright MCP server should be able to launch Chrome and process screenshot requests.
+
 ### 2. Verify Installation
 
 After deployment, check the build logs to ensure Playwright browsers were installed:
