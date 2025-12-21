@@ -21,6 +21,7 @@ import googleAuthRouter from './routes/auth/google'
 import mcpOAuthRouter from './routes/auth/mcp-oauth'
 import memoryRouter from './routes/memory'
 import { eventBusConsumerService } from './services/event-bus-consumer.service'
+import { healerService } from './services/healer.service'
 
 const app = express()
 const server = http.createServer(app)
@@ -73,6 +74,7 @@ const gracefulShutdown = async () => {
   }
   await kafkaConsumerService.stop()
   await eventBusConsumerService.stop()
+  await healerService.stop()
   
   // Close Kafka connections
   await shutdownKafka()
@@ -118,6 +120,10 @@ async function startServer() {
       // Start event bus consumer (for cross-server communication)
       console.log('🔄 Starting event bus consumer...')
       await eventBusConsumerService.start()
+
+      // Start Healer service (DLQ watcher for error recovery)
+      console.log('🔄 Starting Healer service (DLQ watcher)...')
+      await healerService.start()
 
       // Register example workflows
       const { setupVisionToResearcherWorkflow } = await import('./services/workflow-example.service')
