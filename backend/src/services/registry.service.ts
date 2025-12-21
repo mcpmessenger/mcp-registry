@@ -189,6 +189,7 @@ export class RegistryService {
     federationId?: string
     isPublic?: boolean
     metadata?: Record<string, unknown>
+    authConfig?: Record<string, unknown> // OAuth2 configuration
   }): Promise<MCPServer> {
     // Validate serverId format (should be like "io.github.mcpmessenger/mcp-server")
     if (!serverData.serverId || !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(serverData.serverId)) {
@@ -239,6 +240,7 @@ export class RegistryService {
           publishedBy: serverData.publishedBy ?? existing.publishedBy,
           publishedAt: new Date(),
           metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : existing.metadata,
+          authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : existing.authConfig,
         },
       })
 
@@ -262,6 +264,7 @@ export class RegistryService {
           federationId: serverData.federationId ?? null,
           publishedBy: serverData.publishedBy ?? null,
           metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : null,
+          authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : null,
         },
       })
 

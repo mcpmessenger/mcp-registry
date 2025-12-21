@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "fix-playwright": "ts-node src/scripts/fix-playwright-tools.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "prestart": "node scripts/start-kafka.js || powershell -ExecutionPolicy Bypass -File scripts/start-kafka.ps1 || bash scripts/start-kafka.sh || echo 'Kafka startup skipped - start manually if needed'",
     "start": "ts-node src/server.ts",
+    "start:no-kafka": "ts-node src/server.ts",
     "build": "tsc",
     "postinstall": "npx prisma generate",
     "prisma:generate": "npx prisma generate",
@@ -13,7 +16,10 @@
     "prisma:studio": "npx prisma studio",
     "migrate": "npx prisma migrate dev",
     "migrate:deploy": "npx prisma migrate deploy",
-    "seed": "ts-node src/scripts/seed-mcp-server.ts"
+    "seed": "ts-node src/scripts/seed-mcp-server.ts",
+    "register-official": "ts-node src/scripts/register-official-servers.ts",
+    "register-valuation": "ts-node src/scripts/register-valuation-server.ts",
+    "update-playwright-http": "ts-node src/scripts/update-playwright-to-http.ts"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +32,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
+    "google-auth-library": "^10.5.0",
     "kafkajs": "^2.2.4",
     "multer": "^1.4.5-lts.1",
     "openai": "^4.28.0",

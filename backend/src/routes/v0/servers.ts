@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { registryService } from '../../services/registry.service'
+import { authenticateUser } from '../../middleware/auth.middleware'
 import type { MCPServer, MCPTool, MCPToolInputProperty } from '../../types/mcp'
 
 const router = Router()
@@ -114,15 +115,22 @@ const publishServerSchema = z.object({
   metadata: z.record(z.any()).optional(),
 })
 
-router.post('/publish', async (req, res, next) => {
+router.post('/publish', authenticateUser, async (req, res, next) => {
   try {
     // Validate request body
     const validated = publishServerSchema.parse(req.body)
 
-    // Extract publishedBy from auth context (if available)
-    const headerUserId = req.headers['x-user-id']
-    const normalizedUserId = Array.isArray(headerUserId) ? headerUserId[0] : headerUserId
-    const publishedBy = validated.publishedBy || normalizedUserId || 'anonymous'
+    // Extract publishedBy from authenticated user or fallback
+    let publishedBy: string
+    if (req.user) {
+      // Use authenticated user's email or userId
+      publishedBy = validated.publishedBy || req.user.email || req.user.userId
+    } else {
+      // Fallback to header or anonymous
+      const headerUserId = req.headers['x-user-id']
+      const normalizedUserId = Array.isArray(headerUserId) ? headerUserId[0] : headerUserId
+      publishedBy = validated.publishedBy || normalizedUserId || 'anonymous'
+    }
 
     const normalizedTools: MCPTool[] | undefined = validated.tools?.map((tool) => ({
       ...tool,
@@ -169,7 +177,7 @@ router.post('/publish', async (req, res, next) => {
  * PUT /v0.1/servers/:serverId
  * Update an existing MCP server
  */
-router.put('/servers/:serverId', async (req, res, next) => {
+router.put('/servers/:serverId', authenticateUser, async (req, res, next) => {
   try {
     const { serverId } = req.params
     const decodedServerId = decodeURIComponent(serverId)
@@ -194,9 +202,15 @@ router.put('/servers/:serverId', async (req, res, next) => {
       })
     }
 
-    const headerUserId = req.headers['x-user-id']
-    const normalizedUserId = Array.isArray(headerUserId) ? headerUserId[0] : headerUserId
-    const publishedBy = updateData.publishedBy || normalizedUserId || 'anonymous'
+    // Extract publishedBy from authenticated user or fallback
+    let publishedBy: string
+    if (req.user) {
+      publishedBy = updateData.publishedBy || req.user.email || req.user.userId
+    } else {
+      const headerUserId = req.headers['x-user-id']
+      const normalizedUserId = Array.isArray(headerUserId) ? headerUserId[0] : headerUserId
+      publishedBy = updateData.publishedBy || normalizedUserId || 'anonymous'
+    }
 
     const normalizedTools: MCPTool[] | undefined = updateData.tools?.map((tool) => ({
       ...tool,

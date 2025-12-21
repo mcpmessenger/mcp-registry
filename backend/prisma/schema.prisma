@@ -51,6 +51,9 @@ model McpServer {
   publishedBy     String?  // User/owner who published this server
   publishedAt     DateTime @default(now())
   metadata        String?  // JSON string for additional metadata
+  authConfig      String?  // JSON: OAuth2 configuration for third-party servers
+  encryptedTokens String?  // Encrypted OAuth tokens (encrypted at rest)
+  tokenExpiresAt  DateTime? // Token expiration
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -157,4 +160,80 @@ model OAuthConsent {
   @@index([userId])
   @@index([clientId])
   @@index([isActive])
+}
+
+// Conversation and Agent Memory
+model Conversation {
+  id              String   @id @default(cuid())
+  userId          String?  // Optional: for user-specific conversations
+  title           String?   // Auto-generated or user-provided title
+  systemPrompt    String?   // System instructions for the agent
+  context         String?   // JSON string for conversation context/metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  messages        Message[]
+  toolInvocations ToolInvocation[]
+  memories        Memory[]
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Chat messages in a conversation
+model Message {
+  id              String   @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            String   // "user", "assistant", "system", "tool"
+  content         String   // Message content
+  toolCalls       String?  // JSON array of tool calls made by assistant
+  toolResults     String?  // JSON array of tool results
+  metadata        String?  // JSON string for additional metadata (attachments, etc.)
+  createdAt       DateTime  @default(now())
+  
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+// Tool invocations across servers
+model ToolInvocation {
+  id              String   @id @default(cuid())
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  serverId        String   // Which MCP server was used
+  toolName        String   // Tool that was invoked
+  arguments       String   // JSON string of arguments
+  result          String?  // JSON string of result
+  error           String?  // Error message if failed
+  latency         Int?     // Response time in milliseconds
+  createdAt       DateTime  @default(now())
+  
+  @@index([conversationId])
+  @@index([serverId])
+  @@index([createdAt])
+}
+
+// Agent Memory - long-term context and learned information
+model Memory {
+  id              String   @id @default(cuid())
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  userId          String?  // User-specific memories
+  type            String   // "fact", "preference", "instruction", "context"
+  key             String   // Memory key/identifier
+  value           String   // Memory value/content (can be JSON)
+  importance      Int      @default(1) // 1-10, higher = more important
+  accessCount     Int      @default(0) // How many times this memory was accessed
+  lastAccessed    DateTime @default(now())
+  expiresAt       DateTime? // Optional expiration
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([conversationId])
+  @@index([userId])
+  @@index([type])
+  @@index([key])
+  @@index([importance])
 }

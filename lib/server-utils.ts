@@ -15,29 +15,40 @@ export function transformServerToAgent(server: MCPServer, index: number): MCPAge
     throw new Error(`Invalid server data: missing serverId or name`)
   }
 
-  // Extract endpoint from metadata or manifest
+  // Check if this is a STDIO-based server (has command/args)
+  const isStdioServer = server.command && server.args && server.args.length > 0
+  
+  // Extract endpoint from metadata or manifest (only needed for HTTP servers)
   let endpoint = ''
   
-  // Try metadata first (most reliable)
-  if (server.metadata && typeof server.metadata === 'object') {
-    const metadata = server.metadata as Record<string, unknown>
-    if (typeof metadata.endpoint === 'string' && metadata.endpoint) {
-      endpoint = metadata.endpoint
+  if (!isStdioServer) {
+    // Only HTTP servers need endpoints
+    // Try metadata first (most reliable)
+    if (server.metadata && typeof server.metadata === 'object') {
+      const metadata = server.metadata as Record<string, unknown>
+      if (typeof metadata.endpoint === 'string' && metadata.endpoint) {
+        endpoint = metadata.endpoint
+      }
     }
-  }
-  
-  // Fallback to manifest
-  if (!endpoint && server.manifest && typeof server.manifest === 'object') {
-    const manifest = server.manifest as Record<string, unknown>
-    if (typeof manifest.endpoint === 'string' && manifest.endpoint) {
-      endpoint = manifest.endpoint
+    
+    // Fallback to manifest
+    if (!endpoint && server.manifest && typeof server.manifest === 'object') {
+      const manifest = server.manifest as Record<string, unknown>
+      if (typeof manifest.endpoint === 'string' && manifest.endpoint) {
+        endpoint = manifest.endpoint
+      }
     }
-  }
-  
-  // Last resort: use serverId as endpoint (for local servers)
-  if (!endpoint) {
-    console.warn(`No endpoint found for server ${server.serverId}, using serverId as fallback`)
-    endpoint = server.serverId
+    
+    // Last resort: use serverId as endpoint (for local servers)
+    if (!endpoint) {
+      console.warn(`No endpoint found for HTTP server ${server.serverId}, using serverId as fallback`)
+      endpoint = server.serverId
+    }
+  } else {
+    // STDIO servers don't need endpoints - backend handles them
+    // Use a special marker to indicate STDIO server
+    endpoint = `stdio://${server.serverId}`
+    console.log(`STDIO server detected: ${server.serverId} (command: ${server.command}, args: ${server.args?.join(' ')})`)
   }
   
   // Build manifest JSON (merge stored manifest with current server data)
