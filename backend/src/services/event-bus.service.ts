@@ -1,4 +1,6 @@
 import { kafkaProducer } from '../config/kafka'
+import type { HandoverEvent } from '../types/handover-events'
+import { createHandoverEvent } from '../types/handover-events'
 
 export interface MCPEvent {
   event: string // e.g., "vision.captured", "data.processed"
@@ -27,16 +29,30 @@ export interface DLQEvent extends MCPEvent {
 export class EventBusService {
   /**
    * Emit an event that other servers can subscribe to
+   * Supports both legacy MCPEvent format and new HandoverEvent format
    */
-  async emit(event: Omit<MCPEvent, 'timestamp'>): Promise<void> {
-    const mcpEvent: MCPEvent = {
-      ...event,
-      timestamp: new Date().toISOString(),
-      status: event.status || 'success',
+  async emit(event: Omit<MCPEvent, 'timestamp'> | HandoverEvent): Promise<void> {
+    // Check if it's a HandoverEvent (has payload.contextId)
+    const isHandoverEvent = 'payload' in event && typeof event.payload === 'object' && 'contextId' in event.payload
+
+    let eventToPublish: MCPEvent | HandoverEvent
+
+    if (isHandoverEvent) {
+      // Already in handover format
+      eventToPublish = event as HandoverEvent
+    } else {
+      // Convert legacy MCPEvent format
+      const mcpEvent = event as Omit<MCPEvent, 'timestamp'>
+      eventToPublish = {
+        ...mcpEvent,
+        timestamp: new Date().toISOString(),
+        status: mcpEvent.status || 'success',
+      } as MCPEvent
     }
 
     // Normalize serverId for topic name (replace / with .)
-    const normalizedServerId = event.serverId.replace(/\//g, '.')
+    const serverId = isHandoverEvent ? (event as HandoverEvent).serverId : (event as Omit<MCPEvent, 'timestamp'>).serverId
+    const normalizedServerId = serverId.replace(/\//g, '.')
     const serverTopic = `mcp.events.${normalizedServerId}`
 
     try {
@@ -45,8 +61,11 @@ export class EventBusService {
         topic: serverTopic,
         messages: [
           {
-            key: event.event,
-            value: JSON.stringify(mcpEvent),
+            key: isHandoverEvent ? (event as HandoverEvent).event : (event as Omit<MCPEvent, 'timestamp'>).event,
+            value: JSON.stringify(eventToPublish),
+            headers: {
+              'event-format': isHandoverEvent ? 'handover' : 'legacy',
+            },
           },
         ],
       })
@@ -56,8 +75,11 @@ export class EventBusService {
         topic: 'mcp.events.all',
         messages: [
           {
-            key: `${event.serverId}:${event.event}`,
-            value: JSON.stringify(mcpEvent),
+            key: `${serverId}:${isHandoverEvent ? (event as HandoverEvent).event : (event as Omit<MCPEvent, 'timestamp'>).event}`,
+            value: JSON.stringify(eventToPublish),
+            headers: {
+              'event-format': isHandoverEvent ? 'handover' : 'legacy',
+            },
           },
         ],
       })
@@ -65,6 +87,14 @@ export class EventBusService {
       console.error('Failed to emit event:', error)
       // Don't throw - event emission should not break tool invocation
     }
+  }
+
+  /**
+   * Emit a standardized handover event
+   * This is the preferred method for orchestration events
+   */
+  async emitHandoverEvent(event: HandoverEvent): Promise<void> {
+    await this.emit(event)
   }
 
   /**
