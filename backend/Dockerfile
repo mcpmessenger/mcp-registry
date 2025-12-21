@@ -82,18 +82,23 @@ RUN mkdir -p /ms-playwright-browsers && \
 # Create Playwright browser directory structure and symlink to system Chromium
 # Playwright looks for browsers in ~/.cache/ms-playwright/chromium-<version>/chrome-linux/chrome
 # We create a version directory (using "system" as version) and symlink to system Chromium
+# Also create /opt/google/chrome/chrome symlink for compatibility
 RUN PLAYWRIGHT_DIR="/home/node/.cache/ms-playwright/chromium-system/chrome-linux" && \
     mkdir -p "$PLAYWRIGHT_DIR" && \
+    mkdir -p /opt/google/chrome && \
     if [ -f /usr/bin/chromium-browser ]; then \
       ln -sf /usr/bin/chromium-browser "$PLAYWRIGHT_DIR/chrome" && \
-      echo "Created symlink: /usr/bin/chromium-browser -> $PLAYWRIGHT_DIR/chrome"; \
+      ln -sf /usr/bin/chromium-browser /opt/google/chrome/chrome && \
+      echo "Created symlinks: /usr/bin/chromium-browser -> $PLAYWRIGHT_DIR/chrome and /opt/google/chrome/chrome"; \
     elif [ -f /usr/bin/chromium ]; then \
       ln -sf /usr/bin/chromium "$PLAYWRIGHT_DIR/chrome" && \
-      echo "Created symlink: /usr/bin/chromium -> $PLAYWRIGHT_DIR/chrome"; \
+      ln -sf /usr/bin/chromium /opt/google/chrome/chrome && \
+      echo "Created symlinks: /usr/bin/chromium -> $PLAYWRIGHT_DIR/chrome and /opt/google/chrome/chrome"; \
     else \
       echo "Warning: Chromium not found at expected locations"; \
     fi && \
-    chown -R nodejs:nodejs /home/node/.cache
+    chown -R nodejs:nodejs /home/node/.cache && \
+    chown -R nodejs:nodejs /opt/google/chrome
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
