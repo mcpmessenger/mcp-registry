@@ -19,8 +19,8 @@ const playwrightServer = {
   command: 'npx',
   args: ['-y', '@playwright/mcp@latest'],
   env: {
-    // Tell Playwright where to find Chromium (system Chromium on Alpine)
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/opt/google/chrome/chrome',
+    // Tell Playwright where to find browser cache (we've set up symlinks there)
+    PLAYWRIGHT_BROWSERS_PATH: '/home/node/.cache/ms-playwright',
     // Skip browser download since we're using system Chromium
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
   },
