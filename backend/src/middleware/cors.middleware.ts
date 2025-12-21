@@ -21,7 +21,7 @@ export const corsMiddleware = cors({
       env.server.corsOrigin,
       'http://localhost:3000',
       'https://vercel.com',
-      // Add production frontend URL when available
+      // Allow all vercel.app subdomains for flexibility
     ]
 
     // In development, allow all origins (per MCP spec recommendation for browser tools)
@@ -30,9 +30,12 @@ export const corsMiddleware = cors({
     }
 
     // In production, check against whitelist
-    if (allowedOrigins.some((allowed) => origin.includes(allowed))) {
+    // Also allow any *.vercel.app domain for flexibility
+    const isVercelDomain = origin.includes('.vercel.app')
+    if (allowedOrigins.some((allowed) => origin.includes(allowed)) || isVercelDomain) {
       callback(null, true)
     } else {
+      console.warn(`CORS blocked origin: ${origin}. Allowed: ${allowedOrigins.join(', ')}, Vercel domains`)
       callback(new Error('Not allowed by CORS'))
     }
   },
