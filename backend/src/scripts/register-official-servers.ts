@@ -19,15 +19,15 @@ const playwrightServer = {
   command: 'npx',
   args: ['-y', '@playwright/mcp@latest'],
   env: {
+    // CRITICAL: Explicitly use 'chromium' channel instead of 'chrome'
+    // This prevents Playwright from looking for branded Google Chrome
+    BROWSER: 'chromium',
+    // Path to the Chromium executable (symlinked in Dockerfile)
+    EXECUTABLE_PATH: '/opt/google/chrome/chrome',
     // Tell Playwright where to find browser cache (we've set up symlinks there)
     PLAYWRIGHT_BROWSERS_PATH: '/home/node/.cache/ms-playwright',
     // Skip browser download since we're using system Chromium
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
-    // Point to system Chromium executable (Alpine Linux)
-    // This helps Playwright find the browser when using 'chrome' channel
-    PLAYWRIGHT_CHROME_EXECUTABLE_PATH: '/opt/google/chrome/chrome',
-    // Alternative: use chromium directly instead of chrome channel
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/usr/bin/chromium-browser',
   },
   tools: [
     {
