@@ -24,7 +24,7 @@ The Dockerfile has been updated to install Playwright browsers during the build.
 ```powershell
 cd backend
 
-# Deploy to Cloud Run (will rebuild with Playwright browsers)
+# Deploy to Cloud Run (will rebuild with Playwright browsers installed)
 gcloud run deploy mcp-registry-backend `
   --source . `
   --region us-central1 `
@@ -47,6 +47,10 @@ gcloud run services update mcp-registry-backend `
 ```
 
 This creates revision `mcp-registry-backend-00034-krr` (or similar) and routes 100% of traffic to it. After this, the Playwright MCP server should be able to launch Chrome and process screenshot requests.
+
+## Notes
+- `PLAYWRIGHT_BROWSERS_PATH` tells Playwright where to expect the downloaded browsers.
+- The Dockerfile now installs `playwright` globally and runs `npx playwright install chromium --with-deps` during the build, ensuring the binary exists inside `/ms-playwright-browsers`.
 
 ### 2. Verify Installation
 
