@@ -23,6 +23,11 @@ const playwrightServer = {
     PLAYWRIGHT_BROWSERS_PATH: '/home/node/.cache/ms-playwright',
     // Skip browser download since we're using system Chromium
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+    // Point to system Chromium executable (Alpine Linux)
+    // This helps Playwright find the browser when using 'chrome' channel
+    PLAYWRIGHT_CHROME_EXECUTABLE_PATH: '/opt/google/chrome/chrome',
+    // Alternative: use chromium directly instead of chrome channel
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/usr/bin/chromium-browser',
   },
   tools: [
     {
