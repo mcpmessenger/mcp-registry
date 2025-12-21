@@ -3,15 +3,23 @@
  * Handles all communication with the backend API
  */
 
-// Use environment variable or default to localhost:3001
+const PROD_BACKEND_URL = 'https://mcp-registry-backend-554655392699.us-central1.run.app'
+
+// Use environment variable or default to localhost:3001 (or production backend when running in prod)
 // In browser, we need to use the full URL
 const getApiBaseUrl = () => {
   if (typeof window !== 'undefined') {
     // Client-side: use the same origin or configured URL
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    return (
+      process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.NODE_ENV === 'production' ? PROD_BACKEND_URL : 'http://localhost:3001')
+    )
   }
   // Server-side: use the same
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  return (
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === 'production' ? PROD_BACKEND_URL : 'http://localhost:3001')
+  )
 }
 
 const API_BASE_URL = getApiBaseUrl()
