@@ -52,10 +52,10 @@ COPY --from=builder /app/dist ./dist
 
 # Install Playwright browsers for MCP server support
 # This is needed for @playwright/mcp to work
-# Use npx -y to download Playwright temporarily and install browsers
+# On Alpine, we use the system Chromium installed above and configure Playwright to use it
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright-browsers
-RUN npm install -g playwright && \
-    npx playwright install chromium --with-deps || echo "Playwright browser install skipped"
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm install -g playwright
 
 # CRITICAL FIX: Ensure entire prisma directory (including migrations) is copied
 # This was the root cause - migrations directory was missing
@@ -74,6 +74,20 @@ RUN addgroup -g 1001 -S nodejs && \
 # Prepare Playwright browsers directory and hand ownership to node user
 RUN mkdir -p /ms-playwright-browsers && \
     chown -R nodejs:nodejs /ms-playwright-browsers
+
+# Create symlink for Playwright to use system Chromium
+# System Chromium is installed at /usr/bin/chromium-browser on Alpine
+# We symlink it to the path Playwright expects
+RUN mkdir -p /opt/google/chrome && \
+    if [ -f /usr/bin/chromium-browser ]; then \
+      ln -sf /usr/bin/chromium-browser /opt/google/chrome/chrome && \
+      echo "Created symlink: /usr/bin/chromium-browser -> /opt/google/chrome/chrome"; \
+    elif [ -f /usr/bin/chromium ]; then \
+      ln -sf /usr/bin/chromium /opt/google/chrome/chrome && \
+      echo "Created symlink: /usr/bin/chromium -> /opt/google/chrome/chrome"; \
+    else \
+      echo "Warning: Chromium not found at expected locations"; \
+    fi
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
