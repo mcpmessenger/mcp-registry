@@ -4,22 +4,31 @@
  */
 
 const PROD_BACKEND_URL = 'https://mcp-registry-backend-554655392699.us-central1.run.app'
+const DEV_BACKEND_URL = 'http://localhost:3001'
 
-// Use environment variable or default to localhost:3001 (or production backend when running in prod)
-// In browser, we need to use the full URL
+// Use environment variable or default based on environment
+// NEXT_PUBLIC_API_URL takes precedence if set, otherwise use production URL for production builds
 const getApiBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    // Client-side: use the same origin or configured URL
-    return (
-      process.env.NEXT_PUBLIC_API_URL ||
-      (process.env.NODE_ENV === 'production' ? PROD_BACKEND_URL : 'http://localhost:3001')
-    )
+  // Explicitly check for production environment (Vercel sets VERCEL=1)
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+  
+  // Get the env var value if set
+  const envUrl = process.env.NEXT_PUBLIC_API_URL
+  
+  // If we're in production and the env var points to localhost, ignore it and use production URL
+  // This prevents accidentally using localhost in production deployments
+  if (isProduction && envUrl && envUrl.includes('localhost')) {
+    console.warn('NEXT_PUBLIC_API_URL points to localhost in production, using production URL instead')
+    return PROD_BACKEND_URL
   }
-  // Server-side: use the same
-  return (
-    process.env.NEXT_PUBLIC_API_URL ||
-    (process.env.NODE_ENV === 'production' ? PROD_BACKEND_URL : 'http://localhost:3001')
-  )
+  
+  // If NEXT_PUBLIC_API_URL is explicitly set and not localhost, use it
+  if (envUrl && !envUrl.includes('localhost')) {
+    return envUrl
+  }
+  
+  // Otherwise, use production URL for production, localhost for development
+  return isProduction ? PROD_BACKEND_URL : DEV_BACKEND_URL
 }
 
 const API_BASE_URL = getApiBaseUrl()
