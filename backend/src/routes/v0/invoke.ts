@@ -127,18 +127,42 @@ router.post('/invoke', async (req, res, next) => {
           isError: result.isError || false,
         }
 
-        // Emit event for cross-server communication
-        await eventBusService.emit({
-          event: `tool.${validated.tool}.completed`,
-          serverId: validated.serverId,
-          payload: {
-            tool: validated.tool,
-            arguments: validated.arguments,
-            result: toolResult,
-          },
-          conversationId: req.body.conversationId,
-          correlationId: req.body.correlationId,
-        })
+        // Emit standardized handover event for cross-server communication
+        const { createHandoverEvent } = await import('../types/handover-events')
+        const { memoryService } = await import('../services/memory.service')
+        const conversationId = req.body.conversationId || req.body.contextId || ''
+        const intent = req.body.intent || validated.arguments.query || validated.arguments.input || 'Tool invocation'
+        
+        // Generate memory snapshot URL if we have a conversationId
+        let memorySnapshotUrl: string | undefined
+        if (conversationId) {
+          const baseUrl = `${req.protocol}://${req.get('host')}`
+          memorySnapshotUrl = memoryService.generateSnapshotUrl(conversationId, baseUrl)
+        }
+        
+        const handoverEvent = createHandoverEvent(
+          `tool.${validated.tool}.completed`,
+          validated.serverId,
+          conversationId,
+          intent,
+          {
+            lastToolOutput: {
+              tool: validated.tool,
+              serverId: validated.serverId,
+              result: toolResult,
+              timestamp: new Date().toISOString(),
+            },
+            memorySnapshotUrl,
+            status: toolResult.isError ? 'failed' : 'success',
+            correlationId: req.body.correlationId,
+            metadata: {
+              arguments: validated.arguments,
+              transport: 'stdio',
+            },
+          }
+        )
+        
+        await eventBusService.emitHandoverEvent(handoverEvent)
 
         return res.json({
           success: true,
@@ -243,18 +267,42 @@ router.post('/invoke', async (req, res, next) => {
         isError: result.isError || false,
       }
 
-      // Emit event for cross-server communication
-      await eventBusService.emit({
-        event: `tool.${validated.tool}.completed`,
-        serverId: validated.serverId,
-        payload: {
-          tool: validated.tool,
-          arguments: validated.arguments,
-          result: toolResult,
-        },
-        conversationId: req.body.conversationId,
-        correlationId: req.body.correlationId,
-      })
+      // Emit standardized handover event for cross-server communication
+      const { createHandoverEvent } = await import('../types/handover-events')
+      const { memoryService } = await import('../services/memory.service')
+      const conversationId = req.body.conversationId || req.body.contextId || ''
+      const intent = req.body.intent || validated.arguments.query || validated.arguments.input || 'Tool invocation'
+      
+      // Generate memory snapshot URL if we have a conversationId
+      let memorySnapshotUrl: string | undefined
+      if (conversationId) {
+        const baseUrl = `${req.protocol}://${req.get('host')}`
+        memorySnapshotUrl = memoryService.generateSnapshotUrl(conversationId, baseUrl)
+      }
+      
+      const handoverEvent = createHandoverEvent(
+        `tool.${validated.tool}.completed`,
+        validated.serverId,
+        conversationId,
+        intent,
+        {
+          lastToolOutput: {
+            tool: validated.tool,
+            serverId: validated.serverId,
+            result: toolResult,
+            timestamp: new Date().toISOString(),
+          },
+          memorySnapshotUrl,
+          status: toolResult.isError ? 'failed' : 'success',
+          correlationId: req.body.correlationId,
+          metadata: {
+            arguments: validated.arguments,
+            transport: 'http',
+          },
+        }
+      )
+      
+      await eventBusService.emitHandoverEvent(handoverEvent)
 
       return res.json({
         success: true,

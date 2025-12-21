@@ -139,14 +139,18 @@ router.post('/context', async (req, res, next) => {
   try {
     const validated = upsertContextSchema.parse(req.body)
 
-    await memoryService.upsertContext(
+    // Get base URL from request (for generating snapshot URL)
+    const baseUrl = `${req.protocol}://${req.get('host')}`
+    const snapshotUrl = await memoryService.upsertContext(
       validated.conversationId,
-      validated.context
+      validated.context,
+      baseUrl
     )
 
     res.json({
       success: true,
       message: 'Context updated successfully',
+      snapshotUrl,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

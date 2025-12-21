@@ -71,10 +71,20 @@ export class MemoryService {
   }
 
   /**
+   * Generate a memory snapshot URL for a conversation
+   * This URL can be used to reference the current memory state
+   */
+  generateSnapshotUrl(conversationId: string, baseUrl?: string): string {
+    const base = baseUrl || process.env.API_BASE_URL || 'http://localhost:3001'
+    return `${base}/api/memory?conversationId=${encodeURIComponent(conversationId)}`
+  }
+
+  /**
    * Upsert context data for a conversation
    * Stores tool outputs, conversation state, and other context
+   * Returns the memory snapshot URL
    */
-  async upsertContext(conversationId: string, context: ContextData): Promise<void> {
+  async upsertContext(conversationId: string, context: ContextData, baseUrl?: string): Promise<string> {
     // Store tool outputs as context memories
     if (context.toolOutputs) {
       for (const [toolName, output] of Object.entries(context.toolOutputs)) {
@@ -131,6 +141,9 @@ export class MemoryService {
         })
       }
     }
+
+    // Return snapshot URL for this conversation
+    return this.generateSnapshotUrl(conversationId, baseUrl)
   }
 
   /**
