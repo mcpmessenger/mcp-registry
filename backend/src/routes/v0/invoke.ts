@@ -1,7 +1,11 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { registryService } from '../../services/registry.service'
+import { mcpStdioService } from '../../services/mcp-stdio.service'
+import { memoryService } from '../../services/memory.service'
+import { eventBusService } from '../../services/event-bus.service'
 import type { MCPToolResult } from '../../types/mcp'
+import type { MemoryType } from '../../services/memory.service'
 
 const router = Router()
 
@@ -14,11 +18,72 @@ const invokeToolSchema = z.object({
 /**
  * POST /v0.1/invoke
  * Invoke a tool on a registered MCP server
- * This acts as a proxy to handle CORS and provide a unified interface
+ * Supports both HTTP-based and STDIO-based (npx) MCP servers
  */
 router.post('/invoke', async (req, res, next) => {
   try {
     const validated = invokeToolSchema.parse(req.body)
+
+    // Handle special search_history tool
+  if (validated.tool === 'search_history') {
+    const { conversationId, query, options } = validated.arguments as {
+      conversationId: string
+      query: string
+      options?: {
+        limit?: number
+        types?: string[]
+        minImportance?: number
+      }
+    }
+
+    const normalizeMemoryTypes = (types?: string[]): MemoryType[] | undefined => {
+      if (!types || types.length === 0) {
+        return undefined
+      }
+
+      const allowedTypes: MemoryType[] = ['preference', 'fact', 'context', 'instruction']
+      const normalized = types
+        .map((type) => type.trim().toLowerCase())
+        .filter((type): type is MemoryType => allowedTypes.includes(type as MemoryType))
+
+      return normalized.length > 0 ? normalized : undefined
+    }
+
+      if (!conversationId || !query) {
+        return res.status(400).json({
+          success: false,
+          error: 'conversationId and query are required for search_history',
+        })
+      }
+
+    const memories = await memoryService.searchHistory(
+      conversationId,
+      query,
+      options
+        ? {
+            limit: options.limit,
+            types: normalizeMemoryTypes(options.types),
+            minImportance: options.minImportance,
+          }
+        : undefined
+    )
+
+      return res.json({
+        success: true,
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                memories,
+                count: memories.length,
+                query,
+              }),
+            },
+          ],
+        },
+      })
+    }
 
     // Get the server from registry
     const server = await registryService.getServerById(validated.serverId)
@@ -29,6 +94,106 @@ router.post('/invoke', async (req, res, next) => {
       })
     }
 
+    // Check if this is a STDIO-based server (has command/args)
+    const isStdioServer = server.command && server.args && server.args.length > 0
+
+    // For STDIO-based servers (like @playwright/mcp), use STDIO communication
+    if (isStdioServer) {
+      try {
+        // Ensure connected
+        if (!mcpStdioService.isConnected(validated.serverId)) {
+          await mcpStdioService.connect(
+            validated.serverId,
+            server.command!,
+            server.args!,
+            server.env
+          )
+        }
+
+        // Invoke tool via STDIO
+        const result = await mcpStdioService.invokeTool(
+          validated.serverId,
+          validated.tool,
+          validated.arguments
+        )
+
+        // Transform MCP result to our format
+        const toolResult: MCPToolResult = {
+          content: Array.isArray(result.content)
+            ? result.content
+            : typeof result.content === 'string'
+            ? [{ type: 'text', text: result.content }]
+            : [{ type: 'text', text: JSON.stringify(result) }],
+          isError: result.isError || false,
+        }
+
+        // Emit standardized handover event for cross-server communication
+        const { createHandoverEvent } = await import('../types/handover-events')
+        const { memoryService } = await import('../services/memory.service')
+        const conversationId = req.body.conversationId || req.body.contextId || ''
+        const intent = req.body.intent || validated.arguments.query || validated.arguments.input || 'Tool invocation'
+        
+        // Generate memory snapshot URL if we have a conversationId
+        let memorySnapshotUrl: string | undefined
+        if (conversationId) {
+          const baseUrl = `${req.protocol}://${req.get('host')}`
+          memorySnapshotUrl = memoryService.generateSnapshotUrl(conversationId, baseUrl)
+        }
+        
+        const handoverEvent = createHandoverEvent(
+          `tool.${validated.tool}.completed`,
+          validated.serverId,
+          conversationId,
+          intent,
+          {
+            lastToolOutput: {
+              tool: validated.tool,
+              serverId: validated.serverId,
+              result: toolResult,
+              timestamp: new Date().toISOString(),
+            },
+            memorySnapshotUrl,
+            status: toolResult.isError ? 'failed' : 'success',
+            correlationId: req.body.correlationId,
+            metadata: {
+              arguments: validated.arguments,
+              transport: 'stdio',
+            },
+          }
+        )
+        
+        await eventBusService.emitHandoverEvent(handoverEvent)
+
+        return res.json({
+          success: true,
+          result: toolResult,
+          transport: 'stdio',
+        })
+      } catch (stdioError) {
+        console.error(`STDIO invocation error for ${validated.serverId}:`, stdioError)
+        const errorMessage = stdioError instanceof Error ? stdioError.message : 'Unknown error'
+        
+        // Check if it's a package not found error
+        const isPackageNotFound = errorMessage.includes('404') || 
+                                  errorMessage.includes('Not found') ||
+                                  errorMessage.includes('does not exist')
+        
+        return res.status(500).json({
+          success: false,
+          error: `Failed to invoke tool via STDIO: ${errorMessage}`,
+          details: {
+            serverId: validated.serverId,
+            tool: validated.tool,
+            transport: 'stdio',
+            ...(isPackageNotFound && {
+              suggestion: 'This MCP server package may not be published to npm yet. Google MCP servers are rolling out incrementally.'
+            }),
+          },
+        })
+      }
+    }
+
+    // For HTTP-based servers, use HTTP communication
     // Extract endpoint from metadata or manifest
     let endpoint: string | undefined
     if (server.metadata && typeof server.metadata === 'object') {
@@ -48,13 +213,16 @@ router.post('/invoke', async (req, res, next) => {
       console.error(`Server ${validated.serverId} missing endpoint. Metadata:`, server.metadata, 'Manifest:', server.manifest)
       return res.status(400).json({
         success: false,
-        error: `Server ${validated.serverId} does not have an endpoint configured. Please edit the agent and add an endpoint URL.`,
+        error: `Server ${validated.serverId} does not have an endpoint configured.`,
         details: {
+          serverType: isStdioServer ? 'stdio' : 'http',
+          hasCommand: !!server.command,
+          hasArgs: !!server.args,
           hasMetadata: !!server.metadata,
           hasManifest: !!server.manifest,
-          metadataEndpoint: server.metadata && typeof server.metadata === 'object' 
-            ? (server.metadata as Record<string, unknown>).endpoint 
-            : undefined,
+          suggestion: isStdioServer 
+            ? 'This server uses STDIO (npx command). Ensure the command is correct and dependencies are installed.'
+            : 'Please edit the agent and add an endpoint URL (e.g., https://your-server.com)',
         },
       })
     }
@@ -68,7 +236,7 @@ router.post('/invoke', async (req, res, next) => {
       })
     }
 
-    // Try different MCP invocation patterns
+    // HTTP-based server - try different MCP invocation patterns
     // Pattern 1: Direct HTTP POST to /mcp/invoke (if it's an HTTP-based MCP server)
     try {
       const response = await fetch(`${endpoint}/mcp/invoke`, {
@@ -99,9 +267,47 @@ router.post('/invoke', async (req, res, next) => {
         isError: result.isError || false,
       }
 
+      // Emit standardized handover event for cross-server communication
+      const { createHandoverEvent } = await import('../types/handover-events')
+      const { memoryService } = await import('../services/memory.service')
+      const conversationId = req.body.conversationId || req.body.contextId || ''
+      const intent = req.body.intent || validated.arguments.query || validated.arguments.input || 'Tool invocation'
+      
+      // Generate memory snapshot URL if we have a conversationId
+      let memorySnapshotUrl: string | undefined
+      if (conversationId) {
+        const baseUrl = `${req.protocol}://${req.get('host')}`
+        memorySnapshotUrl = memoryService.generateSnapshotUrl(conversationId, baseUrl)
+      }
+      
+      const handoverEvent = createHandoverEvent(
+        `tool.${validated.tool}.completed`,
+        validated.serverId,
+        conversationId,
+        intent,
+        {
+          lastToolOutput: {
+            tool: validated.tool,
+            serverId: validated.serverId,
+            result: toolResult,
+            timestamp: new Date().toISOString(),
+          },
+          memorySnapshotUrl,
+          status: toolResult.isError ? 'failed' : 'success',
+          correlationId: req.body.correlationId,
+          metadata: {
+            arguments: validated.arguments,
+            transport: 'http',
+          },
+        }
+      )
+      
+      await eventBusService.emitHandoverEvent(handoverEvent)
+
       return res.json({
         success: true,
         result: toolResult,
+        transport: 'http',
       })
     } catch (fetchError) {
       // Try alternative endpoint: /tools/call or /api/tools/call
@@ -138,6 +344,7 @@ router.post('/invoke', async (req, res, next) => {
             return res.json({
               success: true,
               result: toolResult,
+              transport: 'http',
             })
           }
         } catch {

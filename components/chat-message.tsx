@@ -40,11 +40,58 @@ function extractSVG(content: string): { svg: string | null; remainingText: strin
 }
 
 /**
- * Render message content with SVG support
+ * Extract base64 images from message content
+ */
+function extractImages(content: string): Array<{ dataUrl: string; mimeType: string }> {
+  const images: Array<{ dataUrl: string; mimeType: string }> = []
+  
+  // Look for data URLs (data:image/...;base64,...)
+  const dataUrlMatch = content.match(/data:image\/([^;]+);base64,([^\s"']+)/gi)
+  if (dataUrlMatch) {
+    dataUrlMatch.forEach(url => {
+      const match = url.match(/data:image\/([^;]+);base64,(.+)/i)
+      if (match) {
+        images.push({
+          dataUrl: url,
+          mimeType: `image/${match[1]}`,
+        })
+      }
+    })
+  }
+  
+  return images
+}
+
+/**
+ * Render message content with SVG and image support
  */
 function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
   const { svg, remainingText } = extractSVG(content)
+  const images = extractImages(content)
   const [showCode, setShowCode] = useState(false)
+
+  // If we have images, render them
+  if (images.length > 0) {
+    return (
+      <div className="space-y-3">
+        {images.map((img, idx) => (
+          <div key={idx} className="flex flex-col items-center gap-2 p-2 bg-background rounded-lg border border-border">
+            <img
+              src={img.dataUrl}
+              alt={`Screenshot ${idx + 1}`}
+              className="max-w-full max-h-96 object-contain rounded"
+            />
+            <p className="text-xs text-muted-foreground">Screenshot</p>
+          </div>
+        ))}
+        {remainingText && (
+          <div className="whitespace-pre-wrap break-words">
+            {remainingText}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (!svg) {
     // No SVG found, render as plain text

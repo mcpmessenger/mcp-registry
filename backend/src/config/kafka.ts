@@ -39,17 +39,21 @@ export const kafkaConsumer = kafka.consumer({
 
 /**
  * Initialize Kafka connections
+ * Returns true if successful, false if Kafka is unavailable (non-blocking)
  */
-export async function initializeKafka(): Promise<void> {
+export async function initializeKafka(): Promise<boolean> {
   try {
     await kafkaProducer.connect()
     console.log('✅ Kafka producer connected')
     
     await kafkaConsumer.connect()
     console.log('✅ Kafka consumer connected')
+    return true
   } catch (error) {
-    console.error('❌ Failed to initialize Kafka:', error)
-    throw error
+    console.warn('⚠️  Kafka unavailable - continuing without async design generation')
+    console.warn('   Kafka is only needed for SVG generation. Basic MCP tools will work.')
+    console.warn('   To enable Kafka, start it with: docker-compose -f docker-compose.kafka.yml up -d')
+    return false
   }
 }
 

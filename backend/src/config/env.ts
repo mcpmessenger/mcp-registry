@@ -17,6 +17,11 @@ interface EnvConfig {
     visionApiKey: string
     geminiApiKey: string
     geminiModelName?: string
+    oauth: {
+      clientId: string
+      clientSecret: string
+      redirectUri: string
+    }
   }
   openai: {
     apiKey: string
@@ -55,6 +60,11 @@ export const env: EnvConfig = {
     geminiApiKey: process.env.GOOGLE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
     // Model name with specific version for better compatibility (e.g., gemini-1.5-flash-001)
     geminiModelName: process.env.GEMINI_MODEL_NAME,
+    oauth: {
+      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
+      redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || `http://localhost:${process.env.PORT || '3001'}/api/auth/google/callback`,
+    },
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
@@ -81,6 +91,10 @@ if (!env.google.geminiApiKey && env.server.nodeEnv === 'production') {
 
 if (!env.openai.apiKey && env.server.nodeEnv === 'production') {
   console.warn('Warning: OPENAI_API_KEY is not set (required for Whisper transcription)')
+}
+
+if (!env.google.oauth.clientId && env.server.nodeEnv === 'production') {
+  console.warn('Warning: GOOGLE_OAUTH_CLIENT_ID is not set (required for OAuth authentication)')
 }
 
 export default env

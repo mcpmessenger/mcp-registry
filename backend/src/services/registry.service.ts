@@ -30,6 +30,24 @@ export class RegistryService {
       orderBy: {
         createdAt: 'desc',
       },
+      select: {
+        serverId: true,
+        name: true,
+        description: true,
+        version: true,
+        command: true,
+        args: true,
+        env: true,
+        tools: true,
+        capabilities: true,
+        manifest: true,
+        metadata: true,
+        workflowState: true,
+        lockedBy: true,
+        workflowAttempts: true,
+        contextId: true,
+        workflowUpdatedAt: true,
+      },
     })
 
     // Transform and filter by capability if provided (post-query filter for JSON fields)
@@ -54,6 +72,25 @@ export class RegistryService {
   async getServerById(serverId: string): Promise<MCPServer | null> {
     const server = await prisma.mcpServer.findUnique({
       where: { serverId },
+      select: {
+        serverId: true,
+        name: true,
+        description: true,
+        version: true,
+        command: true,
+        args: true,
+        env: true,
+        tools: true,
+        capabilities: true,
+        manifest: true,
+        metadata: true,
+        isActive: true,
+        workflowState: true,
+        lockedBy: true,
+        workflowAttempts: true,
+        contextId: true,
+        workflowUpdatedAt: true,
+      },
     })
 
     if (!server || !server.isActive) {
@@ -78,6 +115,11 @@ export class RegistryService {
     capabilities: string | null
     manifest: string | null
     metadata: string | null
+    workflowState?: string | null
+    lockedBy?: string | null
+    workflowAttempts?: number
+    contextId?: string | null
+    workflowUpdatedAt?: Date | null
   }): MCPServer {
     // Validate required fields
     if (!server.serverId || !server.name) {
@@ -145,6 +187,20 @@ export class RegistryService {
       }
     }
 
+    // Add workflow state to metadata if present
+    if (server.workflowState || server.lockedBy || server.workflowAttempts) {
+      if (!metadata) {
+        metadata = {}
+      }
+      metadata.workflow = {
+        state: server.workflowState || null,
+        lockedBy: server.lockedBy || null,
+        attempts: server.workflowAttempts || 0,
+        contextId: server.contextId || null,
+        updatedAt: server.workflowUpdatedAt?.toISOString() || null,
+      }
+    }
+
     const result: MCPServer = {
       serverId: server.serverId,
       name: server.name,
@@ -189,6 +245,7 @@ export class RegistryService {
     federationId?: string
     isPublic?: boolean
     metadata?: Record<string, unknown>
+    authConfig?: Record<string, unknown> // OAuth2 configuration
   }): Promise<MCPServer> {
     // Validate serverId format (should be like "io.github.mcpmessenger/mcp-server")
     if (!serverData.serverId || !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(serverData.serverId)) {
@@ -239,6 +296,7 @@ export class RegistryService {
           publishedBy: serverData.publishedBy ?? existing.publishedBy,
           publishedAt: new Date(),
           metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : existing.metadata,
+          authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : existing.authConfig,
         },
       })
 
@@ -262,6 +320,7 @@ export class RegistryService {
           federationId: serverData.federationId ?? null,
           publishedBy: serverData.publishedBy ?? null,
           metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : null,
+          authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : null,
         },
       })
 
@@ -305,6 +364,134 @@ export class RegistryService {
     capabilities?: string[]
   }): Promise<MCPServer> {
     return this.publishServer(serverData)
+  }
+
+  /**
+   * Workflow State Machine Methods
+   * These methods manage workflow state transitions for orchestration
+   */
+
+  /**
+   * Lock a server for a workflow and set initial state
+   */
+  async lockWorkflow(
+    serverId: string,
+    state: string,
+    lockedBy: string,
+    contextId?: string
+  ): Promise<void> {
+    await prisma.mcpServer.update({
+      where: { serverId },
+      data: {
+        workflowState: state,
+        lockedBy,
+        contextId: contextId || null,
+        workflowAttempts: 0,
+        workflowUpdatedAt: new Date(),
+      },
+    })
+  }
+
+  /**
+   * Transition workflow state
+   */
+  async transitionWorkflowState(
+    serverId: string,
+    newState: string,
+    lockedBy?: string
+  ): Promise<void> {
+    const updateData: any = {
+      workflowState: newState,
+      workflowUpdatedAt: new Date(),
+    }
+
+    if (lockedBy) {
+      updateData.lockedBy = lockedBy
+    }
+
+    // Clear lock if state indicates completion or failure
+    if (newState.includes('Completed') || newState.includes('Failed') || newState === 'PlanB') {
+      updateData.lockedBy = null
+    }
+
+    await prisma.mcpServer.update({
+      where: { serverId },
+      data: updateData,
+    })
+  }
+
+  /**
+   * Unlock workflow (clear lock and reset attempts)
+   */
+  async unlockWorkflow(serverId: string): Promise<void> {
+    await prisma.mcpServer.update({
+      where: { serverId },
+      data: {
+        lockedBy: null,
+        workflowAttempts: 0,
+        workflowUpdatedAt: new Date(),
+      },
+    })
+  }
+
+  /**
+   * Increment workflow retry attempts
+   */
+  async incrementWorkflowAttempts(serverId: string): Promise<number> {
+    const server = await prisma.mcpServer.findUnique({
+      where: { serverId },
+      select: { workflowAttempts: true },
+    })
+
+    if (!server) {
+      throw new Error(`Server ${serverId} not found`)
+    }
+
+    const newAttempts = server.workflowAttempts + 1
+
+    await prisma.mcpServer.update({
+      where: { serverId },
+      data: {
+        workflowAttempts: newAttempts,
+        workflowUpdatedAt: new Date(),
+      },
+    })
+
+    return newAttempts
+  }
+
+  /**
+   * Get workflow state for a server
+   */
+  async getWorkflowState(serverId: string): Promise<{
+    workflowState: string | null
+    lockedBy: string | null
+    workflowAttempts: number
+    contextId: string | null
+    workflowUpdatedAt: Date | null
+  } | null> {
+    const server = await prisma.mcpServer.findUnique({
+      where: { serverId },
+      select: {
+        workflowState: true,
+        lockedBy: true,
+        workflowAttempts: true,
+        contextId: true,
+        workflowUpdatedAt: true,
+      },
+    })
+
+    if (!server) {
+      return null
+    }
+
+    return {
+      workflowState: server.workflowState,
+      lockedBy: server.lockedBy,
+      workflowAttempts: server.workflowAttempts,
+      contextId: server.contextId,
+      workflowUpdatedAt: server.workflowUpdatedAt,
+    }
   }
 }
 
