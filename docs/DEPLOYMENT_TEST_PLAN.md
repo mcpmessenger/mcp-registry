@@ -26,8 +26,11 @@ This document provides a quick reference for verifying the latest backend deploy
      --set-secrets DATABASE_URL=db-url:latest `
      --add-cloudsql-instances slashmcp:us-central1:mcp-registry-db `
      --set-env-vars RUN_MIGRATIONS_ON_STARTUP=true,REGISTER_OFFICIAL_SERVERS_ON_STARTUP=true,CORS_ORIGIN=https://v0-logo-design-ashen-mu.vercel.app,PLAYWRIGHT_CHROME_EXECUTABLE_PATH=/opt/google/chrome/chrome `
+     --memory 2Gi `
      --quiet
    ```
+   
+   **Note:** The `BROWSER=chromium` and `EXECUTABLE_PATH` environment variables are set in the Playwright MCP server registration (in code), so they're automatically passed when the server is spawned. Memory is set to 2Gi to ensure Chromium has sufficient resources.
 
 ## 2. Backend verification
 

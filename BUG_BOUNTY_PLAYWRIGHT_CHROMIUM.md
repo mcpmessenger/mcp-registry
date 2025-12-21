@@ -320,6 +320,9 @@ gcloud run deploy mcp-registry-backend `
 
 **Status:** ⚠️ Ready to test - This is the most promising fix
 
+**Implementation Date:** December 21, 2025  
+**Code Changes:** Updated `backend/src/scripts/register-official-servers.ts` to include `BROWSER=chromium` environment variable
+
 ---
 
 ### Solution 1: Use Different Base Image
