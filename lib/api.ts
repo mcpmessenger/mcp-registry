@@ -33,6 +33,11 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl()
 
+// Log the API URL being used (helpful for debugging)
+if (typeof window !== 'undefined') {
+  console.log('[API Client] Using backend URL:', API_BASE_URL)
+}
+
 export interface MCPServer {
   serverId: string
   name: string
