@@ -71,6 +71,10 @@ RUN npx prisma generate
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
+# Prepare Playwright browsers directory and hand ownership to node user
+RUN mkdir -p /ms-playwright-browsers && \
+    chown -R nodejs:nodejs /ms-playwright-browsers
+
 # Change ownership
 RUN chown -R nodejs:nodejs /app
 

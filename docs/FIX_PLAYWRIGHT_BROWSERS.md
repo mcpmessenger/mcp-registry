@@ -51,6 +51,7 @@ This creates revision `mcp-registry-backend-00034-krr` (or similar) and routes 1
 ## Notes
 - `PLAYWRIGHT_BROWSERS_PATH` tells Playwright where to expect the downloaded browsers.
 - The Dockerfile now installs `playwright` globally and runs `npx playwright install chromium --with-deps` during the build, ensuring the binary exists inside `/ms-playwright-browsers`.
+- The image now creates `/ms-playwright-browsers` as root and chowns it to `nodejs`, so the service can write browser artifacts at runtime without `EACCES`.
 
 ### 2. Verify Installation
 
