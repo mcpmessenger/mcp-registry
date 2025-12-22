@@ -398,25 +398,44 @@ export interface InvokeMCPToolResponse {
 
 export async function invokeMCPTool(request: InvokeMCPToolRequest): Promise<InvokeMCPToolResponse> {
   // Use backend proxy endpoint to avoid CORS and handle different MCP server types
-  const response = await fetch(`${API_BASE_URL}/v0.1/invoke`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      serverId: request.serverId || '', // We'll need to pass serverId instead of agentEndpoint
-      tool: request.tool,
-      arguments: request.arguments,
-    }),
-  })
+  const controller = new AbortController()
+  // Increased timeout to 180 seconds for Playwright browser operations (cold start + browser launch)
+  const timeoutMs = 180000
+  const timeoutId = setTimeout(() => {
+    console.warn(`Invoke request timeout after ${timeoutMs / 1000} seconds`)
+    controller.abort()
+  }, timeoutMs)
   
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }))
-    throw new Error(error.error || error.message || `Failed to invoke tool: ${response.statusText}`)
+  try {
+    const response = await fetch(`${API_BASE_URL}/v0.1/invoke`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        serverId: request.serverId || '', // We'll need to pass serverId instead of agentEndpoint
+        tool: request.tool,
+        arguments: request.arguments,
+      }),
+    })
+    
+    clearTimeout(timeoutId)
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }))
+      throw new Error(error.error || error.message || `Failed to invoke tool: ${response.statusText}`)
+    }
+    
+    const result = await response.json()
+    return result.result || result
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs / 1000} seconds. The Playwright browser may be taking longer than expected to start.`)
+    }
+    throw error
   }
-  
-  const result = await response.json()
-  return result.result || result
 }
 
 /**
