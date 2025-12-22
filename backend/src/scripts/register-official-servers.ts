@@ -11,13 +11,16 @@ import type { MCPTool } from '../types/mcp'
  */
 
 // Microsoft Playwright MCP Server
+// Use HTTP mode if PLAYWRIGHT_HTTP_ENDPOINT is set, otherwise use STDIO
+const playwrightHttpEndpoint = process.env.PLAYWRIGHT_HTTP_ENDPOINT || 'https://playwright-mcp-http-server-bvfzxpik3q-uc.a.run.app/mcp'
 const playwrightServer = {
   serverId: 'com.microsoft.playwright/mcp',
   name: 'Playwright MCP Server',
   description: 'Official Microsoft Playwright MCP server for browser automation. Enables LLMs to interact with web pages through structured accessibility snapshots, navigate, click, fill forms, take screenshots, and more.',
   version: 'v0.1',
-  command: 'npx',
-  args: ['-y', '@playwright/mcp@latest'],
+  // Use HTTP mode by default (no command/args)
+  command: undefined,
+  args: undefined,
   env: {},
   tools: [
     {
@@ -153,14 +156,15 @@ const playwrightServer = {
     },
   ] as MCPTool[],
   capabilities: ['tools'],
-  metadata: {
-    source: 'official',
-    publisher: 'Microsoft',
-    npmPackage: '@playwright/mcp',
-    repository: 'https://github.com/microsoft/playwright-mcp',
-    documentation: 'https://github.com/microsoft/playwright-mcp',
-    verified: true,
-  },
+    metadata: {
+      source: 'official',
+      publisher: 'Microsoft',
+      npmPackage: '@playwright/mcp',
+      repository: 'https://github.com/microsoft/playwright-mcp',
+      documentation: 'https://github.com/microsoft/playwright-mcp',
+      verified: true,
+      endpoint: playwrightHttpEndpoint, // HTTP endpoint for Playwright server
+    },
 }
 
 // LangChain Agent MCP Server (local/managed LangChain stack)
