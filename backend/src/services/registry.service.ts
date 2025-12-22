@@ -285,15 +285,16 @@ export class RegistryService {
         version: serverData.version || existing.version,
       }
       
-      // Handle command: explicitly set if provided (including null for HTTP servers)
-      if ('command' in serverData) {
+      // Handle command: explicitly set if provided (including undefined for HTTP servers)
+      // Check if command is explicitly provided (not just undefined from optional param)
+      if (serverData.command !== undefined) {
         updateData.command = serverData.command || null
       } else {
         updateData.command = existing.command
       }
       
-      // Handle args: explicitly set if provided (including null/empty for HTTP servers)
-      if ('args' in serverData) {
+      // Handle args: explicitly set if provided (including undefined/empty for HTTP servers)
+      if (serverData.args !== undefined) {
         updateData.args = serverData.args && serverData.args.length > 0 ? JSON.stringify(serverData.args) : null
       } else {
         updateData.args = existing.args
