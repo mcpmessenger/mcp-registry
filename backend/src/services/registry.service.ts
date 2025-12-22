@@ -278,14 +278,31 @@ export class RegistryService {
 
     if (existing) {
       // Update existing server
+      // For HTTP servers, command/args may be explicitly null to clear STDIO mode
+      const updateData: any = {
+        name: serverData.name,
+        description: serverData.description,
+        version: serverData.version || existing.version,
+      }
+      
+      // Handle command: explicitly set if provided (including null for HTTP servers)
+      if ('command' in serverData) {
+        updateData.command = serverData.command || null
+      } else {
+        updateData.command = existing.command
+      }
+      
+      // Handle args: explicitly set if provided (including null/empty for HTTP servers)
+      if ('args' in serverData) {
+        updateData.args = serverData.args && serverData.args.length > 0 ? JSON.stringify(serverData.args) : null
+      } else {
+        updateData.args = existing.args
+      }
+      
       const updated = await prisma.mcpServer.update({
         where: { serverId: serverData.serverId },
         data: {
-          name: serverData.name,
-          description: serverData.description,
-          version: serverData.version || existing.version,
-          command: serverData.command ?? existing.command,
-          args: serverData.args ? JSON.stringify(serverData.args) : existing.args,
+          ...updateData,
           env: serverData.env ? JSON.stringify(serverData.env) : existing.env,
           tools: serverData.tools ? JSON.stringify(serverData.tools) : existing.tools,
           toolSchemas: Object.keys(toolSchemas).length > 0 ? JSON.stringify(toolSchemas) : existing.toolSchemas,
