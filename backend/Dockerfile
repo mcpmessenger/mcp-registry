@@ -28,6 +28,7 @@ ENV NODE_ENV=production
 
 # Install system dependencies needed for Playwright browsers
 # These are required for Chromium to run in Alpine Linux
+# Mesa packages provide software rendering support for headless GPU operations
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -36,6 +37,16 @@ RUN apk add --no-cache \
     harfbuzz \
     ca-certificates \
     ttf-freefont \
+    mesa-dri-gallium \
+    mesa-gl \
+    libx11 \
+    libxcomposite \
+    libxdamage \
+    libxfixes \
+    libxrandr \
+    libxrender \
+    libxshmfence \
+    libgbm \
     || echo "System dependencies install skipped"
 
 # Copy package files
@@ -52,10 +63,10 @@ COPY --from=builder /app/dist ./dist
 
 # Install Playwright browsers for MCP server support
 # This is needed for @playwright/mcp to work
-# Use npx -y to download Playwright temporarily and install browsers
+# On Alpine, we use the system Chromium installed above and configure Playwright to use it
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright-browsers
-RUN npm install -g playwright && \
-    npx playwright install chromium --with-deps || echo "Playwright browser install skipped"
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm install -g playwright
 
 # CRITICAL FIX: Ensure entire prisma directory (including migrations) is copied
 # This was the root cause - migrations directory was missing
@@ -72,8 +83,33 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
 # Prepare Playwright browsers directory and hand ownership to node user
+# Playwright expects browsers in ~/.cache/ms-playwright/chromium-<version>/chrome-linux/chrome
+# We'll create this structure and symlink to system Chromium
 RUN mkdir -p /ms-playwright-browsers && \
-    chown -R nodejs:nodejs /ms-playwright-browsers
+    mkdir -p /home/node/.cache/ms-playwright && \
+    chown -R nodejs:nodejs /ms-playwright-browsers && \
+    chown -R nodejs:nodejs /home/node/.cache
+
+# Create Playwright browser directory structure and symlink to system Chromium
+# Playwright looks for browsers in ~/.cache/ms-playwright/chromium-<version>/chrome-linux/chrome
+# We create a version directory (using "system" as version) and symlink to system Chromium
+# Also create /opt/google/chrome/chrome symlink for compatibility
+RUN PLAYWRIGHT_DIR="/home/node/.cache/ms-playwright/chromium-system/chrome-linux" && \
+    mkdir -p "$PLAYWRIGHT_DIR" && \
+    mkdir -p /opt/google/chrome && \
+    if [ -f /usr/bin/chromium-browser ]; then \
+      ln -sf /usr/bin/chromium-browser "$PLAYWRIGHT_DIR/chrome" && \
+      ln -sf /usr/bin/chromium-browser /opt/google/chrome/chrome && \
+      echo "Created symlinks: /usr/bin/chromium-browser -> $PLAYWRIGHT_DIR/chrome and /opt/google/chrome/chrome"; \
+    elif [ -f /usr/bin/chromium ]; then \
+      ln -sf /usr/bin/chromium "$PLAYWRIGHT_DIR/chrome" && \
+      ln -sf /usr/bin/chromium /opt/google/chrome/chrome && \
+      echo "Created symlinks: /usr/bin/chromium -> $PLAYWRIGHT_DIR/chrome and /opt/google/chrome/chrome"; \
+    else \
+      echo "Warning: Chromium not found at expected locations"; \
+    fi && \
+    chown -R nodejs:nodejs /home/node/.cache && \
+    chown -R nodejs:nodejs /opt/google/chrome
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app

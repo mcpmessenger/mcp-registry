@@ -18,7 +18,22 @@ const playwrightServer = {
   version: 'v0.1',
   command: 'npx',
   args: ['-y', '@playwright/mcp@latest'],
-  env: {},
+  env: {
+    // CRITICAL: Explicitly use 'chromium' channel instead of 'chrome'
+    // This prevents Playwright from looking for branded Google Chrome
+    BROWSER: 'chromium',
+    // Path to the Chromium executable (symlinked in Dockerfile)
+    EXECUTABLE_PATH: '/opt/google/chrome/chrome',
+    // Tell Playwright where to find browser cache (we've set up symlinks there)
+    PLAYWRIGHT_BROWSERS_PATH: '/home/node/.cache/ms-playwright',
+    // Skip browser download since we're using system Chromium
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+    // Disable GPU acceleration for headless/serverless environments
+    // These flags prevent GPU initialization errors in containerized environments
+    DISPLAY: ':99', // Virtual display (even though headless, some processes expect this)
+    LIBGL_ALWAYS_SOFTWARE: '1', // Force software rendering
+    GALLIUM_DRIVER: 'llvmpipe', // Software rendering driver
+  },
   tools: [
     {
       name: 'browser_navigate',
@@ -165,7 +180,7 @@ const playwrightServer = {
 
 // LangChain Agent MCP Server (local/managed LangChain stack)
 const langchainAgentServer = {
-  serverId: 'langchain-agent-mcp-server',
+  serverId: 'com.langchain/agent-mcp-server',
   name: 'LangChain Agent MCP Server',
   description: 'LangChain Agent MCP Server hosted on Google Cloud Run (langchain-agent-mcp-server-554655392699.us-central1.run.app).',
   version: '1.0.0',

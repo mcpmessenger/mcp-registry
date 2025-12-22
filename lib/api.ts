@@ -33,6 +33,11 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl()
 
+// Log the API URL being used (helpful for debugging)
+if (typeof window !== 'undefined') {
+  console.log('[API Client] Using backend URL:', API_BASE_URL)
+}
+
 export interface MCPServer {
   serverId: string
   name: string
@@ -162,10 +167,10 @@ export async function getServers(options?: {
     clearTimeout(timeoutId)
     console.error('Fetch error:', error)
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Request timeout: Backend server may not be responding. Check that http://localhost:3001 is running.')
+      throw new Error(`Request timeout: Backend server may not be responding. Check that ${API_BASE_URL} is running.`)
     }
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error('Network error: Cannot connect to backend. Make sure http://localhost:3001 is running.')
+      throw new Error(`Network error: Cannot connect to backend at ${API_BASE_URL}. Make sure the backend server is running and accessible.`)
     }
     throw error
   }
