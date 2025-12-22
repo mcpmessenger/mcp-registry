@@ -105,6 +105,10 @@ RUN chown -R nodejs:nodejs /app
 
 USER nodejs
 
+# Set environment variable to disable Chromium sandbox for playwright-mcp
+# This prevents "Running as root without --no-sandbox" errors in containerized environments
+ENV PLAYWRIGHT_MCP_SANDBOX=false
+
 # Expose port
 EXPOSE 3001
 

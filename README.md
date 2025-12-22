@@ -6,13 +6,8 @@ A comprehensive registry and management platform for Model Context Protocol (MCP
 
 - [Overview](#overview)
 - [Features](#features)
-- [Repository Structure](#repository-structure)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Frontend Setup](#frontend-setup)
-  - [Backend Setup](#backend-setup)
-- [Development](#development)
-- [Deployment](#deployment)
+- [Quick Start](#quick-start)
+- [Documentation](#documentation)
 - [Technology Stack](#technology-stack)
 - [Contributing](#contributing)
 - [License](#license)
@@ -61,16 +56,38 @@ mcp-registry/
 └── README.md            # This file
 ```
 
-## 🚀 Getting Started
+## 🚀 Quick Start
+
+For detailed setup instructions, see the [Development Guide](docs/DEVELOPMENT.md).
 
 ### Prerequisites
 
 - **Node.js** (v18 or higher)
 - **npm** or **pnpm** (for frontend)
 - **npm** (for backend)
+- **PostgreSQL** (recommended) or SQLite (development)
 - **Git**
 
-### Frontend Setup
+### Quick Setup
+
+**Backend:**
+```bash
+cd backend
+npm install
+cp env.example.txt .env  # Edit with your configuration
+npm run migrate
+npm run seed
+npm start
+```
+
+**Frontend:**
+```bash
+cd mcp-registry-main
+pnpm install
+pnpm dev
+```
+
+### Frontend Setup (Detailed)
 
 The frontend is a Next.js application located in the `mcp-registry-main/` directory.
 
@@ -220,6 +237,17 @@ The backend now ships with PostgreSQL (recommended for production) plus a Prisma
 
 Prisma automatically maintains migration history in `backend/prisma/migrations`; rerun `npx prisma migrate dev` whenever you change the schema.
 
+## 📚 Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **[Development Guide](docs/DEVELOPMENT.md)** - Complete setup and development workflow
+- **[API Documentation](docs/API.md)** - Complete API reference
+- **[Architecture Documentation](docs/ARCHITECTURE.md)** - System architecture overview
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment instructions
+- **[Event-Driven Architecture](docs/EVENT_DRIVEN_ARCHITECTURE.md)** - Kafka and event processing
+- **[Kafka Setup](docs/KAFKA_SETUP.md)** - Kafka configuration and setup
+
 ## 💻 Development
 
 Both frontend and backend can be developed independently:
@@ -227,51 +255,17 @@ Both frontend and backend can be developed independently:
 - **Frontend**: Runs on port 3000 (default Next.js port)
 - **Backend**: Runs on port 3001 (configurable via environment variables)
 
-The frontend communicates with the backend API. Make sure both servers are running during development.
-
-### Running Both Services
-
-You can run both services simultaneously by opening two terminal windows:
-
-**Terminal 1 - Frontend:**
-```bash
-cd mcp-registry-main
-pnpm dev
-```
-
-**Terminal 2 - Backend:**
-```bash
-cd backend
-npm start
-```
+See the [Development Guide](docs/DEVELOPMENT.md) for detailed instructions.
 
 ## 🚢 Deployment
 
-### Frontend Deployment
+For production deployment, see the [Deployment Guide](docs/DEPLOYMENT.md).
 
-The frontend is configured for deployment on Vercel:
-
-- **Live URL**: [https://vercel.com/sentilabs/v0-logo-design](https://vercel.com/sentilabs/v0-logo-design)
-- **Build on v0**: [https://v0.app/chat/nokJqOBoETr](https://v0.app/chat/nokJqOBoETr)
-
-To deploy to Vercel:
-1. Connect your GitHub repository to Vercel
-2. Configure build settings (Vercel auto-detects Next.js)
-3. Deploy
-
-### Backend Deployment
-
-For backend deployment, you can use platforms like:
-- **Railway**
-- **Render**
-- **Heroku**
-- **AWS/DigitalOcean**
-
-Make sure to:
-1. Set up environment variables
-2. Configure the database (use PostgreSQL for production)
-3. Run migrations: `npx prisma migrate deploy`
-4. Build and start the server
+**Quick Summary:**
+- **Frontend**: Deploy to Vercel (already configured)
+- **Backend**: Deploy to GCP Cloud Run (recommended)
+- **Database**: Cloud SQL (PostgreSQL)
+- **Event Bus**: Confluent Cloud (Kafka) or Cloud Pub/Sub
 
 ## 🛠 Technology Stack
 

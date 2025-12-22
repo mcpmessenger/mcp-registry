@@ -31,6 +31,16 @@ export class McpStdioService extends EventEmitter {
         ...env,
       }
 
+      // CRITICAL FIX: Disable Chromium sandbox for playwright-mcp in containerized environments
+      // This prevents "Running as root without --no-sandbox" errors in Docker/Cloud Run
+      // The playwright-mcp server reads this environment variable to disable the sandbox
+      if (serverId === 'com.microsoft.playwright/mcp' || 
+          serverId.includes('playwright') || 
+          args.some(arg => arg.includes('@playwright/mcp'))) {
+        processEnv.PLAYWRIGHT_MCP_SANDBOX = 'false'
+        console.log(`🔧 Setting PLAYWRIGHT_MCP_SANDBOX=false for ${serverId}`)
+      }
+
       // On Windows, we need to use shell mode for .cmd files to work properly
       // Also handle npx specifically on Windows
       let actualCommand = command
