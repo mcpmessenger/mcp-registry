@@ -28,6 +28,11 @@ const playwrightServer = {
     PLAYWRIGHT_BROWSERS_PATH: '/home/node/.cache/ms-playwright',
     // Skip browser download since we're using system Chromium
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+    // Disable GPU acceleration for headless/serverless environments
+    // These flags prevent GPU initialization errors in containerized environments
+    DISPLAY: ':99', // Virtual display (even though headless, some processes expect this)
+    LIBGL_ALWAYS_SOFTWARE: '1', // Force software rendering
+    GALLIUM_DRIVER: 'llvmpipe', // Software rendering driver
   },
   tools: [
     {

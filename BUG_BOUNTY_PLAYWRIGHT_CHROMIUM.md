@@ -214,6 +214,61 @@ const timeoutMs = method === 'initialize' ? 90000 : 120000 // 120s for browser o
 
 ---
 
+### Fix Attempt #7: BROWSER=chromium Environment Variable
+
+**Approach:** Explicitly set `BROWSER=chromium` to use chromium channel instead of chrome
+
+**Changes Made:**
+```typescript
+// backend/src/scripts/register-official-servers.ts
+env: {
+  BROWSER: 'chromium',
+  EXECUTABLE_PATH: '/opt/google/chrome/chrome',
+  DISPLAY: ':99',
+  LIBGL_ALWAYS_SOFTWARE: '1',
+  GALLIUM_DRIVER: 'llvmpipe',
+  // ... other vars
+}
+```
+
+**Result:** 
+- ✅ Browser successfully launches (confirmed via DevTools connection logs)
+- ✅ No more "chrome not found" error
+- ❌ Browser times out after 180 seconds due to GPU initialization failures
+- **Analysis:** Browser launches but GPU processes fail repeatedly, causing hang
+
+---
+
+### Fix Attempt #8: Add Mesa/OpenGL Packages for Software Rendering
+
+**Approach:** Install Mesa packages to provide software rendering support for GPU operations
+
+**Changes Made:**
+```dockerfile
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    mesa-dri-gallium \
+    mesa-gl \
+    libx11 \
+    libxcomposite \
+    libxdamage \
+    libxfixes \
+    libxrandr \
+    libxrender \
+    libxshmfence \
+    libgbm \
+```
+
+**Status:** 🔄 In progress - Ready to test
+
+---
+
 ## Current State
 
 ### What Works
@@ -223,12 +278,14 @@ const timeoutMs = method === 'initialize' ? 90000 : 120000 // 120s for browser o
 - ✅ System Chromium is installed and accessible at `/usr/bin/chromium-browser`
 - ✅ Symlinks are created correctly (verified in build logs)
 - ✅ Environment variables are passed to MCP server process
+- ✅ Browser successfully launches when `BROWSER=chromium` is set (confirmed via DevTools connection)
+- ✅ No more "chrome not found" error
 
 ### What Doesn't Work
 
-- ❌ Browser launch fails when attempting tool invocations
-- ❌ Error indicates Playwright is looking for 'chrome' distribution, not 'chromium'
-- ❌ Tool invocations timeout after 120 seconds
+- ❌ Browser launches but times out after 180 seconds
+- ❌ GPU process initialization failures (Vulkan/EGL errors) cause browser to hang
+- ❌ Tool invocations fail due to timeout (browser never fully initializes)
 - ❌ No successful browser operations (navigation, screenshots) have been completed
 
 ### Build Verification
@@ -238,11 +295,26 @@ Build logs confirm symlinks are created:
 Created symlinks: /usr/bin/chromium-browser -> /home/node/.cache/ms-playwright/chromium-system/chrome-linux/chrome and /opt/google/chrome/chrome
 ```
 
-### Runtime Logs
+### Runtime Logs (Latest - After BROWSER=chromium Fix)
 
+**Browser Launch Success:**
 ```
-2025-12-21 23:16:15 ✅ MCP server com.microsoft.playwright/mcp initialized successfully
-2025-12-21 23:16:51 STDIO invocation error for com.microsoft.playwright/mcp: Error: Request timeout for tools/call (30s)
+- <launched> pid=48
+- DevTools listening on ws://127.0.0.1:51447/devtools/browser/...
+- <ws connected> ws://127.0.0.1:51447/devtools/browser/...
+```
+
+**GPU Initialization Failures:**
+```
+ERROR:ui/gl/angle_platform_impl.cc:49] vk_renderer.cpp:183 (VerifyExtensionsPresent): 
+Extension not supported: VK_KHR_surface
+ERROR:ui/gl/gl_display.cc:815] Initialization of all EGL display types failed.
+ERROR:components/viz/service/main/viz_main_impl.cc:183] Exiting GPU process due to errors during initialization
+```
+
+**Timeout Error:**
+```
+TimeoutError: browserType.launchPersistentContext: Timeout 180000ms exceeded.
 ```
 
 ---
@@ -318,10 +390,18 @@ gcloud run deploy mcp-registry-backend `
 - Addresses root cause (channel mismatch)
 - No Dockerfile changes needed
 
-**Status:** ⚠️ Ready to test - This is the most promising fix
+**Status:** ⚠️ Partially successful - Browser launches but times out due to GPU initialization failures
 
 **Implementation Date:** December 21, 2025  
-**Code Changes:** Updated `backend/src/scripts/register-official-servers.ts` to include `BROWSER=chromium` environment variable
+**Code Changes:** 
+- Updated `backend/src/scripts/register-official-servers.ts` to include `BROWSER=chromium` environment variable
+- Added `DISPLAY`, `LIBGL_ALWAYS_SOFTWARE`, and `GALLIUM_DRIVER` environment variables for software rendering
+
+**Result:** 
+- ✅ Browser successfully launches (confirmed via DevTools connection)
+- ✅ No more "chrome not found" error
+- ❌ Timeout after 180 seconds due to GPU process initialization failures
+- **Next Step:** Add Mesa/OpenGL packages to Dockerfile for software rendering support
 
 ---
 
