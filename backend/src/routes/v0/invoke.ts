@@ -128,8 +128,8 @@ router.post('/invoke', async (req, res, next) => {
         }
 
         // Emit standardized handover event for cross-server communication
-        const { createHandoverEvent } = await import('../types/handover-events')
-        const { memoryService } = await import('../services/memory.service')
+        const { createHandoverEvent } = await import('../../types/handover-events')
+        const { memoryService } = await import('../../services/memory.service')
         const conversationId = req.body.conversationId || req.body.contextId || ''
         const intent = req.body.intent || validated.arguments.query || validated.arguments.input || 'Tool invocation'
         
@@ -297,8 +297,8 @@ router.post('/invoke', async (req, res, next) => {
       }
 
       // Emit standardized handover event for cross-server communication
-      const { createHandoverEvent } = await import('../types/handover-events')
-      const { memoryService } = await import('../services/memory.service')
+      const { createHandoverEvent } = await import('../../types/handover-events')
+      const { memoryService } = await import('../../services/memory.service')
       const conversationId = req.body.conversationId || req.body.contextId || ''
       const intent = req.body.intent || validated.arguments.query || validated.arguments.input || 'Tool invocation'
       
