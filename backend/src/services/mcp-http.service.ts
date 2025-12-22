@@ -120,6 +120,33 @@ export class McpHttpService {
     // Ensure session is initialized
     await this.initializeSession(endpoint)
 
+    // For browser_navigate, close any existing browser first to avoid "Browser is already in use" errors
+    if (toolName === 'browser_navigate') {
+      try {
+        const closeRequest = {
+          jsonrpc: '2.0',
+          id: Date.now() - 1, // Use different ID
+          method: 'tools/call',
+          params: {
+            name: 'browser_close',
+            arguments: {},
+          },
+        }
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(closeRequest),
+        })
+        // Wait a moment for browser to close
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error) {
+        // Ignore errors when closing (browser might not be open)
+        console.warn('Failed to close browser before navigate:', error)
+      }
+    }
+
     const toolRequest = {
       jsonrpc: '2.0',
       id: Date.now(),
