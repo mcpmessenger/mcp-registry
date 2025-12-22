@@ -17,19 +17,13 @@ const playwrightServer = {
   description: 'Official Microsoft Playwright MCP server for browser automation. Enables LLMs to interact with web pages through structured accessibility snapshots, navigate, click, fill forms, take screenshots, and more.',
   version: 'v0.1',
   command: 'npx',
-  args: ['-y', '@playwright/mcp@latest', '--browser', 'chromium'],
+  args: ['-y', '@playwright/mcp@latest'],
   env: {
-    // Path to the Chromium executable (symlinked in Dockerfile)
-    EXECUTABLE_PATH: '/opt/google/chrome/chrome',
-    // Tell Playwright where to find browser cache (we've set up symlinks there)
-    PLAYWRIGHT_BROWSERS_PATH: '/home/node/.cache/ms-playwright',
+    // Tell Playwright where to find Chromium (system Chromium on Alpine)
+    // The symlink at /opt/google/chrome/chrome points to /usr/bin/chromium-browser
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/opt/google/chrome/chrome',
     // Skip browser download since we're using system Chromium
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
-    // Disable GPU acceleration for headless/serverless environments
-    // These flags prevent GPU initialization errors in containerized environments
-    DISPLAY: ':99', // Virtual display (even though headless, some processes expect this)
-    LIBGL_ALWAYS_SOFTWARE: '1', // Force software rendering
-    GALLIUM_DRIVER: 'llvmpipe', // Software rendering driver
   },
   tools: [
     {
