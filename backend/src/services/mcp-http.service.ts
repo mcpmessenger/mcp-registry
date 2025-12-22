@@ -132,18 +132,30 @@ export class McpHttpService {
             arguments: {},
           },
         }
-        await fetch(endpoint, {
+        const closeResponse = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(closeRequest),
+          signal: AbortSignal.timeout(5000), // 5 second timeout for close
         })
-        // Wait a moment for browser to close
-        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Wait a moment for browser to fully close
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Log if close was successful (but don't fail if it wasn't)
+        if (closeResponse.ok) {
+          const closeResult = await closeResponse.json()
+          if (closeResult.error) {
+            console.log('Browser close returned error (may not have been open):', closeResult.error.message)
+          } else {
+            console.log('Browser closed successfully before navigate')
+          }
+        }
       } catch (error) {
-        // Ignore errors when closing (browser might not be open)
-        console.warn('Failed to close browser before navigate:', error)
+        // Ignore errors when closing (browser might not be open, or close timed out)
+        console.log('Browser close attempt completed (may not have been needed):', error instanceof Error ? error.message : String(error))
       }
     }
 
