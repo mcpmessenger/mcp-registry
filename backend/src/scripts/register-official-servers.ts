@@ -177,8 +177,8 @@ const langchainAgentServer = {
   description: 'LangChain Agent MCP Server hosted on Google Cloud Run (langchain-agent-mcp-server-554655392699.us-central1.run.app).',
   version: '1.0.0',
   // Use HTTP mode (no command/args)
-  command: undefined,
-  args: undefined,
+  command: undefined as string | undefined,
+  args: undefined as string[] | undefined,
   env: {},
   tools: [
     {
@@ -254,7 +254,7 @@ async function registerOfficialServers() {
         version: server.version,
         // Explicitly set to undefined to clear STDIO mode for HTTP servers
         command: server.command || undefined,
-        args: server.args && server.args.length > 0 ? server.args : undefined,
+        args: (server.args && Array.isArray(server.args) && server.args.length > 0) ? (server.args as string[]) : undefined,
         env: server.env,
         tools: server.tools,
         capabilities: server.capabilities,
