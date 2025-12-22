@@ -120,10 +120,12 @@ export interface JobResponse {
 /**
  * Fetch all available MCP servers
  * Supports query parameters for filtering and searching (MCP v0.1 specification)
+ * Includes retry logic for Cloud Run cold starts
  */
 export async function getServers(options?: {
   search?: string
   capability?: string
+  retries?: number
 }): Promise<MCPServer[]> {
   const params = new URLSearchParams()
   if (options?.search) {
@@ -136,44 +138,72 @@ export async function getServers(options?: {
   const url = `${API_BASE_URL}/v0.1/servers${queryString ? `?${queryString}` : ''}`
   console.log('Fetching from:', url)
   
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => {
-    console.warn('Request timeout after 5 seconds')
-    controller.abort()
-  }, 5000) // 5 second timeout (reduced from 10)
+  const maxRetries = options?.retries ?? 2
+  let lastError: Error | null = null
   
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Add cache control to prevent hanging
-      cache: 'no-cache',
-    })
-    
-    clearTimeout(timeoutId)
-    console.log('Response status:', response.status, response.statusText)
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Failed to fetch servers: ${response.status} ${response.statusText} - ${errorText}`)
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      // Exponential backoff: wait 2s, 4s, etc.
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 10000)
+      console.log(`Retrying request (attempt ${attempt + 1}/${maxRetries + 1}) after ${delay}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
     }
     
-    const data = await response.json()
-    console.log('Response data:', data)
-    return data
-  } catch (error) {
-    clearTimeout(timeoutId)
-    console.error('Fetch error:', error)
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Request timeout: Backend server may not be responding. Check that ${API_BASE_URL} is running.`)
+    const controller = new AbortController()
+    // Increased timeout to 30 seconds for Cloud Run cold starts
+    const timeoutMs = 30000
+    const timeoutId = setTimeout(() => {
+      console.warn(`Request timeout after ${timeoutMs / 1000} seconds (attempt ${attempt + 1})`)
+      controller.abort()
+    }, timeoutMs)
+    
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Add cache control to prevent hanging
+        cache: 'no-cache',
+      })
+      
+      clearTimeout(timeoutId)
+      console.log('Response status:', response.status, response.statusText)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Failed to fetch servers: ${response.status} ${response.statusText} - ${errorText}`)
+      }
+      
+      const data = await response.json()
+      console.log('Response data:', data)
+      return data
+    } catch (error) {
+      clearTimeout(timeoutId)
+      console.error(`Fetch error (attempt ${attempt + 1}):`, error)
+      lastError = error as Error
+      
+      // Don't retry on certain errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        // Network error - might be CORS or connectivity issue, retry once
+        if (attempt < maxRetries) continue
+      }
+      
+      // If it's the last attempt, throw the error
+      if (attempt === maxRetries) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`Request timeout after ${maxRetries + 1} attempts. Backend server may be cold-starting or not responding. Check that ${API_BASE_URL} is running.`)
+        }
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          throw new Error(`Network error: Cannot connect to backend at ${API_BASE_URL}. Make sure the backend server is running and accessible.`)
+        }
+        throw error
+      }
     }
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error(`Network error: Cannot connect to backend at ${API_BASE_URL}. Make sure the backend server is running and accessible.`)
-    }
-    throw error
   }
+  
+  // Should never reach here, but TypeScript needs it
+  throw lastError || new Error('Unknown error fetching servers')
 }
 
 /**
