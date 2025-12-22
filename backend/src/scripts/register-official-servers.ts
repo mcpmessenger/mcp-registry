@@ -19,20 +19,9 @@ const playwrightServer = {
   command: 'npx',
   args: ['-y', '@playwright/mcp@latest'],
   env: {
-    // CRITICAL: Explicitly use 'chromium' channel instead of 'chrome'
-    // This prevents Playwright from looking for branded Google Chrome
-    BROWSER: 'chromium',
-    // Path to the Chromium executable (symlinked in Dockerfile)
-    EXECUTABLE_PATH: '/opt/google/chrome/chrome',
-    // Tell Playwright where to find browser cache (we've set up symlinks there)
-    PLAYWRIGHT_BROWSERS_PATH: '/home/node/.cache/ms-playwright',
     // Skip browser download since we're using system Chromium
+    // The symlink at /opt/google/chrome/chrome should be found automatically
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
-    // Disable GPU acceleration for headless/serverless environments
-    // These flags prevent GPU initialization errors in containerized environments
-    DISPLAY: ':99', // Virtual display (even though headless, some processes expect this)
-    LIBGL_ALWAYS_SOFTWARE: '1', // Force software rendering
-    GALLIUM_DRIVER: 'llvmpipe', // Software rendering driver
   },
   tools: [
     {
