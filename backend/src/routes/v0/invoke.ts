@@ -237,17 +237,26 @@ router.post('/invoke', async (req, res, next) => {
     }
 
     // HTTP-based server - try different MCP invocation patterns
-    // Pattern 1: Direct HTTP POST to /mcp/invoke (if it's an HTTP-based MCP server)
+    // Pattern 1: JSON-RPC format (for Playwright HTTP server and other MCP HTTP servers)
+    // The endpoint is already the full URL (e.g., https://playwright-server.com/mcp)
     try {
-      const response = await fetch(`${endpoint}/mcp/invoke`, {
+      // Use JSON-RPC 2.0 format for MCP protocol
+      const jsonRpcRequest = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: {
+          name: validated.tool,
+          arguments: validated.arguments,
+        },
+      }
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          tool: validated.tool,
-          arguments: validated.arguments,
-        }),
+        body: JSON.stringify(jsonRpcRequest),
       })
 
       if (!response.ok) {
@@ -255,16 +264,36 @@ router.post('/invoke', async (req, res, next) => {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const result = await response.json()
+      const jsonRpcResponse = await response.json()
       
-      // Transform to MCPToolResult format if needed
-      const toolResult: MCPToolResult = {
-        content: Array.isArray(result.content)
-          ? result.content
-          : typeof result.content === 'string'
-          ? [{ type: 'text', text: result.content }]
-          : [{ type: 'text', text: JSON.stringify(result) }],
-        isError: result.isError || false,
+      // Handle JSON-RPC response format
+      const result = jsonRpcResponse.result || jsonRpcResponse
+      
+      // Transform JSON-RPC result to MCPToolResult format
+      // JSON-RPC result may have content array or be a direct result
+      let toolResult: MCPToolResult
+      if (result.content) {
+        // Already in MCPToolResult format
+        toolResult = {
+          content: Array.isArray(result.content)
+            ? result.content
+            : typeof result.content === 'string'
+            ? [{ type: 'text', text: result.content }]
+            : [{ type: 'text', text: JSON.stringify(result.content) }],
+          isError: result.isError || jsonRpcResponse.error || false,
+        }
+      } else if (jsonRpcResponse.error) {
+        // JSON-RPC error response
+        toolResult = {
+          content: [{ type: 'text', text: jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error) }],
+          isError: true,
+        }
+      } else {
+        // Direct result (wrap it)
+        toolResult = {
+          content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
+          isError: false,
+        }
       }
 
       // Emit standardized handover event for cross-server communication
@@ -357,7 +386,7 @@ router.post('/invoke', async (req, res, next) => {
       return res.status(502).json({
         success: false,
         error: `Failed to invoke tool on server: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
-        details: `Tried endpoints: /mcp/invoke, /tools/call, /api/tools/call, /invoke`,
+        details: `Tried JSON-RPC on endpoint: ${endpoint}, and alternative endpoints: /mcp/invoke, /tools/call, /api/tools/call, /invoke`,
       })
     }
   } catch (error) {
