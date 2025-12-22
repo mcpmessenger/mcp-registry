@@ -8,8 +8,14 @@ SyntaxError: browserType.launch: Invalid URL: undefined
 ```
 
 ## Root Cause
-1. **Sandbox Issue**: Chrome cannot run as root without `--no-sandbox` flag (Cloud Run runs containers as root)
-2. **Invalid URL**: The URL parameter may not be passed correctly to the browser launch
+1. **Sandbox Issue**: Chrome cannot run as root without `--no-sandbox` flag (Cloud Run runs containers as root) ✅ **FIXED** - Environment variable set
+2. **Invalid URL**: The URL parameter is not being passed correctly to the browser launch ⚠️ **NEEDS FIX** - Playwright HTTP server code issue
+
+### Invalid URL Issue Details
+The error `SyntaxError: browserType.launch: Invalid URL: undefined` suggests:
+- The `browser_navigate` tool is being called with `arguments: { url: "https://google.com" }`
+- But the Playwright HTTP server is receiving `undefined` for the URL
+- This could be a parameter parsing issue in the Playwright HTTP server code
 
 ## Solution
 
