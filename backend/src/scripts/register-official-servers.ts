@@ -11,8 +11,8 @@ import type { MCPTool } from '../types/mcp'
  */
 
 // Microsoft Playwright MCP Server
-// Use HTTP mode if PLAYWRIGHT_HTTP_ENDPOINT is set, otherwise use STDIO
-const playwrightHttpEndpoint = process.env.PLAYWRIGHT_HTTP_ENDPOINT || 'https://playwright-mcp-http-server-bvfzxpik3q-uc.a.run.app/mcp'
+// Use HTTP mode - deployed Playwright MCP HTTP server from mcpmessenger/playwright-mcp
+const playwrightHttpEndpoint = process.env.PLAYWRIGHT_HTTP_ENDPOINT || 'https://playwright-mcp-http-server-554655392699.us-central1.run.app/mcp'
 const playwrightServer = {
   serverId: 'com.microsoft.playwright/mcp',
   name: 'Playwright MCP Server',
