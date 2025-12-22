@@ -398,25 +398,89 @@ gcloud run deploy mcp-registry-backend `
 - Added `DISPLAY`, `LIBGL_ALWAYS_SOFTWARE`, and `GALLIUM_DRIVER` environment variables for software rendering
 
 **Result:** 
-- ✅ Browser successfully launches (confirmed via DevTools connection)
-- ✅ No more "chrome not found" error
-- ❌ Timeout after 180 seconds due to GPU process initialization failures
-- **Next Step:** Add Mesa/OpenGL packages to Dockerfile for software rendering support
+- ❌ `--browser chromium` is **not a valid option** for Playwright MCP
+- Valid options are: `chrome`, `firefox`, `webkit`, `msedge`, or Chrome channels (`chrome-beta`, etc.)
+- When using `--browser chrome`, Playwright MCP uses `channel: 'chrome'` which **requires Google Chrome**, not Chromium
+- **Root Cause Identified:** Playwright's channel-based browser detection expects Google Chrome, which is not available on Alpine Linux (only Chromium is available)
+- **Fundamental Incompatibility:** Alpine Linux provides Chromium, but Playwright MCP's `--browser chrome` option specifically requires Google Chrome
 
 ---
 
-### Solution 1: Use Different Base Image
+### Solution 1: Switch to Debian-Based Image (RECOMMENDED)
 
-**Approach:** Switch from `node:18-alpine` to `node:18` (Debian-based)
+**Approach:** Switch from `node:18-alpine` to `node:18` (Debian-based) and install Google Chrome
+
+**Rationale:** This is now the **only viable solution** because:
+- Playwright MCP's `--browser chrome` option requires Google Chrome (not Chromium)
+- Alpine Linux only provides Chromium, not Google Chrome
+- Google Chrome can be installed on Debian-based images using Playwright's installation or manual installation
+
+**Implementation:**
+```dockerfile
+FROM node:18 AS runner  # Instead of node:18-alpine
+WORKDIR /app
+
+# Install Google Chrome (required for Playwright MCP --browser chrome)
+RUN apt-get update && \
+    apt-get install -y \
+    wget \
+    gnupg \
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libc6 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgbm1 \
+    libgcc1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    lsb-release \
+    xdg-utils && \
+    wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
+    apt-get update && \
+    apt-get install -y google-chrome-stable && \
+    rm -rf /var/lib/apt/lists/*
+
+# Rest of Dockerfile...
+```
 
 **Pros:**
-- Playwright browser installation would work out of the box
+- Resolves the fundamental incompatibility (Google Chrome available on Debian)
+- Playwright MCP will work correctly with `--browser chrome`
 - Better compatibility with Playwright's installation scripts
 - Full glibc support
 
 **Cons:**
-- Larger image size (impact on cold start times)
+- Larger image size (~500MB-1GB increase, may impact cold start times)
 - More system dependencies
+- More complex Dockerfile
+
+**Status:** ⚠️ **Required Solution** - This is the only path forward given the channel requirement
 
 **Implementation:**
 ```dockerfile
