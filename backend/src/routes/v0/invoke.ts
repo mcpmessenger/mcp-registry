@@ -246,10 +246,10 @@ router.post('/invoke', async (req, res, next) => {
         validated.arguments
       )
       
-      // Transform JSON-RPC result to MCPToolResult format
-      // JSON-RPC result may have content array or be a direct result
+      // Transform result to MCPToolResult format
+      // Result from mcpHttpService.callTool is already the tool result
       let toolResult: MCPToolResult
-      if (result.content) {
+      if (result && typeof result === 'object' && 'content' in result) {
         // Already in MCPToolResult format
         toolResult = {
           content: Array.isArray(result.content)
@@ -257,13 +257,7 @@ router.post('/invoke', async (req, res, next) => {
             : typeof result.content === 'string'
             ? [{ type: 'text', text: result.content }]
             : [{ type: 'text', text: JSON.stringify(result.content) }],
-          isError: result.isError || jsonRpcResponse.error || false,
-        }
-      } else if (jsonRpcResponse.error) {
-        // JSON-RPC error response
-        toolResult = {
-          content: [{ type: 'text', text: jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error) }],
-          isError: true,
+          isError: result.isError || false,
         }
       } else {
         // Direct result (wrap it)
