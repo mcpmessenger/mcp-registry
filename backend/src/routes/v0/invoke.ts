@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { registryService } from '../../services/registry.service'
 import { mcpStdioService } from '../../services/mcp-stdio.service'
+import { mcpHttpService } from '../../services/mcp-http.service'
 import { memoryService } from '../../services/memory.service'
 import { eventBusService } from '../../services/event-bus.service'
 import type { MCPToolResult } from '../../types/mcp'
@@ -236,38 +237,14 @@ router.post('/invoke', async (req, res, next) => {
       })
     }
 
-    // HTTP-based server - try different MCP invocation patterns
-    // Pattern 1: JSON-RPC format (for Playwright HTTP server and other MCP HTTP servers)
-    // The endpoint is already the full URL (e.g., https://playwright-server.com/mcp)
+    // HTTP-based server - use MCP HTTP service which handles initialization
     try {
-      // Use JSON-RPC 2.0 format for MCP protocol
-      const jsonRpcRequest = {
-        jsonrpc: '2.0',
-        id: Date.now(),
-        method: 'tools/call',
-        params: {
-          name: validated.tool,
-          arguments: validated.arguments,
-        },
-      }
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(jsonRpcRequest),
-      })
-
-      if (!response.ok) {
-        // Try alternative endpoint patterns
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const jsonRpcResponse = await response.json()
-      
-      // Handle JSON-RPC response format
-      const result = jsonRpcResponse.result || jsonRpcResponse
+      // Use the HTTP service which manages session initialization
+      const result = await mcpHttpService.callTool(
+        endpoint,
+        validated.tool,
+        validated.arguments
+      )
       
       // Transform JSON-RPC result to MCPToolResult format
       // JSON-RPC result may have content array or be a direct result
