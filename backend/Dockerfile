@@ -28,7 +28,6 @@ ENV NODE_ENV=production
 
 # Install system dependencies needed for Playwright browsers
 # These are required for Chromium to run in Alpine Linux
-# Mesa packages provide software rendering support for headless GPU operations
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -37,16 +36,6 @@ RUN apk add --no-cache \
     harfbuzz \
     ca-certificates \
     ttf-freefont \
-    mesa-dri-gallium \
-    mesa-gl \
-    libx11 \
-    libxcomposite \
-    libxdamage \
-    libxfixes \
-    libxrandr \
-    libxrender \
-    libxshmfence \
-    libgbm \
     || echo "System dependencies install skipped"
 
 # Copy package files

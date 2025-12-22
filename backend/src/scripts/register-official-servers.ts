@@ -18,11 +18,7 @@ const playwrightServer = {
   version: 'v0.1',
   command: 'npx',
   args: ['-y', '@playwright/mcp@latest'],
-  env: {
-    // Skip browser download since we're using system Chromium
-    // The symlink at /opt/google/chrome/chrome should be found automatically
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
-  },
+  env: {},
   tools: [
     {
       name: 'browser_navigate',
@@ -169,7 +165,7 @@ const playwrightServer = {
 
 // LangChain Agent MCP Server (local/managed LangChain stack)
 const langchainAgentServer = {
-  serverId: 'com.langchain/agent-mcp-server',
+  serverId: 'langchain-agent-mcp-server',
   name: 'LangChain Agent MCP Server',
   description: 'LangChain Agent MCP Server hosted on Google Cloud Run (langchain-agent-mcp-server-554655392699.us-central1.run.app).',
   version: '1.0.0',
