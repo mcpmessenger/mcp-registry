@@ -247,8 +247,9 @@ async function registerOfficialServers() {
         name: server.name,
         description: server.description,
         version: server.version,
-        command: server.command,
-        args: server.args,
+        // Explicitly set to null/empty to clear STDIO mode for HTTP servers
+        command: server.command || null,
+        args: server.args && server.args.length > 0 ? server.args : null,
         env: server.env,
         tools: server.tools,
         capabilities: server.capabilities,
