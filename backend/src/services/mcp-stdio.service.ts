@@ -164,7 +164,8 @@ export class McpStdioService extends EventEmitter {
     return new Promise((resolve, reject) => {
       // Longer timeout for initialization (npx may need to download packages)
       // Browser operations (especially Playwright) can take longer in serverless environments
-      const timeoutMs = method === 'initialize' ? 90000 : 120000 // 90s for init, 120s for browser operations
+      // Increased to 180s for Playwright browser launch (GPU initialization can be slow)
+      const timeoutMs = method === 'initialize' ? 90000 : 180000 // 90s for init, 180s for browser operations
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id)
         reject(new Error(`Request timeout for ${method} (${timeoutMs/1000}s)`))
