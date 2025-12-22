@@ -76,7 +76,8 @@ export class HealerService {
    * Handle a failed event from the DLQ
    */
   private async handleFailedEvent(dlqEvent: DLQEvent): Promise<void> {
-    const { originalEvent, error, retryCount, serverId, contextId } = dlqEvent
+    const { originalEvent, error, retryCount, serverId } = dlqEvent
+    const contextId = originalEvent.conversationId
 
     console.log(`🔧 Healer processing failed event: ${originalEvent.event}`)
     console.log(`   Server: ${serverId}, Retry count: ${retryCount}, Error: ${error.message}`)
@@ -208,7 +209,8 @@ export class HealerService {
     strategy: { type: string; action: any },
     dlqEvent: DLQEvent
   ): Promise<void> {
-    const { originalEvent, serverId, contextId } = dlqEvent
+    const { originalEvent, serverId } = dlqEvent
+    const contextId = originalEvent.conversationId
 
     switch (strategy.type) {
       case 'alternative_tool':
