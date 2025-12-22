@@ -19,9 +19,10 @@ const playwrightServer = {
   command: 'npx',
   args: ['-y', '@playwright/mcp@latest'],
   env: {
-    // CRITICAL: Explicitly use 'chromium' channel instead of 'chrome'
+    // CRITICAL: Explicitly use 'chromium' browser type instead of 'chrome'
+    // The Playwright MCP server uses BROWSER_TYPE (not BROWSER) to determine which browser to use
     // This prevents Playwright from looking for branded Google Chrome
-    BROWSER: 'chromium',
+    BROWSER_TYPE: 'chromium',
     // Path to the Chromium executable (symlinked in Dockerfile)
     EXECUTABLE_PATH: '/opt/google/chrome/chrome',
     // Tell Playwright where to find browser cache (we've set up symlinks there)
