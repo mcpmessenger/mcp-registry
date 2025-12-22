@@ -15,19 +15,6 @@ export class McpHttpService {
   private sessions: Map<string, McpHttpSession> = new Map()
   private readonly SESSION_TIMEOUT = 30 * 60 * 1000 // 30 minutes
 
-  private get authHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    }
-
-    const token = process.env.PLAYWRIGHT_MCP_AUTH_TOKEN?.trim()
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
-    }
-
-    return headers
-  }
-
   /**
    * Get or create a session for an HTTP MCP server
    */
@@ -80,7 +67,9 @@ export class McpHttpService {
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
-    headers: this.authHeaders,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(initRequest),
       })
 
@@ -143,7 +132,9 @@ export class McpHttpService {
 
     const response = await fetch(endpoint, {
       method: 'POST',
-    headers: this.authHeaders,
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(toolRequest),
     })
 
