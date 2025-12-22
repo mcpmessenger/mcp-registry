@@ -17,12 +17,8 @@ const playwrightServer = {
   description: 'Official Microsoft Playwright MCP server for browser automation. Enables LLMs to interact with web pages through structured accessibility snapshots, navigate, click, fill forms, take screenshots, and more.',
   version: 'v0.1',
   command: 'npx',
-  args: ['-y', '@playwright/mcp@latest'],
+  args: ['-y', '@playwright/mcp@latest', '--browser', 'chromium'],
   env: {
-    // CRITICAL: Explicitly use 'chromium' browser type instead of 'chrome'
-    // The Playwright MCP server uses BROWSER_TYPE (not BROWSER) to determine which browser to use
-    // This prevents Playwright from looking for branded Google Chrome
-    BROWSER_TYPE: 'chromium',
     // Path to the Chromium executable (symlinked in Dockerfile)
     EXECUTABLE_PATH: '/opt/google/chrome/chrome',
     // Tell Playwright where to find browser cache (we've set up symlinks there)
