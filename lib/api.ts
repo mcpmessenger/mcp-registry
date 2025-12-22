@@ -573,3 +573,202 @@ export async function healthCheck(): Promise<{ status: string; timestamp: string
   
   return response.json()
 }
+
+/**
+ * Durable Tasks API (SEP-1686)
+ */
+export interface DurableTask {
+  id: string
+  taskId: string
+  serverId: string
+  server?: {
+    serverId: string
+    name: string
+  }
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  taskType?: string
+  description?: string
+  input?: Record<string, unknown>
+  output?: Record<string, unknown>
+  progress: number
+  progressMessage?: string
+  errorMessage?: string
+  metadata?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+  completedAt?: string
+}
+
+export interface GetTasksResponse {
+  success: boolean
+  tasks: DurableTask[]
+  count: number
+}
+
+export interface GetTaskResponse {
+  success: boolean
+  task: DurableTask
+}
+
+export interface CreateTaskRequest {
+  taskId: string
+  serverId: string
+  taskType?: string
+  description?: string
+  input?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+}
+
+export interface CreateTaskResponse {
+  success: boolean
+  message: string
+  task: DurableTask
+}
+
+/**
+ * Get all durable tasks
+ */
+export async function getTasks(filters?: {
+  serverId?: string
+  status?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  taskType?: string
+}): Promise<GetTasksResponse> {
+  const params = new URLSearchParams()
+  if (filters?.serverId) params.append('serverId', filters.serverId)
+  if (filters?.status) params.append('status', filters.status)
+  if (filters?.taskType) params.append('taskType', filters.taskType)
+  
+  const queryString = params.toString()
+  const url = `${API_BASE_URL}/api/tasks${queryString ? `?${queryString}` : ''}`
+  
+  const response = await fetch(url)
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to fetch tasks: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Get a specific task by ID
+ */
+export async function getTask(id: string): Promise<GetTaskResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/tasks/${id}`)
+  
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Task not found: ${id}`)
+    }
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to fetch task: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Get tasks for a specific server
+ */
+export async function getTasksByServer(serverId: string): Promise<GetTasksResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/tasks/server/${encodeURIComponent(serverId)}`)
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to fetch tasks: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Security & Trust Scoring API
+ */
+export interface SecurityScore {
+  serverId: string
+  name: string
+  securityScore: number | null
+  lastSecurityScan: string | null
+  identityVerified: boolean
+}
+
+export interface GetSecurityScoresResponse {
+  success: boolean
+  servers: SecurityScore[]
+  count: number
+}
+
+export interface GetSecurityScoreResponse {
+  success: boolean
+  server: {
+    serverId: string
+    name: string
+    securityScore: number | null
+    lastSecurityScan: string | null
+    scanResults?: {
+      score: number
+      npmAudit?: {
+        vulnerabilities: number
+        critical: number
+        high: number
+        moderate: number
+        low: number
+      }
+      codeAnalysis?: {
+        issues: Array<{
+          severity: 'critical' | 'high' | 'medium' | 'low'
+          type: string
+          description: string
+        }>
+      }
+    }
+  }
+}
+
+/**
+ * Get security scores for all servers
+ */
+export async function getSecurityScores(): Promise<GetSecurityScoresResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/security/scores`)
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to fetch security scores: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Get security score for a specific server
+ */
+export async function getSecurityScore(serverId: string): Promise<GetSecurityScoreResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/security/score/${encodeURIComponent(serverId)}`)
+  
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Server not found: ${serverId}`)
+    }
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to fetch security score: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
+ * Trigger security scan for a server
+ */
+export async function scanServerSecurity(serverId: string): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/security/scan/${encodeURIComponent(serverId)}`, {
+    method: 'POST',
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(error.message || error.error || `Failed to trigger security scan: ${response.statusText}`)
+  }
+  
+  return response.json()
+}

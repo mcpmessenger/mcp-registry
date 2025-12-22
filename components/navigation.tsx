@@ -4,19 +4,24 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { LayoutDashboard, MessageSquare, Settings } from "lucide-react"
+import { LayoutDashboard, MessageSquare, Settings, ListTodo } from "lucide-react"
 import Image from "next/image"
 
 const navItems = [
   {
-    title: "Registry",
+    title: "Chat",
     href: "/",
+    icon: MessageSquare,
+  },
+  {
+    title: "Registry",
+    href: "/registry",
     icon: LayoutDashboard,
   },
   {
-    title: "Chat",
-    href: "/chat",
-    icon: MessageSquare,
+    title: "Tasks",
+    href: "/tasks",
+    icon: ListTodo,
   },
   {
     title: "Settings",

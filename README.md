@@ -18,11 +18,12 @@ The MCP Registry is a platform designed to help developers discover, register, a
 
 ## ✨ Features
 
+### Core Functionality
 - **Service Registry**: Register and manage MCP services with metadata
 - **Search & Filter**: Find services by name, endpoint, or status
 - **Service Management**: Create, update, and delete service entries
 - **Service Details**: View comprehensive information about each service
-- **Chat Interface**: Interact with MCP agents through a chat interface
+- **Chat Interface**: Interact with MCP agents through a chat interface (default landing page)
 - **Voice Transcription**: Real-time voice-to-text using OpenAI Whisper API
 - **Document Analysis**: AI-powered analysis of PDFs, images, and text files using Google Gemini Vision
 - **Screen Capture**: Capture and analyze screen content using browser APIs
@@ -31,6 +32,42 @@ The MCP Registry is a platform designed to help developers discover, register, a
 - **Real-time Progress**: Server-Sent Events (SSE) for live job progress updates
 - **Multi-Tier Fallback**: Robust API fallback strategy for reliable AI generation
 - **Modern UI**: Built with Next.js and Tailwind CSS for a responsive experience
+
+### 🆕 Latest Upgrades (December 2024)
+
+#### Server Identity Verification (SEP-1302)
+- **Dynamic Identity Provider**: Registry now supports the `/.well-known/mcp-server-identity` standard
+- **Automatic Verification**: When a server is published, the registry automatically pings the identity endpoint to verify ownership
+- **Cryptographic Signatures**: Verifies signed metadata from server identity endpoints
+- **Identity Status**: Tracks verification status and metadata for each registered server
+
+#### Task Management Dashboard (SEP-1686)
+- **Durable Request Tracking**: Monitor long-running async operations across MCP servers
+- **Task Dashboard**: New `/tasks` route provides real-time monitoring of all durable tasks
+- **Status Monitoring**: Track task progress, completion status, and errors
+- **Auto-refresh**: Real-time updates with configurable auto-refresh capability
+- **Task Filtering**: Filter tasks by server, status, or type
+- **Security Scores Overview**: View trust scores for all registered servers
+
+#### Trust Scoring Engine
+- **Security Scanning**: Background worker that analyzes registered servers for security issues
+- **npm Audit Integration**: Scans dependencies for known vulnerabilities (infrastructure ready)
+- **LLM-based Code Analysis**: AI-powered code scanning for security best practices (infrastructure ready)
+- **Security Scores**: 0-100 scoring system for each server
+- **Scan Results**: Detailed security analysis results stored and accessible via API
+- **Periodic Scanning**: Automated security scans for all active servers
+
+### API Endpoints
+
+#### New Endpoints
+- `GET /api/tasks` - List all durable tasks
+- `GET /api/tasks/:id` - Get specific task details
+- `GET /api/tasks/server/:serverId` - Get tasks for a server
+- `POST /api/tasks` - Create a new durable task
+- `PATCH /api/tasks/:taskId/progress` - Update task progress
+- `POST /api/security/scan/:serverId` - Trigger security scan
+- `GET /api/security/scores` - Get all security scores
+- `GET /api/security/score/:serverId` - Get security score for a server
 
 ## 📁 Repository Structure
 

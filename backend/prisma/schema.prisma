@@ -60,11 +60,22 @@ model McpServer {
   workflowAttempts Int     @default(0) // Number of retry attempts
   contextId       String?  // Link to conversation/memory for this workflow
   workflowUpdatedAt DateTime? // Last workflow state update
+  // Server Identity (SEP-1302) fields
+  identityPublicKey String? // Public key from /.well-known/mcp-server-identity
+  identitySignature String? // Cryptographic signature from identity endpoint
+  identityVerified Boolean @default(false) // Whether identity has been verified
+  identityVerifiedAt DateTime? // When identity was last verified
+  identityUrl String? // URL where identity endpoint was found
+  // Trust Scoring fields
+  securityScore Int? // Security score 0-100 (higher is better)
+  lastSecurityScan DateTime? // Last time security scan was run
+  securityScanResults String? // JSON string of scan results (npm audit, code analysis, etc.)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
   // Relations
   designJobs      DesignJob[]
+  durableTasks    DurableTask[]
   
   @@index([serverId])
   @@index([isActive])
@@ -94,6 +105,31 @@ model DesignJob {
   @@index([status])
   @@index([createdAt])
   @@index([serverId])
+}
+
+// Durable Task for tracking long-running async operations across MCP servers (SEP-1686)
+model DurableTask {
+  id              String    @id @default(cuid())
+  taskId          String    @unique // External task ID from MCP server
+  serverId        String    // Which MCP server owns this task
+  server          McpServer @relation(fields: [serverId], references: [id])
+  status          JobStatus @default(PENDING)
+  taskType        String?   // Type of task (e.g., "data-processing", "model-training", "analysis")
+  description     String?   // Human-readable description
+  input           String?   // JSON string of task input parameters
+  output          String?   // JSON string of task output/result
+  progress        Int       @default(0) // 0-100 percentage
+  progressMessage String?   // Current status message
+  errorMessage    String?   // Error details if failed
+  metadata        String?   // JSON string for additional metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  completedAt     DateTime?
+  
+  @@index([serverId])
+  @@index([status])
+  @@index([taskId])
+  @@index([createdAt])
 }
 
 // Generated assets (SVGs, images, etc.)

@@ -135,3 +135,64 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Gradient background for grids - Bright orange in light mode, Blue in dark mode */
+  .gradient-grid-bg {
+    position: relative;
+  }
+  
+  .gradient-grid-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: 
+      /* Large bright orange blotch */
+      radial-gradient(circle 400px at 25% 40%, rgba(255, 140, 0, 0.4) 0%, transparent 70%),
+      /* Small bright orange blotch */
+      radial-gradient(circle 200px at 75% 60%, rgba(255, 165, 0, 0.35) 0%, transparent 60%);
+  }
+  
+  .dark .gradient-grid-bg::before {
+    background: 
+      /* Large blue blotch */
+      radial-gradient(circle 500px at 20% 35%, rgba(59, 130, 246, 0.4) 0%, transparent 75%),
+      /* Small blue blotch */
+      radial-gradient(circle 250px at 80% 65%, rgba(96, 165, 250, 0.35) 0%, transparent 65%);
+  }
+  
+  /* Gradient background for chat input - Bright orange in light mode, Blue in dark mode */
+  .gradient-chat-bg {
+    position: relative;
+  }
+  
+  .gradient-chat-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: 
+      /* Large bright orange blotch */
+      radial-gradient(circle 300px at 15% 50%, rgba(255, 140, 0, 0.35) 0%, transparent 65%),
+      /* Small bright orange blotch */
+      radial-gradient(circle 150px at 85% 50%, rgba(255, 165, 0, 0.3) 0%, transparent 55%);
+  }
+  
+  .dark .gradient-chat-bg::before {
+    background: 
+      /* Large blue blotch */
+      radial-gradient(circle 350px at 20% 50%, rgba(59, 130, 246, 0.45) 0%, transparent 70%),
+      /* Small blue blotch */
+      radial-gradient(circle 180px at 85% 50%, rgba(96, 165, 250, 0.4) 0%, transparent 60%);
+  }
+  
+  /* Ensure content stays above gradient */
+  .gradient-grid-bg > *,
+  .gradient-chat-bg > * {
+    position: relative;
+    z-index: 1;
+  }
+}

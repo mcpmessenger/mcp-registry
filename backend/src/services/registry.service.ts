@@ -1,5 +1,6 @@
 import { prisma } from '../config/database'
 import type { MCPServer, MCPTool } from '../types/mcp'
+import { serverIdentityService } from './server-identity.service'
 
 export class RegistryService {
   /**
@@ -271,6 +272,27 @@ export class RegistryService {
       }
     }
 
+    // Verify server identity if endpoint is available (SEP-1302)
+    let identityVerification = null
+    const metadata = serverData.metadata || {}
+    const endpoint = metadata.endpoint as string | undefined
+    
+    if (endpoint) {
+      try {
+        console.log(`🔍 Verifying identity for server: ${serverData.serverId}`)
+        identityVerification = await serverIdentityService.verifyServerIdentity(endpoint)
+        
+        if (identityVerification.isValid) {
+          console.log(`✅ Identity verified for server: ${serverData.serverId}`)
+        } else {
+          console.warn(`⚠️  Identity verification failed for server: ${serverData.serverId}`, identityVerification.error)
+        }
+      } catch (error) {
+        console.error(`❌ Error during identity verification for ${serverData.serverId}:`, error)
+        // Continue with registration even if verification fails
+      }
+    }
+
     // Check if server already exists
     const existing = await prisma.mcpServer.findUnique({
       where: { serverId: serverData.serverId },
@@ -300,46 +322,68 @@ export class RegistryService {
         updateData.args = existing.args
       }
       
+      const updatePayload: any = {
+        ...updateData,
+        env: serverData.env ? JSON.stringify(serverData.env) : existing.env,
+        tools: serverData.tools ? JSON.stringify(serverData.tools) : existing.tools,
+        toolSchemas: Object.keys(toolSchemas).length > 0 ? JSON.stringify(toolSchemas) : existing.toolSchemas,
+        capabilities: serverData.capabilities ? JSON.stringify(serverData.capabilities) : existing.capabilities,
+        manifest: serverData.manifest ? JSON.stringify(serverData.manifest) : existing.manifest,
+        isPublic: serverData.isPublic ?? existing.isPublic,
+        federationId: serverData.federationId ?? existing.federationId,
+        publishedBy: serverData.publishedBy ?? existing.publishedBy,
+        publishedAt: new Date(),
+        metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : existing.metadata,
+        authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : existing.authConfig,
+      }
+      
+      // Add identity verification data if available
+      if (identityVerification) {
+        updatePayload.identityVerified = identityVerification.isValid
+        updatePayload.identityVerifiedAt = identityVerification.isValid ? new Date() : existing.identityVerifiedAt
+        updatePayload.identityPublicKey = identityVerification.publicKey || existing.identityPublicKey
+        updatePayload.identitySignature = identityVerification.signature || existing.identitySignature
+        updatePayload.identityUrl = endpoint || existing.identityUrl
+      }
+      
       const updated = await prisma.mcpServer.update({
         where: { serverId: serverData.serverId },
-        data: {
-          ...updateData,
-          env: serverData.env ? JSON.stringify(serverData.env) : existing.env,
-          tools: serverData.tools ? JSON.stringify(serverData.tools) : existing.tools,
-          toolSchemas: Object.keys(toolSchemas).length > 0 ? JSON.stringify(toolSchemas) : existing.toolSchemas,
-          capabilities: serverData.capabilities ? JSON.stringify(serverData.capabilities) : existing.capabilities,
-          manifest: serverData.manifest ? JSON.stringify(serverData.manifest) : existing.manifest,
-          isPublic: serverData.isPublic ?? existing.isPublic,
-          federationId: serverData.federationId ?? existing.federationId,
-          publishedBy: serverData.publishedBy ?? existing.publishedBy,
-          publishedAt: new Date(),
-          metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : existing.metadata,
-          authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : existing.authConfig,
-        },
+        data: updatePayload,
       })
 
       return this.transformToMCPFormat(updated)
     } else {
       // Create new server
+      const createData: any = {
+        serverId: serverData.serverId,
+        name: serverData.name,
+        description: serverData.description,
+        version: serverData.version || 'v0.1',
+        command: serverData.command,
+        args: serverData.args ? JSON.stringify(serverData.args) : null,
+        env: serverData.env ? JSON.stringify(serverData.env) : null,
+        tools: serverData.tools ? JSON.stringify(serverData.tools) : null,
+        toolSchemas: Object.keys(toolSchemas).length > 0 ? JSON.stringify(toolSchemas) : null,
+        capabilities: serverData.capabilities ? JSON.stringify(serverData.capabilities) : null,
+        manifest: serverData.manifest ? JSON.stringify(serverData.manifest) : null,
+        isPublic: serverData.isPublic ?? true,
+        federationId: serverData.federationId ?? null,
+        publishedBy: serverData.publishedBy ?? null,
+        metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : null,
+        authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : null,
+      }
+      
+      // Add identity verification data if available
+      if (identityVerification) {
+        createData.identityVerified = identityVerification.isValid
+        createData.identityVerifiedAt = identityVerification.isValid ? new Date() : null
+        createData.identityPublicKey = identityVerification.publicKey || null
+        createData.identitySignature = identityVerification.signature || null
+        createData.identityUrl = endpoint || null
+      }
+      
       const server = await prisma.mcpServer.create({
-        data: {
-          serverId: serverData.serverId,
-          name: serverData.name,
-          description: serverData.description,
-          version: serverData.version || 'v0.1',
-          command: serverData.command,
-          args: serverData.args ? JSON.stringify(serverData.args) : null,
-          env: serverData.env ? JSON.stringify(serverData.env) : null,
-          tools: serverData.tools ? JSON.stringify(serverData.tools) : null,
-          toolSchemas: Object.keys(toolSchemas).length > 0 ? JSON.stringify(toolSchemas) : null,
-          capabilities: serverData.capabilities ? JSON.stringify(serverData.capabilities) : null,
-          manifest: serverData.manifest ? JSON.stringify(serverData.manifest) : null,
-          isPublic: serverData.isPublic ?? true,
-          federationId: serverData.federationId ?? null,
-          publishedBy: serverData.publishedBy ?? null,
-          metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : null,
-          authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : null,
-        },
+        data: createData,
       })
 
       return this.transformToMCPFormat(server)

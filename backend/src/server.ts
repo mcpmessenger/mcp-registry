@@ -20,6 +20,8 @@ import debugRouter from './routes/debug'
 import googleAuthRouter from './routes/auth/google'
 import mcpOAuthRouter from './routes/auth/mcp-oauth'
 import memoryRouter from './routes/memory'
+import tasksRouter from './routes/tasks'
+import securityRouter from './routes/security'
 import { eventBusConsumerService } from './services/event-bus-consumer.service'
 import { healerService } from './services/healer.service'
 
@@ -57,6 +59,8 @@ app.use('/api/streams', streamsRouter)
 app.use('/api/audio', audioRouter)
 app.use('/api/documents', documentsRouter)
 app.use('/api/debug', debugRouter)
+app.use('/api/tasks', tasksRouter)
+app.use('/api/security', securityRouter)
 
 // 404 handler
 app.use(notFoundMiddleware)
