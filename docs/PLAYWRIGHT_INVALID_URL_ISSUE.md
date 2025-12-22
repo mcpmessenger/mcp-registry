@@ -1,5 +1,7 @@
 # Playwright Invalid URL Issue
 
+> **Note**: See also `PLAYWRIGHT_BROWSER_ARGS_ISSUE.md` for browser arguments support and consolidated status.
+
 ## Error
 ```
 SyntaxError: browserType.launch: Invalid URL: undefined
