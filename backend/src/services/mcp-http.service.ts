@@ -110,6 +110,14 @@ export class McpHttpService {
   }
 
   /**
+   * Check if endpoint uses custom API format (not standard MCP JSON-RPC)
+   */
+  private isCustomApiFormat(endpoint: string): boolean {
+    // LangChain server uses /mcp/invoke with custom format
+    return endpoint.includes('/mcp/invoke')
+  }
+
+  /**
    * Call a tool on an HTTP MCP server
    */
   async callTool(
@@ -117,11 +125,16 @@ export class McpHttpService {
     toolName: string,
     arguments_: Record<string, unknown>
   ): Promise<any> {
-    // Ensure session is initialized
-    await this.initializeSession(endpoint)
+    // Check if this is a custom API format (not standard JSON-RPC)
+    const isCustomFormat = this.isCustomApiFormat(endpoint)
+    
+    // Only initialize session for standard MCP JSON-RPC servers
+    if (!isCustomFormat) {
+      await this.initializeSession(endpoint)
+    }
 
     // For browser_navigate, close any existing browser first to avoid "Browser is already in use" errors
-    if (toolName === 'browser_navigate') {
+    if (toolName === 'browser_navigate' && !isCustomFormat) {
       try {
         const closeRequest = {
           jsonrpc: '2.0',
@@ -159,15 +172,21 @@ export class McpHttpService {
       }
     }
 
-    const toolRequest = {
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'tools/call',
-      params: {
-        name: toolName,
-        arguments: arguments_,
-      },
-    }
+    // Use custom format for LangChain server, standard JSON-RPC for others
+    const toolRequest = isCustomFormat
+      ? {
+          tool: toolName,
+          arguments: arguments_,
+        }
+      : {
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: arguments_,
+          },
+        }
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -195,6 +214,12 @@ export class McpHttpService {
     }
 
     const result = await response.json()
+
+    // Handle custom API format (LangChain server)
+    if (isCustomFormat) {
+      // Custom format returns { content: [...], isError: false } directly
+      return result
+    }
 
     // Handle JSON-RPC error response
     if (result.error) {
