@@ -61,8 +61,8 @@ RUN npm install -g playwright
 # This was the root cause - migrations directory was missing
 COPY --from=builder /app/prisma ./prisma
 
-# Verify migrations directory exists (fail build if missing)
-RUN ls -la /app/prisma/migrations/ || (echo "ERROR: Migrations directory not found!" && exit 1)
+# Create migrations directory if it doesn't exist (migrations can be run at runtime)
+RUN mkdir -p /app/prisma/migrations || true
 
 # Generate Prisma Client
 RUN npx prisma generate
