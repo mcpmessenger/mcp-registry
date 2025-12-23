@@ -1,4 +1,8 @@
-# MCP Registry
+# 🌐 MCP Registry: The Agentic Hub
+
+**The fastest way to discover and connect Model Context Protocol (MCP) servers.**
+
+[Quick Start](#-quick-start-the-google-era-update) • [Ecosystem Architecture](#️-ecosystem-architecture) • [The Stack](#️-the-stack)
 
 A comprehensive registry and management platform for Model Context Protocol (MCP) services. This monorepo contains both the frontend and backend applications for discovering, managing, and interacting with MCP agents and services.
 
@@ -93,9 +97,42 @@ mcp-registry/
 └── README.md            # This file
 ```
 
-## 🚀 Quick Start (snappy)
+## ⚡ Quick Start (The "Google Era" Update)
 
-For full details, see [Development Guide](docs/DEVELOPMENT.md). Below is the shortest path to a working local stack.
+Google officially launched Managed MCP Servers (Dec 15). Here is how to add the official Google Maps grounding directly to your agent:
+
+### 1. Add Official Google Maps (Grounding Lite)
+
+**Option A: Via Registry UI (Recommended)**
+1. Start the backend and frontend (see [Development Setup](#development-setup) below)
+2. Navigate to the Registry UI at `http://localhost:3000/registry`
+3. Find "Google Maps MCP (Grounding Lite)" and click Edit
+4. In **HTTP Headers (JSON)**, set: `{"X-Goog-Api-Key":"YOUR_API_KEY_HERE"}`
+5. Enable **Maps Grounding Lite API** in your Google Cloud Console
+6. Save and start chatting!
+
+**Option B: For Cline or Claude Desktop**
+Add this to your `mcp_config.json`:
+
+```json
+"google-maps": {
+  "command": "npx",
+  "args": ["-y", "@googlemaps/code-assist-mcp@latest"],
+  "env": {
+    "GOOGLE_MAPS_API_KEY": "YOUR_API_KEY_HERE"
+  }
+}
+```
+
+### 2. Add the Playwright Registry Bridge
+
+To browse the web and interact with maps via a real browser:
+
+```bash
+npx @mcpmessenger/playwright-mcp --install
+```
+
+### Development Setup
 
 **Prereqs**
 - Node.js ≥ 18
@@ -114,14 +151,15 @@ npm start
 
 **Frontend (http://localhost:3000)**
 ```bash
+# If using the mcp-registry-main directory:
 cd mcp-registry-main
 pnpm install
 NEXT_PUBLIC_API_URL=http://localhost:3001 pnpm dev
-```
 
-**Google Maps MCP (Grounding Lite)**
-- In Registry UI, edit the “Google Maps MCP” agent, set HTTP Headers (JSON) to `{"X-Goog-Api-Key":"YOUR_KEY"}`.
-- Enable Maps Grounding Lite API on your GCP project.
+# Or from root:
+pnpm install
+NEXT_PUBLIC_API_URL=http://localhost:3001 pnpm dev
+```
 
 **Common env (backend)**
 ```env
@@ -131,6 +169,36 @@ CORS_ORIGIN=http://localhost:3000
 GOOGLE_GEMINI_API_KEY=
 OPENAI_API_KEY=
 ```
+
+## 🏗️ Ecosystem Architecture
+
+The registry orchestrates between your local machine and Google's cloud-scale tools.
+
+```mermaid
+graph LR
+    User([User]) --> Agent[Cline / Claude]
+    Agent --> Registry{Registry}
+    
+    subgraph "Managed (Official)"
+        Registry --> GMaps[Google Maps Grounding]
+        Registry --> BQ[BigQuery MCP]
+    end
+    
+    subgraph "Local / Hybrid"
+        Registry --> PW[Playwright-MCP]
+        Registry --> LC[LangchainMCP]
+    end
+    
+    GMaps --- Tool1[Search & Routes]
+    PW --- Tool2[Browser Automation]
+```
+
+## 🗺️ New: Google Maps MCP Integration
+
+The registry now supports both managed and automated map tools:
+
+- **Google Grounding Lite**: Access fresh, official geospatial data, real-time weather, and distance matrices. No hallucinations—just raw Google Maps data.
+- **Playwright-MCP Bridge**: Need to actually see the map or scrape specific business details? Use the Playwright bridge to automate the Google Maps UI.
 
 ## 🔀 Workflow at a Glance
 
@@ -143,7 +211,7 @@ graph TD
 ```
 
 Notes:
-- HTTP MCPs can require headers (e.g., Google Maps MCP needs `X-Goog-Api-Key` in the agent’s HTTP Headers).
+- HTTP MCPs can require headers (e.g., Google Maps MCP needs `X-Goog-Api-Key` in the agent's HTTP Headers).
 - STDIO MCPs (Playwright, LangChain) are spawned by the backend.
 - Registry seeds include Playwright, LangChain, and Google Maps MCP; add your own via the Registry UI or publish API.
 
@@ -214,9 +282,15 @@ For production deployment, see the [Deployment Guide](docs/DEPLOYMENT.md).
 - **Database**: Cloud SQL (PostgreSQL)
 - **Event Bus**: Confluent Cloud (Kafka) or Cloud Pub/Sub
 
-## 🛠 Technology Stack
+## 🛠️ The Stack
 
-### Frontend
+- **mcp-registry**: Central discovery for all official and community servers.
+- **playwright-mcp**: Full browser capabilities (Chromium) for your agent.
+- **LangchainMCP**: Bridging MCP tools into production LangGraph/LangChain workflows.
+
+### Technology Stack
+
+**Frontend**
 - **Next.js 16** - React framework
 - **React 19** - UI library
 - **TypeScript** - Type safety
@@ -224,7 +298,7 @@ For production deployment, see the [Deployment Guide](docs/DEPLOYMENT.md).
 - **Radix UI** - Accessible component primitives
 - **shadcn/ui** - UI component library
 
-### Backend
+**Backend**
 - **Express.js 5** - Web framework
 - **Prisma** - ORM and database toolkit
 - **TypeScript** - Type safety
