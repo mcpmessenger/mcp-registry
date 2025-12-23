@@ -71,6 +71,10 @@ export function transformServerToAgent(server: MCPServer, index: number): MCPAge
     lastActive: new Date(),
     capabilities: server.capabilities || server.tools?.map(t => t.name) || [],
     manifest: JSON.stringify(manifestData, null, 2),
+    metadata: server.metadata,
+    httpHeaders: server.metadata && typeof server.metadata === 'object' && (server.metadata as Record<string, unknown>).httpHeaders
+      ? JSON.stringify((server.metadata as Record<string, unknown>).httpHeaders, null, 2)
+      : undefined,
     metrics: {
       avgLatency: 0,
       p95Latency: 0,

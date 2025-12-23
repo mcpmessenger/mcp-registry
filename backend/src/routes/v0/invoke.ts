@@ -239,11 +239,21 @@ router.post('/invoke', async (req, res, next) => {
 
     // HTTP-based server - use MCP HTTP service which handles initialization
     try {
+      // Merge optional HTTP headers from metadata (e.g., X-Goog-Api-Key for Google MCP HTTP servers)
+      let headers: Record<string, unknown> | null | undefined
+      if (server.metadata && typeof server.metadata === 'object') {
+        const md = server.metadata as Record<string, unknown>
+        if (md.httpHeaders && typeof md.httpHeaders === 'object') {
+          headers = md.httpHeaders as Record<string, unknown>
+        }
+      }
+
       // Use the HTTP service which manages session initialization
       const result = await mcpHttpService.callTool(
         endpoint,
         validated.tool,
-        validated.arguments
+        validated.arguments,
+        headers
       )
       
       // Transform result to MCPToolResult format

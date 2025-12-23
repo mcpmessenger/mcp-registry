@@ -34,6 +34,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     endpoint: agent?.endpoint || "",
     manifest: agent?.manifest || "",
     apiKey: "",
+    httpHeaders: agent?.httpHeaders || "",
   })
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle")
@@ -49,6 +50,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
         endpoint: agent.endpoint || "",
         manifest: agent.manifest || "",
         apiKey: "", // Never show API key for security
+        httpHeaders: agent.httpHeaders || "",
       })
     } else {
       // Reset form when creating new agent
@@ -57,6 +59,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
         endpoint: "",
         manifest: "",
         apiKey: "",
+        httpHeaders: "",
       })
     }
     setConnectionStatus("idle")
@@ -115,11 +118,22 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     }
   }
 
+  const validateHeaders = (headers?: string): boolean => {
+    if (!headers || !headers.trim()) return true
+    try {
+      const parsed = JSON.parse(headers)
+      return parsed && typeof parsed === "object"
+    } catch {
+      return false
+    }
+  }
+
   const isFormValid =
     formData.name.trim() !== "" &&
     formData.endpoint.trim() !== "" &&
     formData.manifest.trim() !== "" &&
-    validateManifest(formData.manifest)
+    validateManifest(formData.manifest) &&
+    validateHeaders(formData.httpHeaders)
 
   return (
     <>
@@ -170,6 +184,25 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
               />
               <p className="text-xs text-muted-foreground">
                 Credentials are securely stored and never displayed in the browser.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="httpHeaders">HTTP Headers (JSON, optional)</Label>
+              <Textarea
+                id="httpHeaders"
+                placeholder='{"X-Goog-Api-Key": "your-key"}'
+                value={formData.httpHeaders}
+                onChange={(e) => setFormData((prev) => ({ ...prev, httpHeaders: e.target.value }))}
+                className="font-mono text-xs min-h-[120px]"
+              />
+              {!validateHeaders(formData.httpHeaders) && (
+                <p className="text-xs text-destructive">Headers must be valid JSON object.</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                These headers are sent with every HTTP MCP request (leave blank for STDIO servers).
+                For Google Maps MCP (Grounding Lite), set HTTP Headers to <code className="bg-muted px-1 rounded">{'{"X-Goog-Api-Key": "YOUR_KEY"}'}</code> and ensure the API is enabled:
+                https://developers.google.com/maps/ai/grounding-lite
               </p>
             </div>
 

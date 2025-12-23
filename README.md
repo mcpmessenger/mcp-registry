@@ -93,149 +93,59 @@ mcp-registry/
 └── README.md            # This file
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start (snappy)
 
-For detailed setup instructions, see the [Development Guide](docs/DEVELOPMENT.md).
+For full details, see [Development Guide](docs/DEVELOPMENT.md). Below is the shortest path to a working local stack.
 
-### Prerequisites
+**Prereqs**
+- Node.js ≥ 18
+- PostgreSQL (or SQLite for dev)
+- npm for backend; pnpm (or npm) for frontend
 
-- **Node.js** (v18 or higher)
-- **npm** or **pnpm** (for frontend)
-- **npm** (for backend)
-- **PostgreSQL** (recommended) or SQLite (development)
-- **Git**
-
-### Quick Setup
-
-**Backend:**
+**Backend (API at http://localhost:3001)**
 ```bash
 cd backend
 npm install
-cp env.example.txt .env  # Edit with your configuration
+cp env.example.txt .env   # edit secrets/DB
 npm run migrate
-npm run seed
+npx ts-node src/scripts/register-official-servers.ts   # seeds Playwright, LangChain, Google Maps MCP
 npm start
 ```
 
-**Frontend:**
+**Frontend (http://localhost:3000)**
 ```bash
 cd mcp-registry-main
 pnpm install
-pnpm dev
+NEXT_PUBLIC_API_URL=http://localhost:3001 pnpm dev
 ```
 
-### Frontend Setup (Detailed)
+**Google Maps MCP (Grounding Lite)**
+- In Registry UI, edit the “Google Maps MCP” agent, set HTTP Headers (JSON) to `{"X-Goog-Api-Key":"YOUR_KEY"}`.
+- Enable Maps Grounding Lite API on your GCP project.
 
-The frontend is a Next.js application located in the `mcp-registry-main/` directory.
+**Common env (backend)**
+```env
+DATABASE_URL=postgresql://mcp_registry:your_secure_password@localhost:5432/mcp_registry
+PORT=3001
+CORS_ORIGIN=http://localhost:3000
+GOOGLE_GEMINI_API_KEY=
+OPENAI_API_KEY=
+```
 
-1. **Navigate to the frontend directory:**
-   ```bash
-   cd mcp-registry-main
-   ```
+## 🔀 Workflow at a Glance
 
-2. **Install dependencies:**
-   ```bash
-   pnpm install
-   ```
+```mermaid
+graph TD
+  A[Chat UI] -->|/v0.1/servers| B[Registry Backend]
+  A -->|/v0.1/invoke| B
+  B -->|routes to| C[MCP Servers (HTTP/STDIO)]
+  C -->|tools/call result| B --> A
+```
 
-3. **Run the development server:**
-   ```bash
-   pnpm dev
-   ```
-
-4. **Build for production:**
-   ```bash
-   pnpm build
-   ```
-
-5. **Start production server:**
-   ```bash
-   pnpm start
-   ```
-
-6. **Lint the code:**
-   ```bash
-   pnpm lint
-   ```
-
-The frontend will be available at `http://localhost:3000`
-
-### Backend Setup
-
-The backend is an Express.js API with Prisma ORM, located in the `backend/` directory.
-
-1. **Navigate to the backend directory:**
-   ```bash
-   cd backend
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables:**
-   Create a `.env` file in the `backend/` directory (see `env.example.txt` for the canonical template):
-   ```env
-   DATABASE_URL="postgresql://mcp_registry:your_secure_password@localhost:5432/mcp_registry"
-   PORT=3001
-   NODE_ENV=development
-   CORS_ORIGIN="http://localhost:3000"
-
-   # Google Gemini + Vision APIs (needed for document analysis & SVG generation)
-   GOOGLE_GEMINI_API_KEY=
-   GOOGLE_VISION_API_KEY=
-
-   # OpenAI Whisper transcription (voice features)
-   OPENAI_API_KEY=
-
-   # LangChain MCP manifest (optional if you host your own service)
-   LANGCHAIN_API_KEY=
-   LANGCHAIN_ENDPOINT=
-
-   # Kafka & encryption
-   KAFKA_BROKERS=localhost:9092
-   ENCRYPTION_SECRET=...
-   ENCRYPTION_SALT=...
-   ```
-
-4. **Run Prisma migrations (Postgres):**
-   ```bash
-   npx prisma migrate dev
-   ```
-
-5. **Generate Prisma client:**
-   ```bash
-   npx prisma generate
-   ```
-
-6. **Seed official MCP agents (Playwright + LangChain):**
-   ```bash
-   npm run register-official
-   ```
-   This publishes the Playwright agent plus the hosted `langchain-agent-mcp-server` manifest/endpoint so they are always available in the registry.
-
-7. **Restore or switch Playwright agent (optional)**
-
-   If the Playwright entry was deleted or you want to route through your own HTTP server, run these helper scripts from the `backend/` directory:
-   ```bash
-   npm run fix-playwright
-   npm run update-playwright-http https://your-playwright-host/mcp
-   ```
-   The first creates/reactivates `com.microsoft.playwright/mcp` with the full tool list. The second clears the STDIO command/args and points metadata at your HTTP endpoint.
-   See [`CONNECT_PLAYWRIGHT_HTTP_SERVER.md`](CONNECT_PLAYWRIGHT_HTTP_SERVER.md) for curl snippets and troubleshooting tips.
-
-8. **Start the development server:**
-   ```bash
-   npm start
-   ```
-
-8. **Build TypeScript:**
-   ```bash
-   npm run build
-   ```
-
-The backend API will be available at `http://localhost:3001` (or the port specified in your `.env` file)
+Notes:
+- HTTP MCPs can require headers (e.g., Google Maps MCP needs `X-Goog-Api-Key` in the agent’s HTTP Headers).
+- STDIO MCPs (Playwright, LangChain) are spawned by the backend.
+- Registry seeds include Playwright, LangChain, and Google Maps MCP; add your own via the Registry UI or publish API.
 
 ### API Endpoints
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import type { ChatMessage } from "@/types/chat"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { AudioPlayer } from "@/components/audio-player"
@@ -65,10 +65,38 @@ function extractImages(content: string): Array<{ dataUrl: string; mimeType: stri
 /**
  * Render message content with SVG and image support
  */
+const urlRegex = /(https?:\/\/[^\s]+)/g
+
+function renderWithLinks(text: string) {
+  if (!text) return null
+  const parts = text.split(urlRegex)
+  return parts.map((part, idx) => {
+    const isUrl = urlRegex.test(part)
+    // reset lastIndex for next test
+    urlRegex.lastIndex = 0
+    if (isUrl) {
+      return (
+        <a
+          key={idx}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline break-all"
+        >
+          {part}
+        </a>
+      )
+    }
+    return <span key={idx}>{part}</span>
+  })
+}
+
 function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
   const { svg, remainingText } = extractSVG(content)
   const images = extractImages(content)
   const [showCode, setShowCode] = useState(false)
+  const linkifiedContent = useMemo(() => renderWithLinks(content), [content])
+  const linkifiedRemaining = useMemo(() => renderWithLinks(remainingText), [remainingText])
 
   // If we have images, render them
   if (images.length > 0) {
@@ -86,7 +114,7 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
         ))}
         {remainingText && (
           <div className="whitespace-pre-wrap break-words">
-            {remainingText}
+            {linkifiedRemaining}
           </div>
         )}
       </div>
@@ -97,7 +125,7 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
     // No SVG found, render as plain text
     return (
       <div className="whitespace-pre-wrap break-words">
-        {content}
+        {linkifiedContent}
       </div>
     )
   }
@@ -118,7 +146,7 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
       {/* Show remaining text if any */}
       {remainingText && (
         <div className="whitespace-pre-wrap break-words">
-          {remainingText}
+          {linkifiedRemaining}
         </div>
       )}
 
@@ -145,6 +173,16 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
 
 export function ChatMessageComponent({ message }: ChatMessageProps) {
   const isUser = message.role === "user"
+  const formattedTime = useMemo(() => {
+    if (!message.timestamp) return ""
+    const d = new Date(message.timestamp)
+    if (isNaN(d.getTime())) return ""
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "UTC",
+    }).format(d)
+  }, [message.timestamp])
   
   // Render attachment preview if present
   const renderAttachment = () => {
@@ -238,11 +276,11 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
         </div>
 
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs text-muted-foreground">
-            {new Intl.DateTimeFormat("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            }).format(message.timestamp)}
+          <span
+            className="text-xs text-muted-foreground"
+            suppressHydrationWarning
+          >
+            {formattedTime}
           </span>
         </div>
 

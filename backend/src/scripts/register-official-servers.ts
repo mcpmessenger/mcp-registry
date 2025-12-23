@@ -225,6 +225,71 @@ const langchainAgentServer = {
   },
 }
 
+// Google Maps MCP (Grounding Lite over HTTP)
+const googleMapsMcpServer = {
+  serverId: 'com.google/maps-mcp',
+  name: 'Google Maps MCP (Grounding Lite)',
+  description: 'Google Maps Platform MCP server (Grounding Lite). Requires X-Goog-Api-Key header configured in the registry HTTP headers.',
+  version: '0.1.0',
+  command: undefined as string | undefined,
+  args: undefined as string[] | undefined,
+  env: {},
+  tools: [
+    {
+      name: 'search_places',
+      description: 'Search places by text query',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          text_query: {
+            type: 'string',
+            description: 'Primary search text, e.g., tacos in des moines',
+          },
+          location_bias: {
+            type: 'object',
+            description: 'Optional bias region (see Maps Grounding Lite docs)',
+          },
+        },
+        required: ['text_query'],
+      },
+    },
+  ] as MCPTool[],
+  capabilities: ['tools'],
+  manifest: {
+    name: 'Google Maps MCP',
+    version: '0.1.0',
+    endpoint: 'https://mapstools.googleapis.com/mcp',
+    tools: [
+      {
+        name: 'search_places',
+        description: 'Search places by text query',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            text_query: {
+              type: 'string',
+              description: 'Primary search text, e.g., tacos in des moines',
+            },
+            location_bias: {
+              type: 'object',
+              description: 'Optional bias region (see Maps Grounding Lite docs)',
+            },
+          },
+          required: ['text_query'],
+        },
+      },
+    ],
+    capabilities: ['tools'],
+  },
+  metadata: {
+    source: 'official',
+    publisher: 'Google',
+    documentation: 'https://developers.google.com/maps/ai/grounding-lite',
+    endpoint: 'https://mapstools.googleapis.com/mcp',
+    notes: 'Set HTTP Headers in registry to {"X-Goog-Api-Key":"YOUR_KEY"}',
+  },
+}
+
 async function registerOfficialServers() {
   console.log('🚀 Registering official MCP servers...\n')
 
@@ -233,7 +298,7 @@ async function registerOfficialServers() {
   const servers = [
     playwrightServer, // ✅ Available: @playwright/mcp exists on npm
     langchainAgentServer, // ✅ Your LangChain MCP instance
-    // googleMapsServer, // ⏳ Not yet published: @google/maps-mcp returns 404
+    googleMapsMcpServer, // Grounding Lite MCP over HTTP (requires X-Goog-Api-Key header)
     // googleBigQueryServer, // ⏳ Not yet published: @google/bigquery-mcp returns 404
   ]
   

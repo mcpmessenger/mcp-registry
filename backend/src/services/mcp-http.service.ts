@@ -7,8 +7,30 @@
 
 interface McpHttpSession {
   endpoint: string
+  headersKey: string
   initialized: boolean
   initializedAt: number
+}
+
+type HttpHeaders = Record<string, string>
+
+function normalizeHeaders(headers?: Record<string, unknown> | null): HttpHeaders {
+  if (!headers || typeof headers !== 'object') return {}
+  const result: HttpHeaders = {}
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      result[key] = String(value)
+    }
+  }
+  return result
+}
+
+function sessionKey(endpoint: string, headers: HttpHeaders): string {
+  return `${endpoint}::${JSON.stringify(headers)}`
+}
+
+function mergeHeaders(base: HttpHeaders, extra: HttpHeaders): HttpHeaders {
+  return { ...base, ...extra }
 }
 
 export class McpHttpService {
@@ -18,23 +40,24 @@ export class McpHttpService {
   /**
    * Get or create a session for an HTTP MCP server
    */
-  private getSession(endpoint: string): McpHttpSession {
-    const sessionKey = endpoint
-    let session = this.sessions.get(sessionKey)
+  private getSession(endpoint: string, headers: HttpHeaders): McpHttpSession {
+    const key = sessionKey(endpoint, headers)
+    let session = this.sessions.get(key)
 
     // Check if session expired
     if (session && Date.now() - session.initializedAt > this.SESSION_TIMEOUT) {
-      this.sessions.delete(sessionKey)
+      this.sessions.delete(key)
       session = undefined
     }
 
     if (!session) {
       session = {
         endpoint,
+        headersKey: key,
         initialized: false,
         initializedAt: 0,
       }
-      this.sessions.set(sessionKey, session)
+      this.sessions.set(key, session)
     }
 
     return session
@@ -43,8 +66,9 @@ export class McpHttpService {
   /**
    * Initialize MCP session with the server
    */
-  async initializeSession(endpoint: string): Promise<void> {
-    const session = this.getSession(endpoint)
+  async initializeSession(endpoint: string, headers?: Record<string, unknown> | null): Promise<void> {
+    const normalizedHeaders = normalizeHeaders(headers)
+    const session = this.getSession(endpoint, normalizedHeaders)
 
     if (session.initialized) {
       return // Already initialized
@@ -67,9 +91,12 @@ export class McpHttpService {
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: mergeHeaders(
+          {
+            'Content-Type': 'application/json',
+          },
+          normalizedHeaders
+        ),
         body: JSON.stringify(initRequest),
       })
 
@@ -123,14 +150,16 @@ export class McpHttpService {
   async callTool(
     endpoint: string,
     toolName: string,
-    arguments_: Record<string, unknown>
+    arguments_: Record<string, unknown>,
+    headers?: Record<string, unknown> | null
   ): Promise<any> {
     // Check if this is a custom API format (not standard JSON-RPC)
     const isCustomFormat = this.isCustomApiFormat(endpoint)
+    const normalizedHeaders = normalizeHeaders(headers)
     
     // Only initialize session for standard MCP JSON-RPC servers
     if (!isCustomFormat) {
-      await this.initializeSession(endpoint)
+      await this.initializeSession(endpoint, normalizedHeaders)
     }
 
     // For browser_navigate, close any existing browser first to avoid "Browser is already in use" errors
@@ -147,9 +176,12 @@ export class McpHttpService {
         }
         const closeResponse = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: mergeHeaders(
+            {
+              'Content-Type': 'application/json',
+            },
+            normalizedHeaders
+          ),
           body: JSON.stringify(closeRequest),
           signal: AbortSignal.timeout(5000), // 5 second timeout for close
         })
@@ -190,9 +222,12 @@ export class McpHttpService {
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: mergeHeaders(
+        {
+          'Content-Type': 'application/json',
+        },
+        normalizedHeaders
+      ),
       body: JSON.stringify(toolRequest),
     })
 
@@ -210,6 +245,12 @@ export class McpHttpService {
           errorMessage = `${errorMessage}: ${errorText}`
         }
       }
+      console.error('MCP HTTP call failed', {
+        endpoint,
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+      })
       throw new Error(errorMessage)
     }
 

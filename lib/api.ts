@@ -48,6 +48,7 @@ export interface MCPServer {
   env?: Record<string, string>
   tools: MCPTool[]
   capabilities?: string[]
+  metadata?: Record<string, unknown>
 }
 
 export interface MCPTool {
