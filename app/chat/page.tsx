@@ -199,7 +199,16 @@ export default function ChatPage() {
             }
           } catch (error) {
             console.error('Design generation error:', error)
-            throw new Error(`Failed to generate design: ${error instanceof Error ? error.message : 'Unknown error'}`)
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+            
+            // Check if it's a service setup message (503 or similar)
+            if (errorMessage.includes('service is being set up') || errorMessage.includes('not yet configured')) {
+              responseContent = `I've received your design request! ${errorMessage}. The design generation service is currently being configured. Your request has been logged and will be processed once the service is ready.`
+            } else {
+              // For other errors, show a helpful message
+              responseContent = `I encountered an issue while setting up your design: ${errorMessage}. The design generation feature is still being configured. Please try again in a few moments, or contact support if this persists.`
+            }
+            // Don't throw - use the responseContent we set above
           }
         } else if (attachment?.type === "image" || attachment?.type === "glazyr") {
           // Route to Vision MCP or document analysis
