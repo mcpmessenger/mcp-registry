@@ -23,14 +23,26 @@ const refineDesignSchema = z.object({
 })
 
 /**
+ * GET /api/mcp/tools/test
+ * Simple test endpoint to verify route is working
+ */
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Design generation route is working',
+    timestamp: new Date().toISOString(),
+  })
+})
+
+/**
  * POST /api/mcp/tools/generate
  * Generate an SVG from a natural language description
  */
 router.post('/generate', async (req, res, next) => {
   try {
-    console.log('Received generate request:', req.body)
+    console.log('[Design Generate] Received request:', JSON.stringify(req.body))
     const validated = generateSVGSchema.parse(req.body)
-    console.log('Validated request:', validated)
+    console.log('[Design Generate] Validated:', JSON.stringify(validated))
 
     // Try to use the service if it exists, otherwise use simple fallback
     let mcpToolsModule = null
@@ -64,29 +76,41 @@ router.post('/generate', async (req, res, next) => {
     // Generate a simple job ID and return immediately
     const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
     
-    console.log('Using fallback design generation (no Kafka/job tracking):', {
-      jobId,
-      description: validated.description,
-      style: validated.style,
-    })
+    console.log('[Design Generate] Using fallback - jobId:', jobId)
     
     // Return success response with job ID
-    return res.json({
+    const response = {
       success: true,
       jobId: jobId,
       message: 'Design generation request received. The design generation service is being set up. Please check back later or use the job ID to check status.',
       note: 'Full design generation with Kafka/job tracking is not yet configured. This is a placeholder response.',
-    })
+    }
+    
+    console.log('[Design Generate] Sending response:', JSON.stringify(response))
+    return res.json(response)
   } catch (error) {
-    console.error('Error in /generate endpoint:', error)
+    console.error('[Design Generate] Error:', error)
+    console.error('[Design Generate] Error stack:', error instanceof Error ? error.stack : 'No stack')
+    
     if (error instanceof z.ZodError) {
+      console.error('[Design Generate] Validation error:', error.errors)
       return res.status(400).json({
         success: false,
         error: 'Validation error',
         details: error.errors,
       })
     }
-    next(error)
+    
+    // Ensure we always return a response, even on unexpected errors
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[Design Generate] Unexpected error, returning 500:', errorMessage)
+    
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: errorMessage,
+      timestamp: new Date().toISOString(),
+    })
   }
 })
 
