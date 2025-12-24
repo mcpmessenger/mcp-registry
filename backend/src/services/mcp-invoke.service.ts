@@ -3,6 +3,7 @@
  * Handles both HTTP-based and STDIO-based MCP servers
  */
 
+import { spawn, ChildProcess } from 'child_process'
 import { registryService } from './registry.service'
 import type { MCPServer } from '../types/mcp'
 
@@ -48,7 +49,7 @@ export class MCPInvokeService {
     if (isHttpServer && endpoint) {
       return this.invokeHttpTool(server, request.tool, request.arguments, endpoint)
     } else if (server.command) {
-      throw new Error('STDIO-based MCP servers are not yet supported for tool invocation')
+      return this.invokeStdioTool(server, request.tool, request.arguments)
     } else {
       throw new Error(`Server ${request.serverId} has no endpoint or command configured`)
     }
@@ -198,6 +199,178 @@ export class MCPInvokeService {
         },
       }
     }
+  }
+
+  /**
+   * Invoke a tool on a STDIO-based MCP server
+   */
+  private async invokeStdioTool(
+    server: MCPServer,
+    toolName: string,
+    toolArgs: Record<string, unknown>
+  ): Promise<InvokeToolResponse> {
+    return new Promise((resolve, reject) => {
+      if (!server.command) {
+        reject(new Error(`Server ${server.serverId} has no command configured`))
+        return
+      }
+
+      const args = server.args || []
+      const env = this.getServerEnv(server)
+      
+      console.log(`[STDIO] Spawning process: ${server.command} ${args.join(' ')}`)
+      
+      // Spawn the MCP server process
+      const proc = spawn(server.command, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+        env: { ...process.env, ...env },
+      })
+
+      let stdoutBuffer = ''
+      let requestId = 1
+      const timeout = 60000 // 60 second timeout
+      let timeoutId: NodeJS.Timeout
+
+      // Handle stdout - accumulate JSON-RPC messages
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString()
+        this.processStdioBuffer(stdoutBuffer, (message: any) => {
+          if (message.id === requestId) {
+            clearTimeout(timeoutId)
+            proc.kill()
+            
+            if (message.error) {
+              reject(new Error(`MCP error: ${message.error.message || JSON.stringify(message.error)}`))
+            } else if (message.result) {
+              // Convert MCP result to our format
+              let content: InvokeToolResponse['result']['content'] = []
+              
+              if (message.result.content) {
+                content = Array.isArray(message.result.content) 
+                  ? message.result.content 
+                  : [{ type: 'text', text: String(message.result.content) }]
+              } else if (typeof message.result === 'string') {
+                content = [{ type: 'text', text: message.result }]
+              } else {
+                content = [{ type: 'text', text: JSON.stringify(message.result, null, 2) }]
+              }
+              
+              resolve({
+                result: {
+                  content,
+                  isError: false,
+                },
+              })
+            } else {
+              reject(new Error('Invalid MCP response format'))
+            }
+          }
+        })
+      })
+
+      // Handle stderr
+      proc.stderr?.on('data', (data: Buffer) => {
+        const message = data.toString()
+        if (!message.includes('Downloading') && !message.includes('Installing')) {
+          console.error(`[STDIO ${server.serverId} stderr]:`, message.trim())
+        }
+      })
+
+      // Handle process errors
+      proc.on('error', (error) => {
+        clearTimeout(timeoutId)
+        reject(new Error(`Failed to spawn process: ${error.message}`))
+      })
+
+      proc.on('exit', (code) => {
+        clearTimeout(timeoutId)
+        if (code !== 0 && code !== null) {
+          console.warn(`[STDIO] Process exited with code ${code}`)
+        }
+      })
+
+      // Send initialize request first
+      const initRequest = {
+        jsonrpc: '2.0',
+        id: requestId++,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: {
+            name: 'mcp-registry-backend',
+            version: '1.0.0',
+          },
+        },
+      }
+
+      proc.stdin?.write(JSON.stringify(initRequest) + '\n')
+      proc.stdin?.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
+
+      // Wait a bit for initialization, then send tool call
+      setTimeout(() => {
+        const toolRequest = {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: toolArgs,
+          },
+        }
+
+        proc.stdin?.write(JSON.stringify(toolRequest) + '\n')
+        
+        // Set timeout
+        timeoutId = setTimeout(() => {
+          proc.kill()
+          reject(new Error(`Request timeout after ${timeout / 1000} seconds`))
+        }, timeout)
+      }, 500)
+    })
+  }
+
+  /**
+   * Process stdout buffer and extract complete JSON-RPC messages
+   */
+  private processStdioBuffer(buffer: string, callback: (message: any) => void): void {
+    const lines = buffer.split('\n')
+    for (const line of lines) {
+      if (line.trim()) {
+        try {
+          const message = JSON.parse(line)
+          callback(message)
+        } catch (e) {
+          // Not a complete JSON message yet, continue accumulating
+        }
+      }
+    }
+  }
+
+  /**
+   * Get environment variables for the server
+   */
+  private getServerEnv(server: MCPServer): Record<string, string> {
+    const env: Record<string, string> = {}
+    
+    if (server.env && typeof server.env === 'object') {
+      Object.assign(env, server.env)
+    }
+    
+    // Check authConfig for API keys
+    if (server.authConfig && typeof server.authConfig === 'object') {
+      const authConfig = server.authConfig as Record<string, unknown>
+      // Common API key environment variable names
+      if (authConfig.apiKey) {
+        env.GEMINI_API_KEY = String(authConfig.apiKey)
+      }
+      if (authConfig.geminiApiKey) {
+        env.GEMINI_API_KEY = String(authConfig.geminiApiKey)
+      }
+    }
+    
+    return env
   }
 }
 

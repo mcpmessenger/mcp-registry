@@ -60,26 +60,47 @@ router.post('/generate', async (req, res) => {
           t.name.includes('generate') || 
           t.name.includes('design') || 
           t.name.includes('svg') ||
-          t.name.includes('create')
+          t.name.includes('create') ||
+          t.name.includes('image')
         )) {
-          const designTool = server.tools.find(t => 
-            t.name.includes('generate') || 
-            t.name.includes('design') || 
-            t.name.includes('svg') ||
-            t.name.includes('create')
-          )
+          // Prefer generate_image, then other generation tools
+          const designTool = server.tools.find(t => t.name === 'generate_image') ||
+            server.tools.find(t => t.name.includes('generate_image')) ||
+            server.tools.find(t => t.name.includes('generate')) ||
+            server.tools.find(t => t.name.includes('design')) ||
+            server.tools.find(t => t.name.includes('svg')) ||
+            server.tools.find(t => t.name.includes('create')) ||
+            server.tools.find(t => t.name.includes('image'))
           
           if (designTool) {
             console.log('[Design Generate] Routing to MCP server:', server.serverId, 'tool:', designTool.name)
+            
+            // Map our request format to the tool's expected format
+            // Nano-Banana uses 'prompt', other tools might use 'description'
+            const toolArgs: Record<string, unknown> = {}
+            
+            if (designTool.name === 'generate_image' || designTool.name.includes('generate_image')) {
+              // Nano-Banana format: { prompt: "..." }
+              toolArgs.prompt = validated.description
+              if (validated.style) {
+                toolArgs.prompt = `${toolArgs.prompt}, ${validated.style} style`
+              }
+              if (validated.colorPalette && validated.colorPalette.length > 0) {
+                toolArgs.prompt = `${toolArgs.prompt}, colors: ${validated.colorPalette.join(', ')}`
+              }
+            } else {
+              // Generic format
+              toolArgs.description = validated.description
+              toolArgs.prompt = validated.description
+              if (validated.style) toolArgs.style = validated.style
+              if (validated.colorPalette) toolArgs.colorPalette = validated.colorPalette
+              if (validated.size) toolArgs.size = validated.size
+            }
+            
             mcpResult = await mcpInvokeService.invokeTool({
               serverId: server.serverId,
               tool: designTool.name,
-              arguments: {
-                description: validated.description,
-                style: validated.style,
-                colorPalette: validated.colorPalette,
-                size: validated.size,
-              },
+              arguments: toolArgs,
             })
             mcpServerUsed = true
           }
@@ -92,29 +113,49 @@ router.post('/generate', async (req, res) => {
             t.name.includes('generate') || 
             t.name.includes('design') || 
             t.name.includes('svg') ||
-            t.name.includes('create')
+            t.name.includes('create') ||
+            t.name.includes('image')
           )
         )
         
         if (designServer) {
-          const designTool = designServer.tools?.find(t => 
-            t.name.includes('generate') || 
-            t.name.includes('design') || 
-            t.name.includes('svg') ||
-            t.name.includes('create')
-          )
+          // Prefer generate_image, then other generation tools
+          const designTool = designServer.tools?.find(t => t.name === 'generate_image') ||
+            designServer.tools?.find(t => t.name.includes('generate_image')) ||
+            designServer.tools?.find(t => t.name.includes('generate')) ||
+            designServer.tools?.find(t => t.name.includes('design')) ||
+            designServer.tools?.find(t => t.name.includes('svg')) ||
+            designServer.tools?.find(t => t.name.includes('create')) ||
+            designServer.tools?.find(t => t.name.includes('image'))
           
           if (designTool) {
             console.log('[Design Generate] Auto-routing to MCP server:', designServer.serverId, 'tool:', designTool.name)
+            
+            // Map our request format to the tool's expected format
+            const toolArgs: Record<string, unknown> = {}
+            
+            if (designTool.name === 'generate_image' || designTool.name.includes('generate_image')) {
+              // Nano-Banana format: { prompt: "..." }
+              toolArgs.prompt = validated.description
+              if (validated.style) {
+                toolArgs.prompt = `${toolArgs.prompt}, ${validated.style} style`
+              }
+              if (validated.colorPalette && validated.colorPalette.length > 0) {
+                toolArgs.prompt = `${toolArgs.prompt}, colors: ${validated.colorPalette.join(', ')}`
+              }
+            } else {
+              // Generic format
+              toolArgs.description = validated.description
+              toolArgs.prompt = validated.description
+              if (validated.style) toolArgs.style = validated.style
+              if (validated.colorPalette) toolArgs.colorPalette = validated.colorPalette
+              if (validated.size) toolArgs.size = validated.size
+            }
+            
             mcpResult = await mcpInvokeService.invokeTool({
               serverId: designServer.serverId,
               tool: designTool.name,
-              arguments: {
-                description: validated.description,
-                style: validated.style,
-                colorPalette: validated.colorPalette,
-                size: validated.size,
-              },
+              arguments: toolArgs,
             })
             mcpServerUsed = true
           }
