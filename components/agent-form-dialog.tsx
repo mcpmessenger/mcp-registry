@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Upload } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,11 +30,18 @@ interface AgentFormDialogProps {
 }
 
 export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentFormDialogProps) {
+  // Determine server type from agent or default to HTTP
+  const isStdioServer = agent?.endpoint?.startsWith('stdio://') || false
+  const [serverType, setServerType] = useState<"http" | "stdio">(isStdioServer ? "stdio" : "http")
+  
   const [formData, setFormData] = useState({
     name: agent?.name || "",
-    endpoint: agent?.endpoint || "",
+    endpoint: agent?.endpoint?.replace('stdio://', '') || "",
+    command: "",
+    args: "",
     manifest: agent?.manifest || "",
     apiKey: "",
+    envVars: "",
   })
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle")
@@ -47,16 +55,34 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
   }
 
   const handleConfirmedSave = () => {
-    onSave(formData)
+    // Pass all form data including server type-specific fields
+    onSave({
+      ...formData,
+      // Add server type indicator
+      ...(serverType === "stdio" ? { 
+        command: formData.command,
+        args: formData.args,
+        envVars: formData.envVars,
+        endpoint: undefined, // Clear endpoint for STDIO
+      } : {
+        endpoint: formData.endpoint,
+        command: undefined, // Clear command/args for HTTP
+        args: undefined,
+      }),
+    })
     setShowConfirmDialog(false)
     onOpenChange(false)
     // Reset form
     setFormData({
       name: "",
       endpoint: "",
+      command: "",
+      args: "",
       manifest: "",
       apiKey: "",
+      envVars: "",
     })
+    setServerType("http")
     setConnectionStatus("idle")
   }
 
@@ -96,9 +122,11 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
 
   const isFormValid =
     formData.name.trim() !== "" &&
-    formData.endpoint.trim() !== "" &&
     formData.manifest.trim() !== "" &&
-    validateManifest(formData.manifest)
+    validateManifest(formData.manifest) &&
+    (serverType === "http" 
+      ? formData.endpoint.trim() !== ""
+      : formData.command.trim() !== "" && formData.args.trim() !== "")
 
   return (
     <>
@@ -126,19 +154,68 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="endpoint">Endpoint URL *</Label>
-              <Input
-                id="endpoint"
-                type="url"
-                placeholder="https://agent.example.com/api"
-                value={formData.endpoint}
-                onChange={(e) => setFormData((prev) => ({ ...prev, endpoint: e.target.value }))}
-                required
-              />
+              <Label htmlFor="serverType">Server Type *</Label>
+              <Select value={serverType} onValueChange={(value: "http" | "stdio") => setServerType(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="http">HTTP Server (Endpoint URL)</SelectItem>
+                  <SelectItem value="stdio">STDIO Server (Command/Args)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {serverType === "http" 
+                  ? "HTTP servers use endpoint URLs for communication"
+                  : "STDIO servers run as processes and communicate via stdin/stdout"}
+              </p>
             </div>
 
+            {serverType === "http" ? (
+              <div className="space-y-2">
+                <Label htmlFor="endpoint">Endpoint URL *</Label>
+                <Input
+                  id="endpoint"
+                  type="url"
+                  placeholder="https://agent.example.com/api"
+                  value={formData.endpoint}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, endpoint: e.target.value }))}
+                  required
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="command">Command *</Label>
+                  <Input
+                    id="command"
+                    placeholder="npx"
+                    value={formData.command}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, command: e.target.value }))}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The command to execute (e.g., "npx", "node", "python")
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="args">Arguments (JSON Array) *</Label>
+                  <Input
+                    id="args"
+                    placeholder='["nano-banana-mcp"]'
+                    value={formData.args}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, args: e.target.value }))}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Command arguments as JSON array (e.g., ["nano-banana-mcp"] or ["-y", "@playwright/mcp@latest"])
+                  </p>
+                </div>
+              </>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key / Credentials *</Label>
+              <Label htmlFor="apiKey">API Key / Credentials</Label>
               <Input
                 id="apiKey"
                 type="password"
@@ -151,6 +228,22 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                 Credentials are securely stored and never displayed in the browser.
               </p>
             </div>
+
+            {serverType === "stdio" && (
+              <div className="space-y-2">
+                <Label htmlFor="envVars">Environment Variables (JSON)</Label>
+                <Textarea
+                  id="envVars"
+                  placeholder='{"GEMINI_API_KEY": "your-key-here"}'
+                  value={formData.envVars}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, envVars: e.target.value }))}
+                  className="font-mono text-xs min-h-[80px]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Environment variables for STDIO servers (e.g., API keys). Must be valid JSON object.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="manifest">MCP Manifest (JSON) *</Label>
@@ -187,7 +280,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                 type="button"
                 variant="outline"
                 onClick={handleTestConnection}
-                disabled={!formData.endpoint || isTestingConnection}
+                disabled={(serverType === "http" && !formData.endpoint) || (serverType === "stdio" && (!formData.command || !formData.args)) || isTestingConnection}
                 className="w-[180px] bg-transparent"
               >
                 {isTestingConnection ? (
