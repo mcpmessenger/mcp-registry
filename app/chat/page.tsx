@@ -160,35 +160,68 @@ export default function ChatPage() {
                   while (attempts < maxAttempts) {
                     await new Promise(resolve => setTimeout(resolve, 5000)) // Wait 5 seconds
                     
-                    const jobStatus = await getJobStatus(generateResponse.jobId)
-                    
-                    if (jobStatus.job.status === 'COMPLETED' && jobStatus.asset) {
-                      // Update the message with the result
-                      const updateMessage: ChatMessage = {
-                        id: `assistant-${Date.now()}`,
-                        role: "assistant",
-                        content: `Your design is ready! ${jobStatus.asset.url ? `View it here: ${jobStatus.asset.url}` : 'Design completed successfully.'}`,
-                        timestamp: new Date(),
-                        agentName: agentName,
+                    try {
+                      const jobStatus = await getJobStatus(generateResponse.jobId)
+                      
+                      if (jobStatus.job.status === 'COMPLETED' && jobStatus.asset) {
+                        // Update the message with the result
+                        const updateMessage: ChatMessage = {
+                          id: `assistant-${Date.now()}`,
+                          role: "assistant",
+                          content: `Your design is ready! ${jobStatus.asset.url ? `View it here: ${jobStatus.asset.url}` : 'Design completed successfully.'}`,
+                          timestamp: new Date(),
+                          agentName: agentName,
+                        }
+                        setMessages((prev) => [...prev, updateMessage])
+                        break
+                      } else if (jobStatus.job.status === 'FAILED') {
+                        const errorMessage: ChatMessage = {
+                          id: `assistant-${Date.now()}`,
+                          role: "assistant",
+                          content: `Design generation failed: ${jobStatus.job.errorMessage || 'Unknown error'}`,
+                          timestamp: new Date(),
+                          agentName: agentName,
+                        }
+                        setMessages((prev) => [...prev, errorMessage])
+                        break
+                      } else if (jobStatus.job.status === 'PENDING' && jobStatus.job.progressMessage?.includes('being set up')) {
+                        // Service is still being set up, continue polling but don't spam updates
+                        if (attempts % 6 === 0) { // Update every 30 seconds
+                          const statusMessage: ChatMessage = {
+                            id: `assistant-${Date.now()}`,
+                            role: "assistant",
+                            content: `Design generation is still being set up. Your request is queued. Job ID: ${generateResponse.jobId}`,
+                            timestamp: new Date(),
+                            agentName: agentName,
+                          }
+                          setMessages((prev) => [...prev, statusMessage])
+                        }
                       }
-                      setMessages((prev) => [...prev, updateMessage])
-                      break
-                    } else if (jobStatus.job.status === 'FAILED') {
-                      const errorMessage: ChatMessage = {
-                        id: `assistant-${Date.now()}`,
-                        role: "assistant",
-                        content: `Design generation failed: ${jobStatus.job.errorMessage || 'Unknown error'}`,
-                        timestamp: new Date(),
-                        agentName: agentName,
+                    } catch (pollError) {
+                      // If polling fails, log but don't break - might be temporary
+                      console.error('Error polling job status:', pollError)
+                      // Stop polling after too many errors
+                      if (attempts > 10) {
+                        break
                       }
-                      setMessages((prev) => [...prev, errorMessage])
-                      break
                     }
                     
                     attempts++
                   }
+                  
+                  // If we've exhausted attempts, notify user
+                  if (attempts >= maxAttempts) {
+                    const timeoutMessage: ChatMessage = {
+                      id: `assistant-${Date.now()}`,
+                      role: "assistant",
+                      content: `Design generation is taking longer than expected. Your request is still being processed. Job ID: ${generateResponse.jobId}. Please check back later.`,
+                      timestamp: new Date(),
+                      agentName: agentName,
+                    }
+                    setMessages((prev) => [...prev, timeoutMessage])
+                  }
                 } catch (error) {
-                  console.error('Error polling job status:', error)
+                  console.error('Error in polling loop:', error)
                 }
               }
               
