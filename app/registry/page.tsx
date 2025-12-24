@@ -122,13 +122,25 @@ export default function RegistryPage() {
     setFormOpen(true)
   }
 
-  const handleSaveAgent = async (data: Partial<MCPAgent>) => {
+  const handleSaveAgent = async (data: Partial<MCPAgent> & { command?: string; args?: string; envVars?: string }) => {
     try {
-      // Validate endpoint is provided
-      if (!data.endpoint || data.endpoint.trim() === '') {
+      // Determine if this is HTTP or STDIO server
+      const isStdioServer = (data.command && data.args) || (!data.endpoint || data.endpoint.trim() === '')
+      
+      // Validate based on server type
+      if (!isStdioServer && (!data.endpoint || data.endpoint.trim() === '')) {
         toast({
           title: "Endpoint required",
-          description: "Please provide an endpoint URL for the MCP agent.",
+          description: "Please provide an endpoint URL for HTTP-based MCP agents.",
+          variant: "destructive",
+        })
+        return
+      }
+      
+      if (isStdioServer && (!data.command || !data.args)) {
+        toast({
+          title: "Command and Args required",
+          description: "Please provide command and arguments for STDIO-based MCP agents.",
           variant: "destructive",
         })
         return
@@ -174,28 +186,73 @@ export default function RegistryPage() {
       const serverId = manifestData.serverId || editingAgent?.id || 
         `com.mcp-registry/${baseServerId}`
 
-      // Ensure endpoint is stored in both metadata and manifest
-      const endpoint = data.endpoint.trim()
+      // Parse environment variables for STDIO servers
+      let env: Record<string, string> | undefined = undefined
+      if (isStdioServer && data.envVars && data.envVars.trim()) {
+        try {
+          env = JSON.parse(data.envVars)
+          if (typeof env !== 'object' || Array.isArray(env)) {
+            throw new Error('Environment variables must be a JSON object')
+          }
+        } catch (e) {
+          toast({
+            title: "Invalid environment variables",
+            description: "Environment variables must be valid JSON object.",
+            variant: "destructive",
+          })
+          return
+        }
+      }
+      
+      // Add API key to env if provided
+      if (data.apiKey) {
+        env = env || {}
+        env.API_KEY = data.apiKey
+        // Also check for common API key names
+        if (name.toLowerCase().includes('gemini') || name.toLowerCase().includes('banana')) {
+          env.GEMINI_API_KEY = data.apiKey
+        }
+      }
+      
+      // Parse command args for STDIO servers
+      let args: string[] | undefined = undefined
+      if (isStdioServer && data.args) {
+        try {
+          args = JSON.parse(data.args)
+          if (!Array.isArray(args)) {
+            throw new Error('Arguments must be a JSON array')
+          }
+        } catch (e) {
+          toast({
+            title: "Invalid arguments",
+            description: "Arguments must be a valid JSON array (e.g., [\"nano-banana-mcp\"]).",
+            variant: "destructive",
+          })
+          return
+        }
+      }
       
       // Transform form data to backend schema
-      const publishData = {
+      const publishData: any = {
         serverId,
         name,
-        description: manifestData.description || data.endpoint || undefined,
+        description: manifestData.description || (isStdioServer ? `${data.command} ${data.args}` : data.endpoint) || undefined,
         version: manifestData.version || "v0.1",
+        command: isStdioServer ? data.command : undefined,
+        args: isStdioServer ? args : undefined,
         tools: manifestData.tools || [],
         capabilities: manifestData.capabilities || [],
         manifest: {
           ...manifestData,
-          endpoint: endpoint, // Store endpoint in manifest
-          serverId: serverId, // Ensure serverId is in manifest too
+          serverId: serverId,
+          ...(isStdioServer ? {} : { endpoint: data.endpoint?.trim() }),
         },
         metadata: {
-          endpoint: endpoint, // Store endpoint in metadata (primary location)
-          apiKey: data.apiKey ? '***' : undefined, // Don't store actual key, just flag
+          ...(isStdioServer ? {} : { endpoint: data.endpoint?.trim() }),
+          apiKey: data.apiKey ? '***' : undefined,
           httpHeaders: httpHeaders,
         },
-        env: data.apiKey ? { API_KEY: data.apiKey } : undefined,
+        env: env,
       }
 
       if (editingAgent) {
