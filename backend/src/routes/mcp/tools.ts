@@ -58,7 +58,7 @@ router.post('/generate', async (req, res, next) => {
       try {
         // Use full service if available
         const result = await mcpToolsModule.mcpToolsService.generateSVG(validated)
-        console.log('Generation result:', { jobId: result.jobId, hasAsset: !!result.assetId })
+        console.log('[Design Generate] Service result:', { jobId: result.jobId, hasAsset: !!result.assetId })
         
         return res.json({
           success: true,
@@ -67,8 +67,19 @@ router.post('/generate', async (req, res, next) => {
           message: 'SVG generation started',
         })
       } catch (serviceError) {
-        console.error('Error calling mcp-tools service:', serviceError)
-        // Fall through to fallback
+        // Catch Kafka errors and other service errors
+        const errorMessage = serviceError instanceof Error ? serviceError.message : String(serviceError)
+        console.error('[Design Generate] Service error (will use fallback):', errorMessage)
+        
+        // Check if it's a Kafka error
+        if (errorMessage.includes('Kafka') || errorMessage.includes('producer is disconnected') || errorMessage.includes('DESIGN_REQUEST_RECEIVED')) {
+          console.log('[Design Generate] Kafka not available, using fallback response')
+          // Fall through to fallback below
+        } else {
+          // For other errors, log and fall through
+          console.error('[Design Generate] Unexpected service error:', serviceError)
+          // Fall through to fallback
+        }
       }
     }
     
