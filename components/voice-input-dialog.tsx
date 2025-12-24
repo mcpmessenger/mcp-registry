@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { VoiceVisualizer } from "@/components/voice-visualizer"
@@ -16,12 +16,22 @@ export function VoiceInputDialog({ open, onOpenChange, onTranscript }: VoiceInpu
   const [isRecording, setIsRecording] = useState(false)
   const [transcript, setTranscript] = useState("")
   const [recordingTime, setRecordingTime] = useState(0)
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     if (!open) {
       setIsRecording(false)
       setTranscript("")
       setRecordingTime(0)
+      // Stop recognition if it's still running
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+          recognitionRef.current = null
+        } catch (e) {
+          // Ignore errors when stopping
+        }
+      }
     }
   }, [open])
 
@@ -39,19 +49,81 @@ export function VoiceInputDialog({ open, onOpenChange, onTranscript }: VoiceInpu
     setIsRecording(true)
     setTranscript("")
 
-    // Simulate STT - in production, this would use Web Speech API or a backend service
-    setTimeout(() => {
-      setTranscript("Transcribing your speech...")
-    }, 1000)
+    // Check if browser supports Web Speech API
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setTranscript("Error: Your browser doesn't support speech recognition. Please use Chrome, Edge, or Safari.")
+      setIsRecording(false)
+      return
+    }
 
-    setTimeout(() => {
-      const sampleTranscript = "Can you analyze the data in this document and provide key insights?"
-      setTranscript(sampleTranscript)
-    }, 3000)
+    // Use Web Speech API for real-time transcription
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const recognition = new SpeechRecognition()
+    
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onstart = () => {
+      console.log('Speech recognition started')
+    }
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = ''
+      let finalTranscript = ''
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' '
+        } else {
+          interimTranscript += transcript
+        }
+      }
+
+      setTranscript(finalTranscript || interimTranscript)
+    }
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error)
+      if (event.error === 'no-speech') {
+        setTranscript("No speech detected. Please try again.")
+      } else if (event.error === 'audio-capture') {
+        setTranscript("No microphone found. Please check your microphone settings.")
+      } else if (event.error === 'not-allowed') {
+        setTranscript("Microphone permission denied. Please allow microphone access.")
+      } else {
+        setTranscript(`Error: ${event.error}. Please try again.`)
+      }
+      setIsRecording(false)
+    }
+
+    recognition.onend = () => {
+      setIsRecording(false)
+    }
+
+    try {
+      recognition.start()
+      // Store recognition instance in ref to stop it later
+      recognitionRef.current = recognition
+    } catch (error) {
+      console.error('Failed to start recognition:', error)
+      setTranscript("Failed to start speech recognition. Please try again.")
+      setIsRecording(false)
+    }
   }
 
   const handleStopRecording = () => {
     setIsRecording(false)
+    // Stop recognition if it's active
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+        recognitionRef.current = null
+      } catch (e) {
+        // Ignore errors when stopping
+      }
+    }
   }
 
   const handleUseTranscript = () => {
