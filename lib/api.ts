@@ -355,7 +355,15 @@ export interface PublishServerResponse {
 }
 
 export async function publishServer(request: PublishServerRequest): Promise<PublishServerResponse> {
-  console.log('[API] Publishing server:', { serverId: request.serverId, name: request.name })
+  console.log('[API] Publishing server:', { 
+    serverId: request.serverId, 
+    name: request.name,
+    hasCommand: !!request.command,
+    hasArgs: !!request.args,
+    hasEnv: !!request.env,
+  })
+  console.log('[API] Full request body:', JSON.stringify(request, null, 2))
+  
   const response = await fetch(`${API_BASE_URL}/v0.1/publish`, {
     method: 'POST',
     headers: {
@@ -364,13 +372,18 @@ export async function publishServer(request: PublishServerRequest): Promise<Publ
     body: JSON.stringify(request),
   })
   
+  console.log('[API] Response status:', response.status, response.statusText)
+  
   if (!response.ok) {
     const errorText = await response.text()
+    console.error('[API] Error response text:', errorText)
     let error: any
     try {
       error = JSON.parse(errorText)
+      console.error('[API] Parsed error:', error)
     } catch {
       error = { error: errorText || response.statusText }
+      console.error('[API] Could not parse error as JSON, using raw text')
     }
     
     // Handle validation errors with details
@@ -378,6 +391,7 @@ export async function publishServer(request: PublishServerRequest): Promise<Publ
       const validationErrors = error.details.map((d: any) => 
         `${d.path?.join('.') || 'field'}: ${d.message}`
       ).join(', ')
+      console.error('[API] Validation errors:', validationErrors)
       throw new Error(`Validation error: ${validationErrors}`)
     }
     
@@ -386,10 +400,14 @@ export async function publishServer(request: PublishServerRequest): Promise<Publ
       throw new Error(`Server with ID "${request.serverId}" already exists. Please use a different server ID.`)
     }
     
-    throw new Error(error.message || error.error || `Failed to publish server: ${response.status} ${response.statusText}`)
+    const errorMessage = error.message || error.error || `Failed to publish server: ${response.status} ${response.statusText}`
+    console.error('[API] Throwing error:', errorMessage)
+    throw new Error(errorMessage)
   }
   
-  return response.json()
+  const result = await response.json()
+  console.log('[API] Success response:', result)
+  return result
 }
 
 /**
