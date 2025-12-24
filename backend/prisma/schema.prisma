@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Service {
+  id          String   @id
+  name        String   @unique
+  description String?
+  url         String   @unique
+  version     String   @default("v0.1")
+  owner       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model McpServer {
+  id                    String    @id
+  serverId              String    @unique
+  name                  String
+  description           String?
+  version               String    @default("v0.1")
+  command               String?
+  args                  String?
+  env                   String?
+  manifest              String?
+  capabilities          String?
+  tools                 String?
+  toolSchemas           String?
+  isActive              Boolean   @default(true)
+  isPublic              Boolean   @default(true)
+  federationId          String?
+  publishedBy           String?
+  publishedAt           DateTime  @default(now())
+  metadata              String?
+  authConfig            String?
+  encryptedTokens       String?
+  tokenExpiresAt        DateTime?
+  workflowState         String?
+  lockedBy              String?
+  workflowAttempts     Int       @default(0)
+  contextId             String?
+  workflowUpdatedAt     DateTime?
+  identityPublicKey     String?
+  identitySignature     String?
+  identityVerified      Boolean   @default(false)
+  identityVerifiedAt     DateTime?
+  identityUrl           String?
+  securityScore         Int?
+  lastSecurityScan      DateTime?
+  securityScanResults   String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  federation            Federation? @relation(fields: [federationId], references: [id])
+  designJobs            DesignJob[]
+  durableTasks          DurableTask[]
+
+  @@index([serverId])
+  @@index([isActive])
+  @@index([isPublic])
+  @@index([federationId])
+  @@index([publishedBy])
+}
+
+model DesignJob {
+  id              String      @id
+  status          JobStatus   @default(PENDING)
+  description     String
+  refinementNotes String?
+  progress        Int         @default(0)
+  progressMessage String?
+  errorMessage    String?
+  serverId        String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  completedAt     DateTime?
+
+  server          McpServer?  @relation(fields: [serverId], references: [id])
+  assets          Asset[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([serverId])
+}
+
+model DurableTask {
+  id              String      @id
+  taskId          String      @unique
+  serverId        String
+  status          JobStatus   @default(PENDING)
+  taskType        String?
+  description     String?
+  input           String?
+  output          String?
+  progress        Int         @default(0)
+  progressMessage String?
+  errorMessage    String?
+  metadata        String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  completedAt     DateTime?
+
+  server          McpServer   @relation(fields: [serverId], references: [id])
+
+  @@index([serverId])
+  @@index([status])
+  @@index([taskId])
+  @@index([createdAt])
+}
+
+model Asset {
+  id          String     @id
+  jobId       String
+  assetType   String
+  content     String?
+  filePath    String?
+  url         String?
+  version     Int        @default(1)
+  isLatest    Boolean    @default(true)
+  metadata    String?
+  createdAt   DateTime   @default(now())
+
+  job         DesignJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([isLatest])
+}
+
+model Federation {
+  id            String      @id
+  name          String      @unique
+  description   String?
+  organizationId String     @unique
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  servers       McpServer[]
+
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model OAuthClient {
+  id            String        @id
+  clientId      String        @unique
+  clientSecret  String
+  clientName    String
+  redirectUris  String
+  scopes        String
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  consents      OAuthConsent[]
+
+  @@index([clientId])
+  @@index([isActive])
+}
+
+model OAuthConsent {
+  id          String      @id
+  clientId    String
+  userId      String
+  scopes      String
+  grantedAt   DateTime    @default(now())
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  isActive    Boolean     @default(true)
+
+  client      OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([userId])
+  @@index([clientId])
+  @@index([isActive])
+}
+
+model Conversation {
+  id          String      @id
+  userId      String?
+  title       String?
+  systemPrompt String?
+  context     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  messages    Message[]
+  toolInvocations ToolInvocation[]
+  memories    Memory[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Message {
+  id            String      @id
+  conversationId String
+  role          String
+  content       String
+  toolCalls     String?
+  toolResults   String?
+  metadata      String?
+  createdAt     DateTime    @default(now())
+
+  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model ToolInvocation {
+  id            String      @id
+  conversationId String?
+  serverId      String
+  toolName      String
+  arguments     String
+  result        String?
+  error         String?
+  latency       Int?
+  createdAt     DateTime    @default(now())
+
+  conversation  Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+  @@index([serverId])
+  @@index([createdAt])
+}
+
+model Memory {
+  id          String      @id
+  conversationId String?
+  userId      String?
+  type        String
+  key         String
+  value       String
+  importance  Int         @default(1)
+  accessCount Int         @default(0)
+  lastAccessed DateTime   @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+  @@index([userId])
+  @@index([type])
+  @@index([key])
+  @@index([importance])
+}
+

@@ -27,6 +27,9 @@ RUN mkdir -p ./prisma && \
 # Use npm install since package-lock.json may not exist
 RUN npm install
 
+# Generate Prisma Client (needed for TypeScript build)
+RUN npx prisma generate || echo "Warning: Prisma generate failed, continuing..."
+
 # Build TypeScript
 RUN npm run build
 
