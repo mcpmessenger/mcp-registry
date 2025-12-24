@@ -355,6 +355,7 @@ export interface PublishServerResponse {
 }
 
 export async function publishServer(request: PublishServerRequest): Promise<PublishServerResponse> {
+  console.log('[API] Publishing server:', { serverId: request.serverId, name: request.name })
   const response = await fetch(`${API_BASE_URL}/v0.1/publish`, {
     method: 'POST',
     headers: {
@@ -364,8 +365,28 @@ export async function publishServer(request: PublishServerRequest): Promise<Publ
   })
   
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }))
-    throw new Error(error.message || error.error || `Failed to publish server: ${response.statusText}`)
+    const errorText = await response.text()
+    let error: any
+    try {
+      error = JSON.parse(errorText)
+    } catch {
+      error = { error: errorText || response.statusText }
+    }
+    
+    // Handle validation errors with details
+    if (error.details && Array.isArray(error.details)) {
+      const validationErrors = error.details.map((d: any) => 
+        `${d.path?.join('.') || 'field'}: ${d.message}`
+      ).join(', ')
+      throw new Error(`Validation error: ${validationErrors}`)
+    }
+    
+    // Handle duplicate serverId
+    if (response.status === 409) {
+      throw new Error(`Server with ID "${request.serverId}" already exists. Please use a different server ID.`)
+    }
+    
+    throw new Error(error.message || error.error || `Failed to publish server: ${response.status} ${response.statusText}`)
   }
   
   return response.json()

@@ -236,6 +236,7 @@ export default function RegistryPage() {
         args: isStdioServer ? args : undefined,
         tools: manifestData.tools || [],
         capabilities: manifestData.capabilities || [],
+        env: env,
         manifest: {
           ...manifestData,
           serverId: serverId,
@@ -246,8 +247,16 @@ export default function RegistryPage() {
           apiKey: credentials ? '***' : undefined,
           httpHeaders: httpHeaders,
         },
-        env: env,
       }
+      
+      console.log('[Save Agent] Publishing data:', {
+        serverId,
+        name,
+        hasCommand: !!publishData.command,
+        hasArgs: !!publishData.args,
+        hasEnv: !!publishData.env,
+        toolsCount: publishData.tools?.length || 0,
+      })
 
       if (editingAgent) {
         // Update existing server
