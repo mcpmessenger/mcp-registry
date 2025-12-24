@@ -358,15 +358,18 @@ export class MCPInvokeService {
       Object.assign(env, server.env)
     }
     
-    // Check authConfig for API keys
-    if (server.authConfig && typeof server.authConfig === 'object') {
-      const authConfig = server.authConfig as Record<string, unknown>
-      // Common API key environment variable names
-      if (authConfig.apiKey) {
-        env.GEMINI_API_KEY = String(authConfig.apiKey)
-      }
-      if (authConfig.geminiApiKey) {
-        env.GEMINI_API_KEY = String(authConfig.geminiApiKey)
+    // Check metadata for API keys (legacy support)
+    if (server.metadata && typeof server.metadata === 'object') {
+      const metadata = server.metadata as Record<string, unknown>
+      // If metadata has authConfig, extract API keys
+      if (metadata.authConfig && typeof metadata.authConfig === 'object') {
+        const authConfig = metadata.authConfig as Record<string, unknown>
+        if (authConfig.apiKey) {
+          env.GEMINI_API_KEY = String(authConfig.apiKey)
+        }
+        if (authConfig.geminiApiKey) {
+          env.GEMINI_API_KEY = String(authConfig.geminiApiKey)
+        }
       }
     }
     
