@@ -119,8 +119,17 @@ const publishServerSchema = z.object({
 
 router.post('/publish', authenticateUser, async (req, res, next) => {
   try {
+    console.log('[Publish] Received request:', JSON.stringify(req.body, null, 2))
+    
     // Validate request body
     const validated = publishServerSchema.parse(req.body)
+    console.log('[Publish] Validated data:', {
+      serverId: validated.serverId,
+      name: validated.name,
+      hasCommand: !!validated.command,
+      hasArgs: !!validated.args,
+      hasEnv: !!validated.env,
+    })
 
     // Extract publishedBy from authenticated user or fallback
     let publishedBy: string
@@ -143,11 +152,13 @@ router.post('/publish', authenticateUser, async (req, res, next) => {
       },
     }))
 
+    console.log('[Publish] Calling registryService.publishServer...')
     const server = await registryService.publishServer({
       ...validated,
       tools: normalizedTools,
       publishedBy,
     })
+    console.log('[Publish] Server published successfully:', server.serverId)
 
     res.status(200).json({
       success: true,
@@ -155,7 +166,10 @@ router.post('/publish', authenticateUser, async (req, res, next) => {
       server,
     })
   } catch (error) {
+    console.error('[Publish] Error caught:', error)
+    
     if (error instanceof z.ZodError) {
+      console.error('[Publish] Validation error:', error.errors)
       return res.status(400).json({
         success: false,
         error: 'Validation error',
@@ -165,9 +179,24 @@ router.post('/publish', authenticateUser, async (req, res, next) => {
 
     // Check for duplicate serverId
     if (error instanceof Error && error.message.includes('Unique constraint')) {
+      console.error('[Publish] Duplicate serverId error')
       return res.status(409).json({
         success: false,
         error: 'Server with this serverId already exists',
+      })
+    }
+
+    // Log the actual error for debugging
+    if (error instanceof Error) {
+      console.error('[Publish] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      })
+      return res.status(500).json({
+        success: false,
+        error: 'Internal Server Error',
+        message: error.message || 'An error occurred',
       })
     }
 
