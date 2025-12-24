@@ -24,7 +24,8 @@ RUN mkdir -p ./prisma && \
     fi
 
 # Install dependencies (including dev dependencies for build)
-RUN npm ci
+# Use npm install since package-lock.json may not exist
+RUN npm install
 
 # Build TypeScript
 RUN npm run build
@@ -89,7 +90,7 @@ COPY package*.json ./
 RUN mkdir -p ./prisma
 
 # Install production dependencies only
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
