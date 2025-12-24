@@ -268,8 +268,22 @@ export async function generateSVG(request: GenerateSVGRequest): Promise<Generate
   })
   
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }))
-    throw new Error(error.message || error.error || `Failed to generate SVG: ${response.statusText}`)
+    let errorData: any
+    try {
+      errorData = await response.json()
+    } catch {
+      errorData = { error: response.statusText }
+    }
+    
+    // If backend returns a helpful message, use it
+    const errorMessage = errorData.message || errorData.error || `Failed to generate SVG: ${response.statusText}`
+    
+    // For 503 (Service Unavailable), provide more context
+    if (response.status === 503) {
+      throw new Error(`Design generation service is being set up. ${errorData.details || errorMessage}`)
+    }
+    
+    throw new Error(errorMessage)
   }
   
   return response.json()
