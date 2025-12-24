@@ -44,7 +44,13 @@ export default function RegistryPage() {
         
         if (isMounted) {
           // Filter out empty objects and validate
-          const validServers = servers.filter(s => s && s.serverId && s.name)
+          const validServers = servers.filter(s => {
+            const isValid = s && s.serverId && s.name
+            if (!isValid) {
+              console.warn('Invalid server filtered out:', s)
+            }
+            return isValid
+          })
           console.log('Valid servers after filtering:', validServers.length)
           
           if (validServers.length === 0 && servers.length > 0) {
@@ -53,9 +59,15 @@ export default function RegistryPage() {
             return
           }
           
-          const transformedAgents = transformServersToAgents(validServers)
-          setAgents(transformedAgents)
-          console.log('Transformed agents:', transformedAgents)
+          try {
+            const transformedAgents = transformServersToAgents(validServers)
+            console.log('Transformed agents:', transformedAgents)
+            console.log('First transformed agent:', transformedAgents[0])
+            setAgents(transformedAgents)
+          } catch (transformError) {
+            console.error('Error transforming servers:', transformError)
+            setError(`Failed to transform servers: ${transformError instanceof Error ? transformError.message : 'Unknown error'}`)
+          }
         }
       } catch (err) {
         if (isMounted) {
