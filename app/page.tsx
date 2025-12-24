@@ -28,6 +28,72 @@ export default function RegistryPage() {
   const [deletingAgent, setDeletingAgent] = useState<MCPAgent | null>(null)
   const { toast } = useToast()
 
+  // Fetch servers from backend API on mount
+  useEffect(() => {
+    let isMounted = true
+    
+    async function fetchServers() {
+      try {
+        setIsLoading(true)
+        setError(null)
+        console.log('Fetching servers from backend...')
+        const servers = await getServers()
+        console.log('Received servers:', servers)
+        console.log('First server structure:', servers[0])
+        console.log('Server count:', servers.length)
+        
+        if (isMounted) {
+          // Filter out empty objects and validate
+          const validServers = servers.filter(s => {
+            const isValid = s && s.serverId && s.name
+            if (!isValid) {
+              console.warn('Invalid server filtered out:', s)
+            }
+            return isValid
+          })
+          console.log('Valid servers after filtering:', validServers.length)
+          
+          if (validServers.length === 0 && servers.length > 0) {
+            console.error('All servers are invalid/empty:', servers)
+            setError('Servers returned but data is invalid. Check console for details.')
+            return
+          }
+          
+          try {
+            const transformedAgents = transformServersToAgents(validServers)
+            console.log('Transformed agents:', transformedAgents)
+            console.log('First transformed agent:', transformedAgents[0])
+            setAgents(transformedAgents)
+          } catch (transformError) {
+            console.error('Error transforming servers:', transformError)
+            setError(`Failed to transform servers: ${transformError instanceof Error ? transformError.message : 'Unknown error'}`)
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to fetch servers'
+          console.error('Error fetching servers:', err)
+          setError(errorMessage)
+          toast({
+            title: "Error loading servers",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    fetchServers()
+    
+    return () => {
+      isMounted = false
+    }
+  }, [toast])
+
   const filteredAgents = agents.filter((agent) => {
     const matchesSearch =
       agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
