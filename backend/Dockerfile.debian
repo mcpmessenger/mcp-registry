@@ -114,14 +114,14 @@ RUN chown -R nodejs:nodejs /app
 
 USER nodejs
 
-# Expose port
-EXPOSE 3001
+# Expose port (Cloud Run will set PORT env var)
+EXPOSE 8080
 
-# Health check
+# Health check (use PORT env var or default to 8080)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3001/health || exit 1
+  CMD wget --quiet --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
 
-# Start server
+# Start server (Cloud Run sets PORT automatically)
 CMD ["node", "dist/server.js"]
 
 
