@@ -186,8 +186,25 @@ export async function getServers(options?: {
         throw new Error(`Failed to fetch servers: ${response.status} ${response.statusText} - ${errorText}`)
       }
       
-      const data = await response.json()
-      console.log('[API] Successfully fetched', data.length, 'servers')
+      const text = await response.text()
+      console.log('[API] Raw response text (first 500 chars):', text.substring(0, 500))
+      
+      let data
+      try {
+        data = JSON.parse(text)
+        console.log('[API] Parsed JSON - type:', typeof data, 'isArray:', Array.isArray(data))
+        if (Array.isArray(data) && data.length > 0) {
+          console.log('[API] First server keys:', Object.keys(data[0]))
+          console.log('[API] First server serverId:', data[0]?.serverId)
+          console.log('[API] First server name:', data[0]?.name)
+        }
+      } catch (parseError) {
+        console.error('[API] JSON parse error:', parseError)
+        console.error('[API] Response text:', text)
+        throw new Error(`Failed to parse JSON response: ${parseError}`)
+      }
+      
+      console.log('[API] Successfully fetched', Array.isArray(data) ? data.length : 'unknown', 'servers')
       return data
     } catch (error) {
       clearTimeout(timeoutId)
