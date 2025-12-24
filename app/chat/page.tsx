@@ -131,7 +131,7 @@ export default function ChatPage() {
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       <AgentSelector agents={agentOptions} selectedAgentId={selectedAgentId} onAgentChange={setSelectedAgentId} />
 
-      <ScrollArea className="flex-1 px-6" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 px-6 overflow-y-auto gradient-grid-bg" ref={scrollAreaRef}>
         <div className="max-w-4xl mx-auto py-4">
           {messages.map((message) => (
             <ChatMessageComponent key={message.id} message={message} />

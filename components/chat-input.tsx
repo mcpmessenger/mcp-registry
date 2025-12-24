@@ -51,9 +51,10 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-border bg-card/50 p-4">
-      <div className="flex items-end gap-2">
-        <div className="flex gap-2">
+    <div className="border-t border-border bg-card/50 p-4 sticky bottom-0 z-40 backdrop-blur-sm w-full gradient-chat-bg">
+      <div className="flex items-end gap-2 max-w-full w-full">
+        {/* Left side buttons - microphone first, shifted right to avoid logo */}
+        <div className="flex gap-2 shrink-0 relative z-50 ml-12">
           <Button
             type="button"
             variant="outline"

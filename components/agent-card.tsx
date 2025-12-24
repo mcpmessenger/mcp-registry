@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Eye, Edit, Trash2, Activity } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { InstallButton } from "@/components/install-button"
+import { transformAgentToServer } from "@/lib/server-utils"
+import type { MCPServer } from "@/lib/api"
 
 interface AgentCardProps {
   agent: MCPAgent
@@ -81,6 +84,18 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete }: AgentCardP
           <Button variant="outline" size="sm" onClick={() => onDelete(agent)}>
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
+        </div>
+        
+        <div className="pt-2 border-t border-border">
+          {(() => {
+            try {
+              const server = transformAgentToServer(agent)
+              return <InstallButton server={server} />
+            } catch (error) {
+              console.error("Error transforming agent to server:", error)
+              return null
+            }
+          })()}
         </div>
       </CardContent>
     </Card>

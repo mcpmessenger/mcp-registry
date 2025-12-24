@@ -1,0 +1,59 @@
+{
+  "name": "mcp-registry-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "fix-playwright": "ts-node src/scripts/fix-playwright-tools.ts",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prestart": "node scripts/start-kafka.js || powershell -ExecutionPolicy Bypass -File scripts/start-kafka.ps1 || bash scripts/start-kafka.sh || echo 'Kafka startup skipped - start manually if needed'",
+    "start": "ts-node src/server.ts",
+    "start:no-kafka": "ts-node src/server.ts",
+    "build": "tsc",
+    "postinstall": "npx prisma generate",
+    "prisma:generate": "npx prisma generate",
+    "prisma:migrate": "npx prisma migrate dev",
+    "prisma:migrate:deploy": "npx prisma migrate deploy",
+    "prisma:studio": "npx prisma studio",
+    "migrate": "npx prisma migrate dev",
+    "migrate:deploy": "npx prisma migrate deploy",
+    "seed": "ts-node src/scripts/seed-mcp-server.ts",
+    "seed:all": "ts-node src/scripts/seed-mcp-server.ts",
+    "register-official": "ts-node src/scripts/register-official-servers.ts",
+    "register-valuation": "ts-node src/scripts/register-valuation-server.ts",
+    "restore-stock-servers": "ts-node src/scripts/seed-mcp-server.ts",
+    "update-playwright-http": "ts-node src/scripts/update-playwright-to-http.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google-cloud/vision": "^4.0.1",
+    "@google/generative-ai": "^0.21.0",
+    "@prisma/client": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "google-auth-library": "^10.5.0",
+    "kafkajs": "^2.2.4",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.28.0",
+    "prisma": "^6.0.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "optionalDependencies": {
+    "@google/genai": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^25.0.3",
+    "@types/ws": "^8.5.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
+
+
