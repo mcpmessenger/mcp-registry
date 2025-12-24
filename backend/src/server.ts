@@ -55,7 +55,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 
 // Start server
 // Cloud Run sets PORT automatically, fallback to env config or 8080
-const PORT = process.env.PORT || env.server.port || 8080
+const PORT = parseInt(process.env.PORT || String(env.server.port || 8080), 10)
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`)
