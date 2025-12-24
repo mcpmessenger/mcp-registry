@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { registryService } from '../../services/registry.service'
+import { mcpInvokeService } from '../../services/mcp-invoke.service'
 
 const router = Router()
 
@@ -45,65 +47,145 @@ router.post('/generate', async (req, res) => {
     const validated = generateSVGSchema.parse(req.body)
     console.log('[Design Generate] Validated:', JSON.stringify(validated))
 
-    // Try to use the service if it exists, otherwise use simple fallback
-    let serviceAvailable = false
-    let serviceResult = null
+    // Strategy 1: Try to route to a registered MCP server with design generation capabilities
+    let mcpServerUsed = false
+    let mcpResult = null
     
     try {
-      // Try to load the service module - wrap in try-catch to handle any initialization errors
+      // Look for a design generation MCP server
+      // Check if a specific serverId was provided
+      if (validated.serverId) {
+        const server = await registryService.getServerById(validated.serverId)
+        if (server && server.tools?.some(t => 
+          t.name.includes('generate') || 
+          t.name.includes('design') || 
+          t.name.includes('svg') ||
+          t.name.includes('create')
+        )) {
+          const designTool = server.tools.find(t => 
+            t.name.includes('generate') || 
+            t.name.includes('design') || 
+            t.name.includes('svg') ||
+            t.name.includes('create')
+          )
+          
+          if (designTool) {
+            console.log('[Design Generate] Routing to MCP server:', server.serverId, 'tool:', designTool.name)
+            mcpResult = await mcpInvokeService.invokeTool({
+              serverId: server.serverId,
+              tool: designTool.name,
+              arguments: {
+                description: validated.description,
+                style: validated.style,
+                colorPalette: validated.colorPalette,
+                size: validated.size,
+              },
+            })
+            mcpServerUsed = true
+          }
+        }
+      } else {
+        // Auto-discover design generation servers
+        const allServers = await registryService.getServers()
+        const designServer = allServers.find(s => 
+          s.tools?.some(t => 
+            t.name.includes('generate') || 
+            t.name.includes('design') || 
+            t.name.includes('svg') ||
+            t.name.includes('create')
+          )
+        )
+        
+        if (designServer) {
+          const designTool = designServer.tools?.find(t => 
+            t.name.includes('generate') || 
+            t.name.includes('design') || 
+            t.name.includes('svg') ||
+            t.name.includes('create')
+          )
+          
+          if (designTool) {
+            console.log('[Design Generate] Auto-routing to MCP server:', designServer.serverId, 'tool:', designTool.name)
+            mcpResult = await mcpInvokeService.invokeTool({
+              serverId: designServer.serverId,
+              tool: designTool.name,
+              arguments: {
+                description: validated.description,
+                style: validated.style,
+                colorPalette: validated.colorPalette,
+                size: validated.size,
+              },
+            })
+            mcpServerUsed = true
+          }
+        }
+      }
+    } catch (mcpError: any) {
+      console.error('[Design Generate] MCP routing failed:', mcpError?.message)
+      // Fall through to native/fallback
+    }
+    
+    // If MCP server handled it, return the result
+    if (mcpServerUsed && mcpResult) {
+      console.log('[Design Generate] MCP server result received')
+      // Extract job ID or result from MCP response
+      const resultContent = mcpResult.result?.content?.[0]
+      if (resultContent?.text) {
+        // Try to parse job ID from response
+        const jobIdMatch = resultContent.text.match(/job[_-]?[\w-]+/i)
+        const jobId = jobIdMatch ? jobIdMatch[0] : `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
+        
+        return res.json({
+          success: true,
+          jobId: jobId,
+          message: 'Design generation started via MCP server',
+          result: resultContent.text,
+        })
+      }
+    }
+
+    // Strategy 2: Try native service if it exists
+    let nativeServiceAvailable = false
+    let nativeServiceResult = null
+    
+    try {
       const mcpToolsModule = require('../../services/mcp-tools.service')
       
       if (mcpToolsModule && mcpToolsModule.mcpToolsService) {
         try {
-          // Use full service if available
-          serviceResult = await mcpToolsModule.mcpToolsService.generateSVG(validated)
-          console.log('[Design Generate] Service result:', { jobId: serviceResult?.jobId, hasAsset: !!serviceResult?.assetId })
-          serviceAvailable = true
+          nativeServiceResult = await mcpToolsModule.mcpToolsService.generateSVG(validated)
+          console.log('[Design Generate] Native service result:', { jobId: nativeServiceResult?.jobId, hasAsset: !!nativeServiceResult?.assetId })
+          nativeServiceAvailable = true
         } catch (serviceError: any) {
-          // Catch ANY error from the service (Kafka, network, etc.)
-          const errorMessage = serviceError?.message || String(serviceError)
-          const errorName = serviceError?.name || 'UnknownError'
-          console.error('[Design Generate] Service error caught (will use fallback):', {
-            name: errorName,
-            message: errorMessage,
-            stack: serviceError?.stack?.substring(0, 200)
-          })
-          // Don't throw - fall through to fallback
-          serviceAvailable = false
+          console.error('[Design Generate] Native service error:', serviceError?.message)
+          // Fall through to fallback
         }
       }
     } catch (moduleError: any) {
-      // Module doesn't exist or failed to load - that's okay, we'll use fallback
-      console.log('[Design Generate] mcp-tools.service not available:', moduleError?.message || 'Module not found')
-      serviceAvailable = false
+      console.log('[Design Generate] Native service not available:', moduleError?.message || 'Module not found')
     }
     
-    // If service worked, return its result
-    if (serviceAvailable && serviceResult) {
+    // If native service worked, return its result
+    if (nativeServiceAvailable && nativeServiceResult) {
       return res.json({
         success: true,
-        jobId: serviceResult.jobId,
-        assetId: serviceResult.assetId,
+        jobId: nativeServiceResult.jobId,
+        assetId: nativeServiceResult.assetId,
         message: 'SVG generation started',
       })
     }
     
-    // Fallback: Simple response without Kafka/job tracking
-    // Generate a simple job ID and return immediately
+    // Strategy 3: Fallback - Simple response
     const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
     
     console.log('[Design Generate] Using fallback - jobId:', jobId)
     
-    // Return success response with job ID
-    const response = {
+    return res.json({
       success: true,
       jobId: jobId,
-      message: 'Design generation request received. The design generation service is being set up. Please check back later or use the job ID to check status.',
-      note: 'Full design generation with Kafka/job tracking is not yet configured. This is a placeholder response.',
-    }
-    
-    console.log('[Design Generate] Sending fallback response:', JSON.stringify(response))
-    return res.json(response)
+      message: 'Design generation request received. No design generation MCP server is currently registered. Please register a design generation MCP server or set up the native service.',
+      note: 'To enable design generation, register an MCP server with a generate/design tool, or configure the native design generation service.',
+    })
     
   } catch (error: any) {
     // Catch ALL errors including validation errors
