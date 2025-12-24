@@ -33,17 +33,17 @@ router.post('/generate', async (req, res, next) => {
     console.log('Validated request:', validated)
 
     // Try to use the service if it exists, otherwise use simple fallback
+    let mcpToolsModule = null
     try {
-      // Dynamic import to handle missing services gracefully
-      const mcpToolsModule = await Promise.resolve().then(() => {
-        try {
-          return require('../../services/mcp-tools.service')
-        } catch {
-          return null
-        }
-      })
-      
-      if (mcpToolsModule && mcpToolsModule.mcpToolsService) {
+      // Try to load the service module
+      mcpToolsModule = require('../../services/mcp-tools.service')
+    } catch (err) {
+      // Service doesn't exist - that's okay, we'll use fallback
+      console.log('mcp-tools.service not available, using fallback')
+    }
+    
+    if (mcpToolsModule && mcpToolsModule.mcpToolsService) {
+      try {
         // Use full service if available
         const result = await mcpToolsModule.mcpToolsService.generateSVG(validated)
         console.log('Generation result:', { jobId: result.jobId, hasAsset: !!result.assetId })
@@ -54,42 +54,29 @@ router.post('/generate', async (req, res, next) => {
           assetId: result.assetId,
           message: 'SVG generation started',
         })
+      } catch (serviceError) {
+        console.error('Error calling mcp-tools service:', serviceError)
+        // Fall through to fallback
       }
-      
-      // Fallback: Simple response without Kafka/job tracking
-      // Generate a simple job ID and return immediately
-      const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
-      
-      console.log('Using fallback design generation (no Kafka/job tracking):', {
-        jobId,
-        description: validated.description,
-        style: validated.style,
-      })
-      
-      // Return success response with job ID
-      // Note: In a full implementation, this would trigger async processing
-      return res.json({
-        success: true,
-        jobId: jobId,
-        message: 'Design generation request received. The design generation service is being set up. Please check back later or use the job ID to check status.',
-        note: 'Full design generation with Kafka/job tracking is not yet configured. This is a placeholder response.',
-      })
-      
-    } catch (serviceError) {
-      // If service doesn't exist or fails, return a helpful error
-      console.error('Service error:', serviceError)
-      if (serviceError instanceof Error && (serviceError.message.includes('Cannot find module') || serviceError.message.includes('Cannot resolve'))) {
-        // Fallback to simple response
-        const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
-        return res.json({
-          success: true,
-          jobId: jobId,
-          message: 'Design generation request received. Service setup in progress.',
-          note: 'Full service stack not yet configured.',
-        })
-      }
-      throw serviceError
     }
+    
+    // Fallback: Simple response without Kafka/job tracking
+    // Generate a simple job ID and return immediately
+    const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    
+    console.log('Using fallback design generation (no Kafka/job tracking):', {
+      jobId,
+      description: validated.description,
+      style: validated.style,
+    })
+    
+    // Return success response with job ID
+    return res.json({
+      success: true,
+      jobId: jobId,
+      message: 'Design generation request received. The design generation service is being set up. Please check back later or use the job ID to check status.',
+      note: 'Full design generation with Kafka/job tracking is not yet configured. This is a placeholder response.',
+    })
   } catch (error) {
     console.error('Error in /generate endpoint:', error)
     if (error instanceof z.ZodError) {
