@@ -1,5 +1,22 @@
-import { googleGeminiClient } from '../integrations/google-gemini'
-import { googleVisionClient } from '../integrations/google-vision'
+// Dynamic imports to handle missing integrations gracefully
+let googleGeminiClient: any
+let googleVisionClient: any
+
+try {
+  const geminiModule = require('../integrations/google-gemini')
+  googleGeminiClient = geminiModule.googleGeminiClient
+} catch {
+  // Integration not available
+  googleGeminiClient = null
+}
+
+try {
+  const visionModule = require('../integrations/google-vision')
+  googleVisionClient = visionModule.googleVisionClient
+} catch {
+  // Integration not available
+  googleVisionClient = null
+}
 
 export interface DocumentAnalysisOptions {
   file: Buffer
@@ -76,6 +93,9 @@ export class DocumentAnalysisService {
 Be thorough and specific.`
 
       // Use Gemini Vision API
+      if (!googleGeminiClient) {
+        throw new Error('Google Gemini integration is not available')
+      }
       const analysis = await googleGeminiClient.analyzeImageWithVision({
         image: {
           data: base64Image,
@@ -126,6 +146,9 @@ Be thorough and extract all relevant information.`
       // Use Gemini Vision API (Gemini can process PDFs as images)
       // Note: Gemini Vision API may not support PDFs directly, so we might need to convert pages to images
       // For now, try as-is - if it fails, we'll need PDF-to-image conversion
+      if (!googleGeminiClient) {
+        throw new Error('Google Gemini integration is not available')
+      }
       try {
         const analysis = await googleGeminiClient.analyzeImageWithVision({
           image: {
@@ -178,12 +201,15 @@ Document content:
 ${textContent}`
 
       // Use Gemini text model
+      if (!googleGeminiClient) {
+        throw new Error('Google Gemini integration is not available')
+      }
       const analysis = await googleGeminiClient.generateText(prompt)
 
       return {
         text: textContent,
         summary: analysis,
-        insights: analysis.split('\n').filter(line => line.trim().length > 0),
+        insights: analysis.split('\n').filter((line: string) => line.trim().length > 0),
       }
     } catch (error) {
       console.error('Text analysis error:', error)
@@ -193,6 +219,7 @@ ${textContent}`
 }
 
 export const documentAnalysisService = new DocumentAnalysisService()
+
 
 
 

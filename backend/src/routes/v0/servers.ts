@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { registryService } from '../../services/registry.service'
 import { authenticateUser } from '../../middleware/auth.middleware'
 import { installConfigService, type InstallClient } from '../../services/install-config.service'
+import { mcpInvokeService } from '../../services/mcp-invoke.service'
 import type { MCPServer, MCPTool, MCPToolInputProperty } from '../../types/mcp'
 
 const router = Router()
@@ -377,6 +378,69 @@ router.get('/servers/:serverId/permissions', async (req, res, next) => {
       permissions,
     })
   } catch (error) {
+    next(error)
+  }
+})
+
+/**
+ * POST /v0.1/invoke
+ * Invoke an MCP tool on a registered server
+ * 
+ * Request body:
+ * {
+ *   "serverId": "com.langchain/agent-mcp-server",
+ *   "tool": "agent_executor",
+ *   "arguments": {
+ *     "query": "user's query"
+ *   }
+ * }
+ * 
+ * Response:
+ * {
+ *   "result": {
+ *     "content": [
+ *       {
+ *         "type": "text",
+ *         "text": "response text"
+ *       }
+ *     ],
+ *     "isError": false
+ *   }
+ * }
+ */
+const invokeToolSchema = z.object({
+  serverId: z.string().min(1),
+  tool: z.string().min(1),
+  arguments: z.record(z.unknown()),
+})
+
+router.post('/invoke', async (req, res, next) => {
+  try {
+    const validated = invokeToolSchema.parse(req.body)
+
+    const result = await mcpInvokeService.invokeTool({
+      serverId: validated.serverId,
+      tool: validated.tool,
+      arguments: validated.arguments,
+    })
+
+    res.json(result)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details: error.errors,
+      })
+    }
+
+    if (error instanceof Error) {
+      return res.status(404).json({
+        success: false,
+        error: error.message,
+      })
+    }
+
     next(error)
   }
 })

@@ -40,6 +40,13 @@ export interface MCPInitializeResult {
   };
 }
 
+export interface MCPToolInputProperty {
+  type: string;
+  description?: string;
+  enum?: any[];
+  [key: string]: any;
+}
+
 export interface MCPTool {
   name: string;
   description: string;
