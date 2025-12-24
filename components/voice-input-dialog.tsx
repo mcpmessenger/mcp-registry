@@ -1,12 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { VoiceVisualizer } from "@/components/voice-visualizer"
-import { Mic, MicOff, Loader2 } from "lucide-react"
-import { transcribeAudio } from "@/lib/api"
-import { useToast } from "@/hooks/use-toast"
+import { Mic, MicOff } from "lucide-react"
 
 interface VoiceInputDialogProps {
   open: boolean
@@ -18,30 +16,14 @@ export function VoiceInputDialog({ open, onOpenChange, onTranscript }: VoiceInpu
   const [isRecording, setIsRecording] = useState(false)
   const [transcript, setTranscript] = useState("")
   const [recordingTime, setRecordingTime] = useState(0)
-  const [isTranscribing, setIsTranscribing] = useState(false)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const streamRef = useRef<MediaStream | null>(null)
-  const { toast } = useToast()
 
   useEffect(() => {
     if (!open) {
-      // Cleanup: stop recording and release media stream
-      if (isRecording) {
-        handleStopRecording()
-      }
       setIsRecording(false)
       setTranscript("")
       setRecordingTime(0)
-      setIsTranscribing(false)
-      
-      // Release media stream
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
-        streamRef.current = null
-      }
     }
-  }, [open, isRecording])
+  }, [open])
 
   useEffect(() => {
     if (!isRecording) return
@@ -53,199 +35,23 @@ export function VoiceInputDialog({ open, onOpenChange, onTranscript }: VoiceInpu
     return () => clearInterval(interval)
   }, [isRecording])
 
-  const handleStartRecording = async () => {
-    try {
-      // Check if getUserMedia is supported
-      // Try multiple ways to access getUserMedia for better browser compatibility
-      let getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>
-      
-      // Debug logging
-      console.log('Checking microphone support...')
-      console.log('navigator.mediaDevices:', navigator.mediaDevices)
-      console.log('navigator.mediaDevices?.getUserMedia:', navigator.mediaDevices?.getUserMedia)
-      console.log('User agent:', navigator.userAgent)
-      
-      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-        getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
-        console.log('Using navigator.mediaDevices.getUserMedia')
-      } else if ((navigator as any).getUserMedia && typeof (navigator as any).getUserMedia === 'function') {
-        // Fallback for older browsers
-        getUserMedia = (constraints: MediaStreamConstraints) => {
-          return new Promise((resolve, reject) => {
-            (navigator as any).getUserMedia(constraints, resolve, reject)
-          })
-        }
-        console.log('Using navigator.getUserMedia (legacy)')
-      } else if ((navigator as any).webkitGetUserMedia && typeof (navigator as any).webkitGetUserMedia === 'function') {
-        // Fallback for older WebKit browsers
-        getUserMedia = (constraints: MediaStreamConstraints) => {
-          return new Promise((resolve, reject) => {
-            (navigator as any).webkitGetUserMedia(constraints, resolve, reject)
-          })
-        }
-        console.log('Using navigator.webkitGetUserMedia (legacy)')
-      } else if ((navigator as any).mozGetUserMedia && typeof (navigator as any).mozGetUserMedia === 'function') {
-        // Fallback for older Firefox
-        getUserMedia = (constraints: MediaStreamConstraints) => {
-          return new Promise((resolve, reject) => {
-            (navigator as any).mozGetUserMedia(constraints, resolve, reject)
-          })
-        }
-        console.log('Using navigator.mozGetUserMedia (legacy)')
-      } else {
-        // More detailed error message
-        const hasMediaDevices = !!navigator.mediaDevices
-        const hasGetUserMedia = !!(navigator.mediaDevices?.getUserMedia)
-        const userAgent = navigator.userAgent
-        const isSecureContext = window.isSecureContext
-        const protocol = window.location.protocol
-        const hostname = window.location.hostname
-        
-        console.error('Microphone API not available:', {
-          hasMediaDevices,
-          hasGetUserMedia,
-          isSecureContext,
-          protocol,
-          hostname,
-          userAgent,
-        })
-        
-        // Provide specific guidance based on the issue
-        let errorTitle = "Microphone access unavailable"
-        let errorDescription = ""
-        
-        if (!isSecureContext || protocol === 'http:') {
-          // Check if it's a local network IP
-          const isLocalNetwork = hostname === 'localhost' || 
-                                hostname === '127.0.0.1' ||
-                                hostname.startsWith('192.168.') ||
-                                hostname.startsWith('172.') ||
-                                hostname.startsWith('10.')
-          
-          if (!isLocalNetwork) {
-            errorTitle = "HTTPS required for microphone access"
-            errorDescription = "Chrome requires HTTPS to access your microphone. Please access this site over HTTPS, or use localhost:3000 for development."
-          } else {
-            errorTitle = "Microphone access blocked"
-            errorDescription = `Chrome is blocking microphone access on HTTP (${hostname}). Try accessing via localhost:3000 instead, or set up HTTPS.`
-          }
-        } else {
-          errorTitle = "Microphone not supported"
-          errorDescription = "Your browser doesn't support microphone access. Please check browser settings or try a different browser."
-        }
-        
-        toast({
-          title: errorTitle,
-          description: errorDescription,
-          variant: "destructive",
-        })
-        return
-      }
+  const handleStartRecording = () => {
+    setIsRecording(true)
+    setTranscript("")
 
-      // Note: Chrome requires HTTPS or localhost for getUserMedia
-      // However, even on HTTP, navigator.mediaDevices should exist
-      // If we got here, getUserMedia exists, so we can proceed
-      // The browser will handle the security check and show appropriate errors
+    // Simulate STT - in production, this would use Web Speech API or a backend service
+    setTimeout(() => {
+      setTranscript("Transcribing your speech...")
+    }, 1000)
 
-      // Request microphone access - this will trigger the browser permission popup
-      // The popup appears automatically when getUserMedia is called from a user gesture (button click)
-      console.log('Requesting microphone access...')
-      const stream = await getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        }
-      })
-      console.log('Microphone access granted, stream:', stream)
-      streamRef.current = stream
-
-      // Create MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-          ? 'audio/webm;codecs=opus'
-          : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : 'audio/mp4',
-      })
-      mediaRecorderRef.current = mediaRecorder
-      audioChunksRef.current = []
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data)
-        }
-      }
-
-      mediaRecorder.onstop = async () => {
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop())
-
-        // Create blob from recorded chunks
-        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType })
-        
-        // Transcribe using Whisper
-        setIsTranscribing(true)
-        setTranscript("Transcribing your speech...")
-        
-        try {
-          const result = await transcribeAudio({ audioBlob })
-          setTranscript(result.text)
-        } catch (error) {
-          console.error('Transcription error:', error)
-          const errorMessage = error instanceof Error ? error.message : 'Failed to transcribe audio'
-          setTranscript("")
-          toast({
-            title: "Transcription failed",
-            description: errorMessage,
-            variant: "destructive",
-          })
-        } finally {
-          setIsTranscribing(false)
-        }
-      }
-
-      // Start recording
-      mediaRecorder.start()
-      setIsRecording(true)
-      setTranscript("")
-      audioChunksRef.current = []
-    } catch (error: any) {
-      console.error('Error starting recording:', error)
-      
-      // Provide specific error messages based on error type
-      let errorTitle = "Microphone access denied"
-      let errorDescription = "Please allow microphone access to use voice input."
-      
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        errorTitle = "Microphone permission denied"
-        errorDescription = "Please click the microphone icon in your browser's address bar and allow microphone access, then try again."
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        errorTitle = "No microphone found"
-        errorDescription = "No microphone device was found. Please connect a microphone and try again."
-      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-        errorTitle = "Microphone in use"
-        errorDescription = "The microphone is being used by another application. Please close other applications using the microphone and try again."
-      } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
-        errorTitle = "Microphone constraints not met"
-        errorDescription = "Your microphone doesn't support the required settings. Please try a different microphone."
-      } else if (error.message) {
-        errorDescription = error.message
-      }
-      
-      toast({
-        title: errorTitle,
-        description: errorDescription,
-        variant: "destructive",
-      })
-    }
+    setTimeout(() => {
+      const sampleTranscript = "Can you analyze the data in this document and provide key insights?"
+      setTranscript(sampleTranscript)
+    }, 3000)
   }
 
   const handleStopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop()
-      setIsRecording(false)
-    }
+    setIsRecording(false)
   }
 
   const handleUseTranscript = () => {
@@ -267,9 +73,7 @@ export function VoiceInputDialog({ open, onOpenChange, onTranscript }: VoiceInpu
         <DialogHeader>
           <DialogTitle>Voice Input</DialogTitle>
           <DialogDescription>
-            {isRecording 
-              ? "Speak clearly into your microphone" 
-              : "Click the microphone button below to start recording. Your browser will ask for microphone permission."}
+            {isRecording ? "Speak clearly into your microphone" : "Click the microphone to start recording"}
           </DialogDescription>
         </DialogHeader>
 
@@ -310,20 +114,13 @@ export function VoiceInputDialog({ open, onOpenChange, onTranscript }: VoiceInpu
               <p className="text-sm">{transcript}</p>
             </div>
           )}
-          
-          {isTranscribing && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Processing audio...</span>
-            </div>
-          )}
         </div>
 
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleUseTranscript} disabled={!transcript || isRecording || isTranscribing}>
+          <Button onClick={handleUseTranscript} disabled={!transcript || isRecording}>
             Use Transcript
           </Button>
         </div>

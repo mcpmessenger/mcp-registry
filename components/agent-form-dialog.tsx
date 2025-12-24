@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import type { MCPAgent } from "@/types/agent"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -34,36 +34,12 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     endpoint: agent?.endpoint || "",
     manifest: agent?.manifest || "",
     apiKey: "",
-    httpHeaders: agent?.httpHeaders || "",
   })
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle")
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
   const isEditing = !!agent
-
-  // Update form data when agent prop changes (e.g., when editing)
-  useEffect(() => {
-    if (agent) {
-      setFormData({
-        name: agent.name || "",
-        endpoint: agent.endpoint || "",
-        manifest: agent.manifest || "",
-        apiKey: "", // Never show API key for security
-        httpHeaders: agent.httpHeaders || "",
-      })
-    } else {
-      // Reset form when creating new agent
-      setFormData({
-        name: "",
-        endpoint: "",
-        manifest: "",
-        apiKey: "",
-        httpHeaders: "",
-      })
-    }
-    setConnectionStatus("idle")
-  }, [agent, open])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -118,22 +94,11 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     }
   }
 
-  const validateHeaders = (headers?: string): boolean => {
-    if (!headers || !headers.trim()) return true
-    try {
-      const parsed = JSON.parse(headers)
-      return parsed && typeof parsed === "object"
-    } catch {
-      return false
-    }
-  }
-
   const isFormValid =
     formData.name.trim() !== "" &&
     formData.endpoint.trim() !== "" &&
     formData.manifest.trim() !== "" &&
-    validateManifest(formData.manifest) &&
-    validateHeaders(formData.httpHeaders)
+    validateManifest(formData.manifest)
 
   return (
     <>
@@ -184,25 +149,6 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
               />
               <p className="text-xs text-muted-foreground">
                 Credentials are securely stored and never displayed in the browser.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="httpHeaders">HTTP Headers (JSON, optional)</Label>
-              <Textarea
-                id="httpHeaders"
-                placeholder='{"X-Goog-Api-Key": "your-key"}'
-                value={formData.httpHeaders}
-                onChange={(e) => setFormData((prev) => ({ ...prev, httpHeaders: e.target.value }))}
-                className="font-mono text-xs min-h-[120px]"
-              />
-              {!validateHeaders(formData.httpHeaders) && (
-                <p className="text-xs text-destructive">Headers must be valid JSON object.</p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                These headers are sent with every HTTP MCP request (leave blank for STDIO servers).
-                For Google Maps MCP (Grounding Lite), set HTTP Headers to <code className="bg-muted px-1 rounded">{'{"X-Goog-Api-Key": "YOUR_KEY"}'}</code> and ensure the API is enabled:
-                https://developers.google.com/maps/ai/grounding-lite
               </p>
             </div>
 
