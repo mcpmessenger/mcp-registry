@@ -39,9 +39,21 @@ export default function RegistryPage() {
         console.log('Fetching servers from backend...')
         const servers = await getServers()
         console.log('Received servers:', servers)
+        console.log('First server structure:', servers[0])
+        console.log('Server count:', servers.length)
         
         if (isMounted) {
-          const transformedAgents = transformServersToAgents(servers)
+          // Filter out empty objects and validate
+          const validServers = servers.filter(s => s && s.serverId && s.name)
+          console.log('Valid servers after filtering:', validServers.length)
+          
+          if (validServers.length === 0 && servers.length > 0) {
+            console.error('All servers are invalid/empty:', servers)
+            setError('Servers returned but data is invalid. Check console for details.')
+            return
+          }
+          
+          const transformedAgents = transformServersToAgents(validServers)
           setAgents(transformedAgents)
           console.log('Transformed agents:', transformedAgents)
         }
