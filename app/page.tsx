@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { mockAgents } from "@/lib/mock-data"
+import { useState, useEffect } from "react"
+import { getServers, publishServer, updateServer, deleteServer } from "@/lib/api"
+import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPAgent } from "@/types/agent"
 import { AgentCard } from "@/components/agent-card"
 import { AgentDetailsDialog } from "@/components/agent-details-dialog"
@@ -14,7 +15,9 @@ import { Plus, Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function RegistryPage() {
-  const [agents, setAgents] = useState<MCPAgent[]>(mockAgents)
+  const [agents, setAgents] = useState<MCPAgent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [selectedAgent, setSelectedAgent] = useState<MCPAgent | null>(null)
@@ -53,58 +56,139 @@ export default function RegistryPage() {
     setFormOpen(true)
   }
 
-  const handleSaveAgent = (data: Partial<MCPAgent>) => {
-    if (editingAgent) {
-      setAgents((prev) =>
-        prev.map((agent) =>
-          agent.id === editingAgent.id
-            ? {
-                ...agent,
-                ...data,
-                capabilities: data.manifest
-                  ? JSON.parse(data.manifest).capabilities || agent.capabilities
-                  : agent.capabilities,
-              }
-            : agent,
-        ),
-      )
-      toast({
-        title: "Agent updated",
-        description: `${data.name || editingAgent.name} has been successfully updated.`,
-      })
-    } else {
-      const newAgent: MCPAgent = {
-        id: (agents.length + 1).toString(),
-        name: data.name || "New Agent",
-        endpoint: data.endpoint || "",
-        status: "online",
-        lastActive: new Date(),
-        capabilities: data.manifest ? JSON.parse(data.manifest).capabilities || [] : [],
-        manifest: data.manifest || "{}",
-        metrics: {
-          avgLatency: 0,
-          p95Latency: 0,
-          uptime: 100,
-        },
+  const handleSaveAgent = async (data: Partial<MCPAgent>) => {
+    try {
+      // Validate endpoint is provided
+      if (!data.endpoint || data.endpoint.trim() === '') {
+        toast({
+          title: "Endpoint required",
+          description: "Please provide an endpoint URL for the MCP agent.",
+          variant: "destructive",
+        })
+        return
       }
-      setAgents((prev) => [...prev, newAgent])
+
+      // Parse manifest JSON
+      let manifestData: any = {}
+      try {
+        manifestData = data.manifest ? JSON.parse(data.manifest) : {}
+      } catch (e) {
+        toast({
+          title: "Invalid manifest",
+          description: "The manifest must be valid JSON.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Parse HTTP headers if provided (optional)
+      let httpHeaders: Record<string, unknown> | undefined
+      if (data.httpHeaders && data.httpHeaders.trim() !== "") {
+        try {
+          const parsed = JSON.parse(data.httpHeaders)
+          if (parsed && typeof parsed === 'object') {
+            httpHeaders = parsed
+          } else {
+            throw new Error('Headers must be a JSON object')
+          }
+        } catch (e) {
+          toast({
+            title: "Invalid HTTP headers",
+            description: "HTTP headers must be valid JSON object.",
+            variant: "destructive",
+          })
+          return
+        }
+      }
+
+      // Generate serverId from name if not provided
+      const name = data.name || editingAgent?.name || "New Agent"
+      // Remove trailing dashes and ensure valid format
+      const baseServerId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '').replace(/^-+/, '')
+      const serverId = manifestData.serverId || editingAgent?.id || 
+        `com.mcp-registry/${baseServerId}`
+
+      // Ensure endpoint is stored in both metadata and manifest
+      const endpoint = data.endpoint.trim()
+      
+      // Transform form data to backend schema
+      const publishData = {
+        serverId,
+        name,
+        description: manifestData.description || data.endpoint || undefined,
+        version: manifestData.version || "v0.1",
+        tools: manifestData.tools || [],
+        capabilities: manifestData.capabilities || [],
+        manifest: {
+          ...manifestData,
+          endpoint: endpoint, // Store endpoint in manifest
+          serverId: serverId, // Ensure serverId is in manifest too
+        },
+        metadata: {
+          endpoint: endpoint, // Store endpoint in metadata (primary location)
+          apiKey: data.apiKey ? '***' : undefined, // Don't store actual key, just flag
+          httpHeaders: httpHeaders,
+        },
+        env: data.apiKey ? { API_KEY: data.apiKey } : undefined,
+      }
+
+      if (editingAgent) {
+        // Update existing server
+        await updateServer(editingAgent.id, publishData)
+        toast({
+          title: "Agent updated",
+          description: `${name} has been successfully updated.`,
+        })
+      } else {
+        // Create new server
+        await publishServer(publishData)
+        toast({
+          title: "Agent registered",
+          description: `${name} has been successfully registered.`,
+        })
+      }
+
+      // Refresh agents list from backend
+      const servers = await getServers()
+      const transformedAgents = transformServersToAgents(servers)
+      setAgents(transformedAgents)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save agent'
+      console.error('Error saving agent:', error)
       toast({
-        title: "Agent registered",
-        description: `${newAgent.name} has been successfully registered.`,
+        title: editingAgent ? "Update failed" : "Registration failed",
+        description: errorMessage,
+        variant: "destructive",
       })
     }
   }
 
-  const handleConfirmDelete = () => {
-    if (deletingAgent) {
-      setAgents((prev) => prev.filter((agent) => agent.id !== deletingAgent.id))
+  const handleConfirmDelete = async () => {
+    if (!deletingAgent) return
+
+    try {
+      await deleteServer(deletingAgent.id)
       toast({
         title: "Agent deleted",
         description: `${deletingAgent.name} has been removed from the registry.`,
         variant: "destructive",
       })
+      
+      // Refresh agents list from backend
+      const servers = await getServers()
+      const transformedAgents = transformServersToAgents(servers)
+      setAgents(transformedAgents)
+      
       setDeleteOpen(false)
       setDeletingAgent(null)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete agent'
+      console.error('Error deleting agent:', error)
+      toast({
+        title: "Delete failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     }
   }
 
@@ -170,7 +254,23 @@ export default function RegistryPage() {
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {isLoading && (
+        <div className="text-center py-12">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+          <p className="text-muted-foreground">Loading servers from backend...</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="text-center py-12">
+          <p className="text-destructive">Error: {error}</p>
+          <p className="text-muted-foreground text-sm mt-2">Make sure the backend API is configured correctly</p>
+        </div>
+      )}
+
+      {!isLoading && !error && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredAgents.map((agent) => (
           <AgentCard
             key={agent.id}
@@ -182,10 +282,12 @@ export default function RegistryPage() {
         ))}
       </div>
 
-      {filteredAgents.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No agents found matching your filters.</p>
-        </div>
+          {filteredAgents.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No agents found matching your filters.</p>
+            </div>
+          )}
+        </>
       )}
 
       <AgentDetailsDialog agent={selectedAgent} open={detailsOpen} onOpenChange={setDetailsOpen} />
