@@ -171,6 +171,28 @@ gcloud run jobs create migrate-db \
 gcloud run jobs execute migrate-db --region us-central1
 ```
 
+### Step 6.5: Seed Stock MCP Servers
+
+After migrations, seed the default stock servers (Playwright, LangChain, Google Maps, Valuation):
+
+```bash
+# Create seed job
+gcloud run jobs create seed-stock-servers \
+  --image gcr.io/$PROJECT_ID/mcp-registry-backend \
+  --region us-central1 \
+  --add-cloudsql-instances $DB_CONNECTION_NAME \
+  --set-env-vars "NODE_ENV=production" \
+  --set-secrets "GOOGLE_GEMINI_API_KEY=google-gemini-api-key:latest" \
+  --set-env-vars "DATABASE_URL=postgresql://postgres:$(gcloud secrets versions access latest --secret=db-password)@/$DB_CONNECTION_NAME/mcp_registry?host=/cloudsql/$DB_CONNECTION_NAME" \
+  --command npm \
+  --args "run,seed"
+
+# Execute seed job
+gcloud run jobs execute seed-stock-servers --region us-central1
+```
+
+See [Seed Stock Servers Guide](SEED_STOCK_SERVERS.md) for detailed instructions.
+
 ### Step 7: Update Frontend Environment
 
 In Vercel dashboard, update:
@@ -336,6 +358,7 @@ curl $SERVICE_URL/v0.1/servers
 - [Cloud SQL Documentation](https://cloud.google.com/sql/docs/postgres)
 - [Secret Manager Documentation](https://cloud.google.com/secret-manager/docs)
 - [Vercel Documentation](https://vercel.com/docs)
+
 
 
 
