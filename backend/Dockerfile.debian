@@ -89,8 +89,8 @@ RUN apt-get update && \
 # Copy package files
 COPY package*.json ./
 
-# Create prisma directory (will be populated in next RUN if needed)
-RUN mkdir -p ./prisma
+# Copy Prisma schema from builder (needed for postinstall script)
+COPY --from=builder /app/prisma ./prisma
 
 # Install production dependencies only
 RUN npm install --only=production
@@ -102,21 +102,9 @@ COPY --from=builder /app/dist ./dist
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm install -g playwright
 
-# Ensure prisma directory exists and has schema
-RUN mkdir -p /app/prisma && \
-    if [ ! -f /app/prisma/schema.prisma ]; then \
-      echo 'generator client {' > /app/prisma/schema.prisma && \
-      echo '  provider = "prisma-client-js"' >> /app/prisma/schema.prisma && \
-      echo '}' >> /app/prisma/schema.prisma && \
-      echo '' >> /app/prisma/schema.prisma && \
-      echo 'datasource db {' >> /app/prisma/schema.prisma && \
-      echo '  provider = "sqlite"' >> /app/prisma/schema.prisma && \
-      echo '  url      = env("DATABASE_URL")' >> /app/prisma/schema.prisma && \
-      echo '}' >> /app/prisma/schema.prisma; \
-    fi
-
-# Generate Prisma Client (will work even with minimal schema)
-RUN npx prisma generate || echo "Prisma generate skipped - no schema found"
+# Prisma Client should already be generated from postinstall script
+# But ensure it exists, regenerate if needed
+RUN npx prisma generate || echo "Prisma generate completed or skipped"
 
 # Create non-root user
 RUN groupadd -r nodejs && useradd -r -g nodejs nodejs
