@@ -137,28 +137,29 @@ export async function getServers(options?: {
   }
   const queryString = params.toString()
   const url = `${API_BASE_URL}/v0.1/servers${queryString ? `?${queryString}` : ''}`
-  console.log('Fetching from:', url)
+  console.log('[API] Fetching from:', url)
   
-  const maxRetries = options?.retries ?? 2
+  const maxRetries = options?.retries ?? 1 // Reduce retries to fail faster
   let lastError: Error | null = null
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       // Exponential backoff: wait 2s, 4s, etc.
-      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 10000)
-      console.log(`Retrying request (attempt ${attempt + 1}/${maxRetries + 1}) after ${delay}ms...`)
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 5000)
+      console.log(`[API] Retrying request (attempt ${attempt + 1}/${maxRetries + 1}) after ${delay}ms...`)
       await new Promise(resolve => setTimeout(resolve, delay))
     }
     
     const controller = new AbortController()
-    // Increased timeout to 30 seconds for Cloud Run cold starts
-    const timeoutMs = 30000
+    // Reduced timeout to 10 seconds for faster feedback (Cloud Run should respond faster)
+    const timeoutMs = 10000
     const timeoutId = setTimeout(() => {
-      console.warn(`Request timeout after ${timeoutMs / 1000} seconds (attempt ${attempt + 1})`)
+      console.warn(`[API] Request timeout after ${timeoutMs / 1000} seconds (attempt ${attempt + 1})`)
       controller.abort()
     }, timeoutMs)
     
     try {
+      console.log(`[API] Attempting fetch (attempt ${attempt + 1}/${maxRetries + 1})...`)
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
@@ -166,37 +167,43 @@ export async function getServers(options?: {
         },
         // Add cache control to prevent hanging
         cache: 'no-cache',
+        // Add mode to handle CORS
+        mode: 'cors',
       })
       
       clearTimeout(timeoutId)
-      console.log('Response status:', response.status, response.statusText)
+      console.log('[API] Response status:', response.status, response.statusText)
       
       if (!response.ok) {
-        const errorText = await response.text()
+        const errorText = await response.text().catch(() => 'No error details')
+        console.error('[API] Error response:', errorText)
         throw new Error(`Failed to fetch servers: ${response.status} ${response.statusText} - ${errorText}`)
       }
       
       const data = await response.json()
-      console.log('Response data:', data)
+      console.log('[API] Successfully fetched', data.length, 'servers')
       return data
     } catch (error) {
       clearTimeout(timeoutId)
-      console.error(`Fetch error (attempt ${attempt + 1}):`, error)
+      console.error(`[API] Fetch error (attempt ${attempt + 1}):`, error)
       lastError = error as Error
       
       // Don't retry on certain errors
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        // Network error - might be CORS or connectivity issue, retry once
-        if (attempt < maxRetries) continue
+        // Network error - might be CORS or connectivity issue
+        if (attempt < maxRetries) {
+          console.log('[API] Network error, will retry...')
+          continue
+        }
       }
       
       // If it's the last attempt, throw the error
       if (attempt === maxRetries) {
         if (error instanceof Error && error.name === 'AbortError') {
-          throw new Error(`Request timeout after ${maxRetries + 1} attempts. Backend server may be cold-starting or not responding. Check that ${API_BASE_URL} is running.`)
+          throw new Error(`Request timeout: Backend at ${API_BASE_URL} is not responding. The server may be down or the URL is incorrect.`)
         }
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-          throw new Error(`Network error: Cannot connect to backend at ${API_BASE_URL}. Make sure the backend server is running and accessible.`)
+        if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
+          throw new Error(`Cannot connect to backend at ${API_BASE_URL}. Check: 1) Backend is running, 2) URL is correct, 3) CORS is configured.`)
         }
         throw error
       }
