@@ -36,6 +36,12 @@ const API_BASE_URL = getApiBaseUrl()
 // Log the API URL being used (helpful for debugging)
 if (typeof window !== 'undefined') {
   console.log('[API Client] Using backend URL:', API_BASE_URL)
+  console.log('[API Client] Environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    VERCEL: process.env.VERCEL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    isProduction: process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+  })
 }
 
 export interface MCPServer {
