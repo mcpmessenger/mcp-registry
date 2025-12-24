@@ -9,18 +9,10 @@ import { VoiceInputDialog } from "@/components/voice-input-dialog"
 import { FileUploadDialog } from "@/components/file-upload-dialog"
 import { GlazyrCaptureDialog } from "@/components/glazyr-capture-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { mockAgents } from "@/lib/mock-data"
-
-const agentOptions: AgentOption[] = [
-  { id: "router", name: "Auto-Route (Recommended)", type: "router" },
-  ...mockAgents
-    .filter((a) => a.status === "online")
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      type: "agent" as const,
-    })),
-]
+import { getServers, generateSVG, getJobStatus, createJobProgressStream } from "@/lib/api"
+import { transformServersToAgents } from "@/lib/server-utils"
+import type { MCPServer } from "@/lib/api"
+import { invokeMCPTool } from "@/lib/api"
 
 const initialMessages: ChatMessage[] = [
   {
@@ -33,6 +25,35 @@ const initialMessages: ChatMessage[] = [
   },
 ]
 
+/**
+ * Check if a response looks like a placeholder or generic template
+ */
+function isPlaceholderResponse(content: string): boolean {
+  const placeholderPatterns = [
+    /based on my analysis/i,
+    /here are the key points/i,
+    /you should consider/i,
+    /let me help you with that/i,
+    /based on my analysis.*key points/i,
+  ]
+  
+  return placeholderPatterns.some(pattern => pattern.test(content)) && content.length < 500
+}
+
+/**
+ * Detect if a message is requesting design/generation work
+ */
+function isDesignRequest(content: string): boolean {
+  const designKeywords = [
+    /(create|generate|make|design|build).*(poster|banner|image|graphic|logo|artwork|visual|design|svg|illustration)/i,
+    /(poster|banner|marketing.*material|graphic|logo|artwork|visual|design|svg|illustration).*(for|with|in)/i,
+    /high.resolution.*(poster|banner|image|graphic|logo|artwork|visual|design)/i,
+    /(cosmic|dark mode|neon|color|palette|style).*(poster|banner|image|graphic|logo|artwork|visual|design)/i,
+  ]
+  
+  return designKeywords.some(pattern => pattern.test(content))
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [selectedAgentId, setSelectedAgentId] = useState("router")
@@ -40,7 +61,36 @@ export default function ChatPage() {
   const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
   const [fileDialogOpen, setFileDialogOpen] = useState(false)
   const [glazyrDialogOpen, setGlazyrDialogOpen] = useState(false)
+  const [agentOptions, setAgentOptions] = useState<AgentOption[]>([
+    { id: "router", name: "Auto-Route (Recommended)", type: "router" },
+  ])
+  const [availableServers, setAvailableServers] = useState<MCPServer[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+
+  // Fetch available servers on mount
+  useEffect(() => {
+    async function loadAgents() {
+      try {
+        const servers = await getServers()
+        setAvailableServers(servers)
+        
+        // Transform servers to agent options
+        const transformedAgents = transformServersToAgents(servers)
+        const options: AgentOption[] = [
+          { id: "router", name: "Auto-Route (Recommended)", type: "router" },
+          ...transformedAgents.map((a) => ({
+            id: a.id,
+            name: a.name,
+            type: "agent" as const,
+          })),
+        ]
+        setAgentOptions(options)
+      } catch (error) {
+        console.error('Failed to load agents:', error)
+      }
+    }
+    loadAgents()
+  }, [])
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -64,32 +114,312 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMessage])
     setIsLoading(true)
 
-    // Simulate routing and response
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      let responseContent = ""
+      let agentName: string | undefined = undefined
 
-    const selectedAgent = agentOptions.find((a) => a.id === selectedAgentId)
-    const isRouter = selectedAgentId === "router"
-    const agentName = isRouter
-      ? attachment?.type === "image" || attachment?.type === "glazyr"
-        ? "Vision Agent"
-        : attachment?.type === "document"
-          ? "Document Processing"
-          : "Data Analysis Agent"
-      : selectedAgent?.name
+      const isRouter = selectedAgentId === "router"
+      
+      if (isRouter) {
+        // Auto-route based on content and attachment type
+        let targetServer: MCPServer | null = null
+        let toolName = "agent_executor"
+        
+        // Check for design/generation requests first
+        if (isDesignRequest(content)) {
+          // Route to design generation API
+          agentName = "Design Generator"
+          
+          try {
+            // Extract design details from the request
+            const description = content
+            const styleMatch = content.match(/(cosmic|dark|modern|minimalist|vintage|retro)/i)
+            const colorMatch = content.match(/(purple|blue|red|green|yellow|orange|pink|neon)/i)
+            
+            // Generate the design
+            const generateResponse = await generateSVG({
+              description: description,
+              style: styleMatch ? styleMatch[1].toLowerCase() : 'modern',
+              colorPalette: colorMatch ? [colorMatch[1]] : undefined,
+              size: {
+                width: 1920, // High resolution for posters
+                height: 1080,
+              },
+            })
+            
+            // If job was created, poll for completion
+            if (generateResponse.jobId) {
+              responseContent = `I've started creating your design! Job ID: ${generateResponse.jobId}. I'll notify you when it's ready.`
+              
+              // Poll for job completion in the background
+              const pollJob = async () => {
+                try {
+                  const maxAttempts = 60 // 5 minutes max
+                  let attempts = 0
+                  
+                  while (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 5000)) // Wait 5 seconds
+                    
+                    const jobStatus = await getJobStatus(generateResponse.jobId)
+                    
+                    if (jobStatus.job.status === 'COMPLETED' && jobStatus.asset) {
+                      // Update the message with the result
+                      const updateMessage: ChatMessage = {
+                        id: `assistant-${Date.now()}`,
+                        role: "assistant",
+                        content: `Your design is ready! ${jobStatus.asset.url ? `View it here: ${jobStatus.asset.url}` : 'Design completed successfully.'}`,
+                        timestamp: new Date(),
+                        agentName: agentName,
+                      }
+                      setMessages((prev) => [...prev, updateMessage])
+                      break
+                    } else if (jobStatus.job.status === 'FAILED') {
+                      const errorMessage: ChatMessage = {
+                        id: `assistant-${Date.now()}`,
+                        role: "assistant",
+                        content: `Design generation failed: ${jobStatus.job.errorMessage || 'Unknown error'}`,
+                        timestamp: new Date(),
+                        agentName: agentName,
+                      }
+                      setMessages((prev) => [...prev, errorMessage])
+                      break
+                    }
+                    
+                    attempts++
+                  }
+                } catch (error) {
+                  console.error('Error polling job status:', error)
+                }
+              }
+              
+              // Start polling in background (don't await)
+              pollJob().catch(console.error)
+            } else {
+              responseContent = generateResponse.message || "Design generation started successfully."
+            }
+          } catch (error) {
+            console.error('Design generation error:', error)
+            throw new Error(`Failed to generate design: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          }
+        } else if (attachment?.type === "image" || attachment?.type === "glazyr") {
+          // Route to Vision MCP or document analysis
+          targetServer = availableServers.find(s => 
+            s.serverId.includes('vision') || 
+            s.tools?.some(t => t.name.includes('analyze') || t.name.includes('vision'))
+          ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server')
+          agentName = "Vision Agent"
+        } else if (attachment?.type === "document") {
+          // Route to document analysis
+          targetServer = availableServers.find(s => 
+            s.tools?.some(t => t.name.includes('analyze') || t.name.includes('document'))
+          ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server')
+          agentName = "Document Processing"
+        } else {
+          // Route to LangChain agent for general queries
+          targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
+                        availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
+                        availableServers[0]
+          agentName = "AI Assistant"
+        }
 
-    const assistantMessage: ChatMessage = {
-      id: `assistant-${Date.now()}`,
-      role: "assistant",
-      content: attachment
-        ? `I've analyzed the ${attachment.type} you provided. Here are my findings: The content shows comprehensive data patterns with key insights about performance metrics and trends. Would you like me to elaborate on any specific aspect?`
-        : `I understand you asked: "${content}". Let me help you with that. Based on my analysis, here are the key points you should consider...`,
-      timestamp: new Date(),
-      agentName: isRouter ? agentName : undefined,
-      audioUrl: "https://example.com/tts/response.mp3",
+        // Only invoke tool if we didn't handle it as a design request
+        // (Design requests are handled above and responseContent is already set)
+        if (!isDesignRequest(content) && targetServer && targetServer.tools && targetServer.tools.length > 0) {
+          // Use agent_executor if available, otherwise use first tool
+          const executorTool = targetServer.tools.find(t => t.name === 'agent_executor')
+          toolName = executorTool ? 'agent_executor' : targetServer.tools[0].name
+          
+          console.log(`Routing to ${targetServer.name} using tool: ${toolName}`)
+          
+          // Prepare tool arguments based on tool type
+          let toolArgs: Record<string, unknown> = {}
+          
+          if (toolName === 'agent_executor') {
+            toolArgs = {
+              query: content,
+              input: content,
+            }
+          } else {
+            // For other tools, pass content as appropriate argument
+            toolArgs = {
+              query: content,
+              text: content,
+              input: content,
+            }
+          }
+
+          const result = await invokeMCPTool({
+            serverId: targetServer.serverId,
+            tool: toolName,
+            arguments: toolArgs,
+          })
+
+          // Log raw result for debugging
+          console.log('[Chat] Raw agent result:', {
+            serverId: targetServer.serverId,
+            tool: toolName,
+            result,
+            hasContent: !!result.content,
+            isError: result.isError,
+          })
+
+          // Check for errors first
+          if (result.isError) {
+            const errorText = result.content?.[0]?.text || 'Agent returned an error'
+            console.error('[Chat] Agent returned error:', errorText)
+            throw new Error(errorText)
+          }
+
+          // Extract text content from response
+          if (result.content && Array.isArray(result.content)) {
+            responseContent = result.content
+              .filter(item => item.type === 'text' && item.text)
+              .map(item => item.text)
+              .join('\n\n')
+          } else if (typeof result === 'string') {
+            responseContent = result
+          } else {
+            responseContent = JSON.stringify(result, null, 2)
+          }
+
+          // Validate response is not empty
+          if (!responseContent || responseContent.trim().length === 0) {
+            throw new Error("The agent didn't return a valid response. Please try again or select a different agent.")
+          }
+
+          // Check for placeholder-like responses
+          if (isPlaceholderResponse(responseContent)) {
+            console.warn('[Chat] Detected placeholder-like response from agent:', {
+              agentName,
+              serverId: targetServer.serverId,
+              tool: toolName,
+              responsePreview: responseContent.substring(0, 200),
+            })
+            // Still show the response, but log a warning
+          }
+
+          // Log the response for debugging
+          console.log('[Chat] Agent response:', {
+            agentName,
+            serverId: targetServer.serverId,
+            tool: toolName,
+            responseLength: responseContent.length,
+            preview: responseContent.substring(0, 100),
+          })
+        } else if (!isDesignRequest(content)) {
+          // Only show this error if it wasn't a design request (design requests are handled above)
+          responseContent = "I couldn't find an available MCP server to handle your request. Please try selecting a specific agent."
+        }
+      } else {
+        // Use selected agent
+        const selectedAgent = agentOptions.find((a) => a.id === selectedAgentId)
+        const server = availableServers.find(s => s.serverId === selectedAgentId)
+        
+        if (server && server.tools && server.tools.length > 0) {
+          agentName = selectedAgent?.name
+          const tool = server.tools[0] // Use first available tool
+          
+          let toolArgs: Record<string, unknown> = {}
+          if (tool.name === 'agent_executor') {
+            toolArgs = { query: content, input: content }
+          } else {
+            toolArgs = { query: content, text: content, input: content }
+          }
+
+          const result = await invokeMCPTool({
+            serverId: server.serverId,
+            tool: tool.name,
+            arguments: toolArgs,
+          })
+
+          // Log raw result for debugging
+          console.log('[Chat] Raw agent result:', {
+            serverId: server.serverId,
+            tool: tool.name,
+            result,
+            hasContent: !!result.content,
+            isError: result.isError,
+          })
+
+          // Check for errors first
+          if (result.isError) {
+            const errorText = result.content?.[0]?.text || 'Agent returned an error'
+            console.error('[Chat] Agent returned error:', errorText)
+            throw new Error(errorText)
+          }
+
+          if (result.content && Array.isArray(result.content)) {
+            responseContent = result.content
+              .filter(item => item.type === 'text' && item.text)
+              .map(item => item.text)
+              .join('\n\n')
+          } else if (typeof result === 'string') {
+            responseContent = result
+          } else {
+            responseContent = JSON.stringify(result, null, 2)
+          }
+
+          // Validate response is not empty
+          if (!responseContent || responseContent.trim().length === 0) {
+            throw new Error("The agent didn't return a valid response. Please try again or select a different agent.")
+          }
+
+          // Check for placeholder-like responses
+          if (isPlaceholderResponse(responseContent)) {
+            console.warn('[Chat] Detected placeholder-like response from agent:', {
+              agentName,
+              serverId: server.serverId,
+              tool: tool.name,
+              responsePreview: responseContent.substring(0, 200),
+            })
+            // Still show the response, but log a warning
+          }
+
+          // Log the response for debugging
+          console.log('[Chat] Agent response:', {
+            agentName,
+            serverId: server.serverId,
+            tool: tool.name,
+            responseLength: responseContent.length,
+            preview: responseContent.substring(0, 100),
+          })
+        } else {
+          responseContent = `The selected agent "${selectedAgent?.name}" doesn't have available tools. Please try a different agent.`
+        }
+      }
+
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: responseContent,
+        timestamp: new Date(),
+        agentName: agentName,
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+    } catch (error) {
+      console.error('Error sending message:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process your request'
+      
+      // Log full error details for debugging
+      console.error('[Chat] Full error details:', {
+        error,
+        selectedAgentId,
+        availableServers: availableServers.map(s => ({ serverId: s.serverId, name: s.name })),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      })
+      
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: `Sorry, I encountered an error: ${errorMessage}. Please try again or select a different agent. If this persists, the agent may be unavailable or misconfigured.`,
+        timestamp: new Date(),
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+    } finally {
+      setIsLoading(false)
     }
-
-    setMessages((prev) => [...prev, assistantMessage])
-    setIsLoading(false)
   }
 
   const handleVoiceInput = () => {
