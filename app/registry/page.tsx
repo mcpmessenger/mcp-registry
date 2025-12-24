@@ -122,10 +122,10 @@ export default function RegistryPage() {
     setFormOpen(true)
   }
 
-  const handleSaveAgent = async (data: Partial<MCPAgent> & { command?: string; args?: string; envVars?: string }) => {
+  const handleSaveAgent = async (data: Partial<MCPAgent> & { command?: string; args?: string; credentials?: string }) => {
     try {
       // Determine if this is HTTP or STDIO server
-      const isStdioServer = (data.command && data.args) || (!data.endpoint || data.endpoint.trim() === '')
+      const isStdioServer = ((data as any).command && (data as any).args) || (!data.endpoint || data.endpoint.trim() === '')
       
       // Validate based on server type
       if (!isStdioServer && (!data.endpoint || data.endpoint.trim() === '')) {
@@ -137,7 +137,7 @@ export default function RegistryPage() {
         return
       }
       
-      if (isStdioServer && (!data.command || !data.args)) {
+      if (isStdioServer && (!(data as any).command || !(data as any).args)) {
         toast({
           title: "Command and Args required",
           description: "Please provide command and arguments for STDIO-based MCP agents.",
@@ -146,17 +146,19 @@ export default function RegistryPage() {
         return
       }
 
-      // Parse manifest JSON
+      // Parse manifest JSON (optional - will auto-discover if not provided)
       let manifestData: any = {}
-      try {
-        manifestData = data.manifest ? JSON.parse(data.manifest) : {}
-      } catch (e) {
-        toast({
-          title: "Invalid manifest",
-          description: "The manifest must be valid JSON.",
-          variant: "destructive",
-        })
-        return
+      if (data.manifest && data.manifest.trim()) {
+        try {
+          manifestData = JSON.parse(data.manifest)
+        } catch (e) {
+          toast({
+            title: "Invalid manifest",
+            description: "The manifest must be valid JSON.",
+            variant: "destructive",
+          })
+          return
+        }
       }
 
       // Parse HTTP headers if provided (optional)
@@ -186,49 +188,43 @@ export default function RegistryPage() {
       const serverId = manifestData.serverId || editingAgent?.id || 
         `com.mcp-registry/${baseServerId}`
 
-      // Parse environment variables for STDIO servers
+      // Parse credentials (can be simple API key or JSON object)
       let env: Record<string, string> | undefined = undefined
-      if (isStdioServer && data.envVars && data.envVars.trim()) {
+      const credentials = (data as any).credentials
+      if (credentials && credentials.trim()) {
         try {
-          env = JSON.parse(data.envVars)
-          if (typeof env !== 'object' || Array.isArray(env)) {
-            throw new Error('Environment variables must be a JSON object')
+          // Try to parse as JSON first
+          const parsed = JSON.parse(credentials)
+          if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+            env = parsed
+          } else {
+            throw new Error('Credentials JSON must be an object')
           }
-        } catch (e) {
-          toast({
-            title: "Invalid environment variables",
-            description: "Environment variables must be valid JSON object.",
-            variant: "destructive",
-          })
-          return
-        }
-      }
-      
-      // Add API key to env if provided
-      if (data.apiKey) {
-        env = env || {}
-        env.API_KEY = data.apiKey
-        // Also check for common API key names
-        if (name.toLowerCase().includes('gemini') || name.toLowerCase().includes('banana')) {
-          env.GEMINI_API_KEY = data.apiKey
+        } catch {
+          // If not valid JSON, treat as simple API key
+          env = { API_KEY: credentials }
+          // Auto-map to common env var names based on agent name
+          if (name.toLowerCase().includes('gemini') || name.toLowerCase().includes('banana')) {
+            env.GEMINI_API_KEY = credentials
+          }
         }
       }
       
       // Parse command args for STDIO servers
       let args: string[] | undefined = undefined
-      if (isStdioServer && data.args) {
+      if (isStdioServer && (data as any).args) {
         try {
-          args = JSON.parse(data.args)
+          args = JSON.parse((data as any).args)
           if (!Array.isArray(args)) {
             throw new Error('Arguments must be a JSON array')
           }
         } catch (e) {
           toast({
-            title: "Invalid arguments",
-            description: "Arguments must be a valid JSON array (e.g., [\"nano-banana-mcp\"]).",
-            variant: "destructive",
-          })
-          return
+          title: "Invalid arguments",
+          description: "Arguments must be a valid JSON array (e.g., [\"nano-banana-mcp\"]).",
+          variant: "destructive",
+        })
+        return
         }
       }
       
@@ -236,9 +232,9 @@ export default function RegistryPage() {
       const publishData: any = {
         serverId,
         name,
-        description: manifestData.description || (isStdioServer ? `${data.command} ${data.args}` : data.endpoint) || undefined,
+        description: manifestData.description || (isStdioServer ? `${(data as any).command} ${(data as any).args}` : data.endpoint) || undefined,
         version: manifestData.version || "v0.1",
-        command: isStdioServer ? data.command : undefined,
+        command: isStdioServer ? (data as any).command : undefined,
         args: isStdioServer ? args : undefined,
         tools: manifestData.tools || [],
         capabilities: manifestData.capabilities || [],
@@ -249,7 +245,7 @@ export default function RegistryPage() {
         },
         metadata: {
           ...(isStdioServer ? {} : { endpoint: data.endpoint?.trim() }),
-          apiKey: data.apiKey ? '***' : undefined,
+          apiKey: credentials ? '***' : undefined,
           httpHeaders: httpHeaders,
         },
         env: env,

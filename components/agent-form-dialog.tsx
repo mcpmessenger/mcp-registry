@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Upload } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertDialog,
@@ -39,12 +39,8 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     endpoint: agent?.endpoint?.replace('stdio://', '') || "",
     command: "",
     args: "",
-    manifest: agent?.manifest || "",
-    apiKey: "",
-    envVars: "",
+    credentials: "", // Unified credentials field (JSON or simple key)
   })
-  const [isTestingConnection, setIsTestingConnection] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle")
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
   const isEditing = !!agent
@@ -62,10 +58,11 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       ...(serverType === "stdio" ? { 
         command: formData.command,
         args: formData.args,
-        envVars: formData.envVars,
+        credentials: formData.credentials,
         endpoint: undefined, // Clear endpoint for STDIO
       } : {
         endpoint: formData.endpoint,
+        credentials: formData.credentials,
         command: undefined, // Clear command/args for HTTP
         args: undefined,
       }),
@@ -78,43 +75,28 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       endpoint: "",
       command: "",
       args: "",
-      manifest: "",
-      apiKey: "",
-      envVars: "",
+      credentials: "",
     })
     setServerType("http")
-    setConnectionStatus("idle")
   }
 
-  const handleTestConnection = async () => {
-    setIsTestingConnection(true)
-    setConnectionStatus("idle")
 
-    // Simulate connection test
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    // Randomly succeed or fail for demo
-    const success = Math.random() > 0.3
-    setConnectionStatus(success ? "success" : "error")
-    setIsTestingConnection(false)
-  }
-
-  const handleManifestUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const content = event.target?.result as string
-        setFormData((prev) => ({ ...prev, manifest: content }))
-      }
-      reader.readAsText(file)
+  const validateCredentials = (creds: string): boolean => {
+    if (!creds.trim()) return true // Optional field
+    // Try to parse as JSON, if fails, assume it's a simple API key
+    try {
+      const parsed = JSON.parse(creds)
+      return typeof parsed === 'object' && !Array.isArray(parsed)
+    } catch {
+      return true // Simple API key is fine
     }
   }
 
-  const validateManifest = (manifest: string): boolean => {
+  const validateArgs = (args: string): boolean => {
+    if (!args.trim()) return false
     try {
-      JSON.parse(manifest)
-      return true
+      const parsed = JSON.parse(args)
+      return Array.isArray(parsed)
     } catch {
       return false
     }
@@ -122,11 +104,10 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
 
   const isFormValid =
     formData.name.trim() !== "" &&
-    formData.manifest.trim() !== "" &&
-    validateManifest(formData.manifest) &&
+    validateCredentials(formData.credentials) &&
     (serverType === "http" 
       ? formData.endpoint.trim() !== ""
-      : formData.command.trim() !== "" && formData.args.trim() !== "")
+      : formData.command.trim() !== "" && validateArgs(formData.args))
 
   return (
     <>
@@ -194,9 +175,6 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                     onChange={(e) => setFormData((prev) => ({ ...prev, command: e.target.value }))}
                     required
                   />
-                  <p className="text-xs text-muted-foreground">
-                    The command to execute (e.g., "npx", "node", "python")
-                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="args">Arguments (JSON Array) *</Label>
@@ -208,102 +186,28 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    Command arguments as JSON array (e.g., ["nano-banana-mcp"] or ["-y", "@playwright/mcp@latest"])
+                    JSON array format: ["package-name"] or ["-y", "@package/name"]
                   </p>
                 </div>
               </>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key / Credentials</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="Enter API key or credentials"
-                value={formData.apiKey}
-                onChange={(e) => setFormData((prev) => ({ ...prev, apiKey: e.target.value }))}
-                autoComplete="off"
+              <Label htmlFor="credentials">Credentials (Optional)</Label>
+              <Textarea
+                id="credentials"
+                placeholder={serverType === "stdio" 
+                  ? '{"GEMINI_API_KEY": "your-key-here"} or just paste API key'
+                  : 'API key or {"API_KEY": "value"} JSON'}
+                value={formData.credentials}
+                onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
+                className="font-mono text-xs min-h-[80px]"
               />
               <p className="text-xs text-muted-foreground">
-                Credentials are securely stored and never displayed in the browser.
+                {serverType === "stdio" 
+                  ? "Environment variables as JSON object, or a simple API key (will be mapped to GEMINI_API_KEY for Nano-Banana)"
+                  : "API key or credentials as JSON object. Credentials are securely stored."}
               </p>
-            </div>
-
-            {serverType === "stdio" && (
-              <div className="space-y-2">
-                <Label htmlFor="envVars">Environment Variables (JSON)</Label>
-                <Textarea
-                  id="envVars"
-                  placeholder='{"GEMINI_API_KEY": "your-key-here"}'
-                  value={formData.envVars}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, envVars: e.target.value }))}
-                  className="font-mono text-xs min-h-[80px]"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Environment variables for STDIO servers (e.g., API keys). Must be valid JSON object.
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="manifest">MCP Manifest (JSON) *</Label>
-              <div className="flex gap-2 mb-2">
-                <Button type="button" variant="outline" size="sm" className="relative bg-transparent">
-                  <Upload className="h-3.5 w-3.5 mr-1.5" />
-                  Upload File
-                  <input
-                    type="file"
-                    accept=".json,.yaml,.yml"
-                    onChange={handleManifestUpload}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-                </Button>
-                {validateManifest(formData.manifest) && (
-                  <span className="flex items-center text-sm text-success">
-                    <span className="h-1.5 w-1.5 rounded-full bg-success mr-2" />
-                    Valid JSON
-                  </span>
-                )}
-              </div>
-              <Textarea
-                id="manifest"
-                placeholder='{"name": "Agent Name", "version": "1.0.0", "capabilities": ["vision", "ocr"]}'
-                value={formData.manifest}
-                onChange={(e) => setFormData((prev) => ({ ...prev, manifest: e.target.value }))}
-                className="font-mono text-xs min-h-[180px]"
-                required
-              />
-            </div>
-
-            <div className="flex items-center gap-3 pt-2 pb-1">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTestConnection}
-                disabled={(serverType === "http" && !formData.endpoint) || (serverType === "stdio" && (!formData.command || !formData.args)) || isTestingConnection}
-                className="w-[180px] bg-transparent"
-              >
-                {isTestingConnection ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  "Test Connection"
-                )}
-              </Button>
-              {connectionStatus === "success" && (
-                <span className="text-sm text-success flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-success" />
-                  Connection successful
-                </span>
-              )}
-              {connectionStatus === "error" && (
-                <span className="text-sm text-destructive flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-destructive" />
-                  Connection failed
-                </span>
-              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
