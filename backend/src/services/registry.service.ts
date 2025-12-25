@@ -363,7 +363,11 @@ export class RegistryService {
       return this.transformToMCPFormat(updated)
     } else {
       // Create new server
+      // Generate a unique ID (use serverId as the ID since it's also unique)
+      const id = serverData.serverId
+      
       const createData: any = {
+        id: id, // Required by Prisma schema
         serverId: serverData.serverId,
         name: serverData.name,
         description: serverData.description,
