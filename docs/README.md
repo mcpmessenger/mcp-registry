@@ -12,6 +12,8 @@ Welcome to the SlashMCP.com documentation. All documentation is organized by top
 - **[Architecture Documentation](ARCHITECTURE.md)** - System architecture, components, and data flows
 - **[Strategic Roadmap](STRATEGIC_ROADMAP.md)** - Long-term vision, competitive positioning, and phased development plan
 - **[Event-Driven Architecture](EVENT_DRIVEN_ARCHITECTURE.md)** - Kafka event processing architecture
+- **[Tool Context Specification](TOOL_CONTEXT_SPECIFICATION.md)** - Tool responsibilities and output contexts
+- **[LangChain Agent Specification](LANGCHAIN_AGENT_SPEC.md)** - LangChain orchestrator requirements and capabilities
 
 ### Deployment
 - **[Deployment Guide](DEPLOYMENT.md)** - Production deployment to GCP Cloud Run and Vercel
