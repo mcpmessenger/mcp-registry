@@ -125,11 +125,27 @@ export default function RegistryPage() {
   const handleSaveAgent = async (data: Partial<MCPAgent> & { command?: string; args?: string; credentials?: string }) => {
     try {
       // Determine if this is HTTP or STDIO server
-      // Check if endpoint exists (HTTP) or if command/args exist (STDIO)
-      // If editing and endpoint exists in metadata but form doesn't have it, it's HTTP
-      const hasEndpoint = data.endpoint && data.endpoint.trim() !== '' && !data.endpoint.startsWith('stdio://')
+      // Priority: Check if endpoint exists in form data (HTTP) OR in existing server metadata
+      const hasEndpointInForm = data.endpoint && data.endpoint.trim() !== '' && !data.endpoint.startsWith('stdio://')
+      let hasEndpointInMetadata = false
+      if (editingAgent && editingAgent.metadata && typeof editingAgent.metadata === 'object') {
+        const metadata = editingAgent.metadata as Record<string, unknown>
+        hasEndpointInMetadata = typeof metadata.endpoint === 'string' && metadata.endpoint.trim() !== ''
+      }
+      const hasEndpoint = hasEndpointInForm || hasEndpointInMetadata
       const hasCommandArgs = (data as any).command && (data as any).args
+      
+      // HTTP if endpoint exists, STDIO if command/args exist and no endpoint
       const isStdioServer = hasCommandArgs && !hasEndpoint
+      
+      console.log('[Save Agent] Server type detection:', {
+        hasEndpointInForm,
+        hasEndpointInMetadata,
+        hasEndpoint,
+        hasCommandArgs,
+        isStdioServer: isStdioServer ? 'STDIO' : 'HTTP',
+        editingAgentId: editingAgent?.id
+      })
       
       // Validate based on server type
       if (!isStdioServer && (!data.endpoint || data.endpoint.trim() === '')) {
