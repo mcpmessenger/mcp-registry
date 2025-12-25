@@ -12,6 +12,7 @@ Welcome to the SlashMCP.com documentation. All documentation is organized by top
 - **[Architecture Documentation](ARCHITECTURE.md)** - System architecture, components, and data flows
 - **[Strategic Roadmap](STRATEGIC_ROADMAP.md)** - Long-term vision, competitive positioning, and phased development plan
 - **[Event-Driven Architecture](EVENT_DRIVEN_ARCHITECTURE.md)** - Kafka event processing architecture
+- **[MCP Discovery Pipeline](MCP_DISCOVERY_PIPELINE.md)** - Architecture for automatic MCP server discovery by orchestrators
 - **[Tool Context Specification](TOOL_CONTEXT_SPECIFICATION.md)** - Tool responsibilities and output contexts
 - **[LangChain Agent Specification](LANGCHAIN_AGENT_SPEC.md)** - LangChain orchestrator requirements and capabilities
 - **[LangChain Client Update: Iteration Limits](CLIENT_UPDATE_ITERATION_LIMITS.md)** - Latest update on iteration limit increases
