@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deployment script for MCP Registry Backend
+# Deployment script for SlashMCP.com Backend
 # Run this script from the backend directory in Google Cloud Shell
 
 PROJECT_ID="554655392699"
@@ -7,7 +7,7 @@ SERVICE_NAME="mcp-registry-backend"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
-echo "🚀 Deploying MCP Registry Backend to Cloud Run"
+echo "🚀 Deploying SlashMCP.com Backend to Cloud Run"
 echo "Project ID: ${PROJECT_ID}"
 echo "Service: ${SERVICE_NAME}"
 echo "Region: ${REGION}"

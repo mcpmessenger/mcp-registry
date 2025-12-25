@@ -1,6 +1,6 @@
 # Development Guide
 
-Complete guide for setting up and developing the MCP Registry platform.
+Complete guide for setting up and developing the SlashMCP.com platform.
 
 ## Prerequisites
 
@@ -307,6 +307,8 @@ Ensure `CORS_ORIGIN` in backend `.env` matches your frontend URL.
 - See [Deployment Guide](./DEPLOYMENT.md) for production setup
 - See [Architecture Documentation](./ARCHITECTURE.md) for system design
 - See [API Documentation](./API.md) for API reference
+
+
 
 
 

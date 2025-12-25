@@ -1,0 +1,25 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm install -g pnpm
+        - pnpm install
+    build:
+      commands:
+        - pnpm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
+      - pnpm-store/**/*
+      
+# Note: For Next.js on Amplify, you may need to configure:
+# - Environment variable: NEXT_PUBLIC_API_URL (set in Amplify console)
+# - Backend URL: https://mcp-registry-backend-554655392699.us-central1.run.app
+# Amplify will automatically detect Next.js and handle server-side rendering
+

@@ -80,10 +80,10 @@ The Gemini API has a **free tier** with limited quotas:
 2. Sign in with the same Google account
 3. View your current usage and limits
 
-## Update the Key in MCP Registry
+## Update the Key in SlashMCP.com
 
 ### Via UI:
-1. Go to your MCP Registry
+1. Go to SlashMCP.com
 2. Find "Nano Banana MCP" in the registry
 3. Click **Edit**
 4. In the **Credentials** field, paste your `AIza...` key

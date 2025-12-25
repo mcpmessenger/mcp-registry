@@ -142,7 +142,7 @@ async function testAPIKey() {
     console.log('   The Nano Banana MCP server handles this internally.');
     console.log('');
     console.log('💡 Next steps:');
-    console.log('   1. Update the key in MCP Registry UI');
+    console.log('   1. Update the key in SlashMCP.com UI');
     console.log('   2. Or update via API (see UPDATE_API_KEY.md)');
     
   } catch (error) {

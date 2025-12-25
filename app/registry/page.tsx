@@ -332,7 +332,7 @@ export default function RegistryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">MCP Agent Registry</h1>
-          <p className="text-muted-foreground mt-1">Manage and monitor your Model Context Protocol agents</p>
+          <p className="text-muted-foreground mt-1">Manage and monitor your Model Context Protocol agents on SlashMCP.com</p>
         </div>
         <Button className="gap-2" onClick={handleAddNew}>
           <Plus className="h-4 w-4" />

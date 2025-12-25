@@ -1,6 +1,6 @@
 # Documentation Index
 
-Welcome to the MCP Registry documentation. All documentation is organized by topic.
+Welcome to the SlashMCP.com documentation. All documentation is organized by topic.
 
 ## 📚 Core Documentation
 
@@ -50,6 +50,8 @@ docs/
 - See [API Documentation](API.md) for endpoint details
 - Review [Deployment Guide](DEPLOYMENT.md) for deployment problems
 - Open an issue on GitHub for questions
+
+
 
 
 
