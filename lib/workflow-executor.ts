@@ -29,6 +29,7 @@ export interface ToolInvocationResult {
  */
 async function invokeTool(invocation: ToolInvocation): Promise<ToolInvocationResult> {
   try {
+    // Use the backend API endpoint for tool invocation
     const response = await fetch('/api/mcp/tools/invoke', {
       method: 'POST',
       headers: {
