@@ -41,6 +41,10 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
   const hasWebsiteCheck = lowerContent.includes('check') && (lowerContent.includes('website') || lowerContent.includes('site') || lowerContent.includes('ticket') || lowerContent.includes('concert'))
   const hasUsingDomain = lowerContent.includes('using') && (lowerContent.includes('.com') || lowerContent.includes('ticketmaster') || lowerContent.includes('website'))
   const hasFindUsing = /find.*using/i.test(lowerContent) && (lowerContent.includes('.com') || lowerContent.includes('ticketmaster'))
+  const hasGoToWebsite = /go\s+to\s+[\w-]+(?:\.com|\.org|\.net)/i.test(content) ||
+                         /navigate\s+to\s+[\w-]+(?:\.com|\.org|\.net)/i.test(content) ||
+                         (lowerContent.includes('go to') && (lowerContent.includes('.com') || lowerContent.includes('ticketmaster'))) ||
+                         (lowerContent.includes('navigate') && (lowerContent.includes('.com') || lowerContent.includes('website')))
   
   if (
     lowerContent.includes('price') ||
@@ -56,9 +60,11 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     hasWebsiteCheck ||
     hasUsingDomain ||
     hasFindUsing ||
+    hasGoToWebsite ||
     lowerContent.includes('playwright') ||
     lowerContent.includes('browser') ||
-    lowerContent.includes('navigate')
+    lowerContent.includes('navigate') ||
+    lowerContent.includes('look for')
   ) {
     needs.push('Live Prices, Hidden Rules, Contact Details')
     if (!preferredTool) preferredTool = 'playwright'

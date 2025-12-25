@@ -144,6 +144,7 @@ export default function ChatPage() {
         // Auto-route based on content and attachment type
         let targetServer: MCPServer | null = null
         let toolName = "agent_executor"
+        let toolArgs: Record<string, unknown> = {}
         
         // Check for design/generation requests first
         if (isDesignRequest(content)) {
@@ -298,9 +299,16 @@ export default function ChatPage() {
           ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server')
           agentName = "Document Processing"
         } else {
-          // Check for explicit tool requests first (e.g., "use playwright to check ticketmaster")
+          // Check for explicit tool requests first (e.g., "use playwright to check ticketmaster", "go to ticketmaster.com")
           const lowerContent = content.toLowerCase()
-          if (lowerContent.includes('use playwright') || (lowerContent.includes('playwright') && lowerContent.includes('check'))) {
+          const isExplicitPlaywright = lowerContent.includes('use playwright') || 
+                                       (lowerContent.includes('playwright') && lowerContent.includes('check'))
+          const isGoToWebsite = /go\s+to\s+[\w-]+(?:\.com|\.org|\.net)/i.test(content) ||
+                                /navigate\s+to\s+[\w-]+(?:\.com|\.org|\.net)/i.test(content) ||
+                                (lowerContent.includes('go to') && (lowerContent.includes('.com') || lowerContent.includes('ticketmaster'))) ||
+                                (lowerContent.includes('navigate') && (lowerContent.includes('.com') || lowerContent.includes('website')))
+          
+          if (isExplicitPlaywright || isGoToWebsite) {
             const playwrightServer = availableServers.find(s => 
               s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
             )
@@ -309,16 +317,43 @@ export default function ChatPage() {
               agentName = "Playwright MCP Server"
               toolName = playwrightServer.tools?.[0]?.name || 'browser_navigate'
               
-              // Extract URL or query from content
+              // Extract URL from content
+              const urlMatch = content.match(/(https?:\/\/[^\s]+|[\w-]+\.(?:com|org|net|io))/i)
               const ticketmasterMatch = content.match(/ticketmaster/i)
-              if (ticketmasterMatch) {
+              
+              if (urlMatch) {
+                // Extract URL from match
+                let url = urlMatch[1]
+                if (!url.startsWith('http')) {
+                  url = `https://www.${url}`
+                }
+                toolArgs = {
+                  url: url,
+                }
+                
+                // If there's a search query (e.g., "look for iration tickets")
+                const searchMatch = content.match(/(?:look for|search for|find|get)\s+(.+?)(?:\.|$)/i)
+                if (searchMatch) {
+                  toolArgs.query = searchMatch[1].trim()
+                }
+              } else if (ticketmasterMatch) {
                 // User wants to check Ticketmaster
-                const concertMatch = content.match(/LCD Soundsystem|concert|schedule/i)
                 toolArgs = {
                   url: 'https://www.ticketmaster.com',
-                  query: concertMatch ? 'LCD Soundsystem New York' : undefined,
+                }
+                
+                // Extract search query if present
+                const searchMatch = content.match(/(?:look for|search for|find)\s+(.+?)(?:\.|$)/i)
+                if (searchMatch) {
+                  toolArgs.query = searchMatch[1].trim()
+                } else {
+                  const concertMatch = content.match(/LCD Soundsystem|concert|schedule/i)
+                  if (concertMatch) {
+                    toolArgs.query = 'LCD Soundsystem New York'
+                  }
                 }
               } else {
+                // Generic query
                 toolArgs = {
                   query: content,
                 }
