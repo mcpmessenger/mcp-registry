@@ -63,7 +63,10 @@ router.post('/generate', async (req, res) => {
             console.log(`[Design Generate] Server ${server.serverId} has no tools, attempting discovery`)
             await registryService.discoverToolsForServer(server.serverId)
             // Refresh server data
-            server = await registryService.getServerById(validated.serverId)
+            const refreshedServer = await registryService.getServerById(validated.serverId)
+            if (refreshedServer) {
+              server = refreshedServer
+            }
           } catch (discoverError: any) {
             console.warn(`[Design Generate] Failed to discover tools for ${server.serverId}:`, discoverError?.message)
           }
