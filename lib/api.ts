@@ -351,6 +351,7 @@ export interface PublishServerRequest {
   tools?: MCPTool[]
   capabilities?: string[]
   manifest?: Record<string, unknown>
+  metadata?: Record<string, unknown> // HTTP headers, endpoint, etc.
 }
 
 export interface PublishServerResponse {
