@@ -183,18 +183,53 @@ export class NativeOrchestrator {
         }
       }
     } else {
-      // Single-step query
-      const routing = routeRequest(query, this.availableServers)
-      const toolContext = routing.toolContext || (routing.primaryServer ? getToolContext(routing.primaryServer.serverId) : null)
+      // Single-step query - check if it's actually a website check that needs Playwright
+      const lowerQuery = query.toLowerCase()
+      const isWebsiteCheck = lowerQuery.includes('using') && (lowerQuery.includes('.com') || lowerQuery.includes('ticketmaster') || lowerQuery.includes('check') || lowerQuery.includes('website'))
+      
+      // For website checks, prefer Playwright even if routing suggests LangChain
+      if (isWebsiteCheck) {
+        const playwrightServer = this.availableServers.find(s => 
+          s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+        )
+        
+        if (playwrightServer && playwrightServer.tools && playwrightServer.tools.length > 0) {
+          steps.push({
+            step: 1,
+            description: query,
+            requiredOutput: 'Live Prices, Hidden Rules, Contact Details',
+            toolContext: getToolContext('playwright') || null,
+            selectedServer: playwrightServer,
+            selectedTool: playwrightServer.tools[0].name,
+          })
+        } else {
+          // Fallback to routing if Playwright not available
+          const routing = routeRequest(query, this.availableServers)
+          const toolContext = routing.toolContext || (routing.primaryServer ? getToolContext(routing.primaryServer.serverId) : null)
 
-      steps.push({
-        step: 1,
-        description: query,
-        requiredOutput: toolContext?.outputContext || 'result',
-        toolContext: toolContext || null,
-        selectedServer: routing.primaryServer || null,
-        selectedTool: routing.primaryServer?.tools?.[0]?.name || null,
-      })
+          steps.push({
+            step: 1,
+            description: query,
+            requiredOutput: toolContext?.outputContext || 'result',
+            toolContext: toolContext || null,
+            selectedServer: routing.primaryServer || null,
+            selectedTool: routing.primaryServer?.tools?.[0]?.name || null,
+          })
+        }
+      } else {
+        // Standard routing
+        const routing = routeRequest(query, this.availableServers)
+        const toolContext = routing.toolContext || (routing.primaryServer ? getToolContext(routing.primaryServer.serverId) : null)
+
+        steps.push({
+          step: 1,
+          description: query,
+          requiredOutput: toolContext?.outputContext || 'result',
+          toolContext: toolContext || null,
+          selectedServer: routing.primaryServer || null,
+          selectedTool: routing.primaryServer?.tools?.[0]?.name || null,
+        })
+      }
     }
 
     return {
