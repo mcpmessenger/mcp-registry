@@ -387,7 +387,9 @@ steps = [
 ## References
 
 - [Playwright MCP Documentation](https://github.com/microsoft/playwright-mcp)
-- Current Playwright MCP HTTP Endpoint: (check registry for endpoint URL)
+- **Current Playwright MCP HTTP Endpoint**: `https://playwright-mcp-http-server-554655392699.us-central1.run.app/mcp`
+- **Source Repository**: https://github.com/mcpmessenger/playwright-mcp (HTTP wrapper)
+- **Original Playwright MCP**: https://github.com/microsoft/playwright-mcp (official Microsoft package)
 - [Playwright Locator API](https://playwright.dev/docs/locators)
 - [Playwright Accessibility Snapshot](https://playwright.dev/docs/accessibility-snapshot)
 
