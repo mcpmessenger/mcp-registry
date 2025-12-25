@@ -526,12 +526,24 @@ export default function ChatPage() {
                 }
                 toolArgs.url = url
               } else {
-                // Try common domains mentioned in query
-                const domainMatch = content.match(/(ticketmaster|google|amazon|facebook|twitter)/i)
+                // Try common domains mentioned in query (including ticket sites)
+                const domainMatch = content.match(/(ticketmaster|stubhub|seatgeek|ticketfly|axs|tickets|eventbrite|ticketweb|google|amazon|facebook|twitter)/i)
                 if (domainMatch) {
-                  toolArgs.url = `https://www.${domainMatch[1].toLowerCase()}.com`
+                  const domain = domainMatch[1].toLowerCase()
+                  // Map ticket sites to correct URLs
+                  const ticketSites: Record<string, string> = {
+                    'ticketmaster': 'https://www.ticketmaster.com',
+                    'stubhub': 'https://www.stubhub.com',
+                    'seatgeek': 'https://www.seatgeek.com',
+                    'ticketfly': 'https://www.ticketfly.com',
+                    'axs': 'https://www.axs.com',
+                    'tickets': 'https://www.ticketmaster.com', // Generic fallback
+                    'eventbrite': 'https://www.eventbrite.com',
+                    'ticketweb': 'https://www.ticketweb.com',
+                  }
+                  toolArgs.url = ticketSites[domain] || `https://www.${domain}.com`
                 } else {
-                  throw new Error(`browser_navigate requires a URL. Please specify a website (e.g., "go to ticketmaster.com")`)
+                  throw new Error(`browser_navigate requires a URL. Please specify a website (e.g., "go to stubhub.com")`)
                 }
               }
             }
