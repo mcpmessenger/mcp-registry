@@ -248,7 +248,24 @@ router.post('/generate', async (req, res) => {
         stack: mcpError?.stack?.substring(0, 500),
         name: mcpError?.name,
       })
-      // Fall through to native/fallback
+      
+      // If it's a quota/rate limit error, return a helpful error message
+      if (mcpError?.message?.includes('quota') || mcpError?.message?.includes('429') || mcpError?.message?.includes('rate limit')) {
+        return res.status(429).json({
+          success: false,
+          error: 'API Quota Exceeded',
+          message: mcpError.message,
+          note: 'The Gemini API quota has been exceeded. Please check your API key quota, wait for the rate limit to reset, or upgrade your plan.',
+        })
+      }
+      
+      // For other MCP errors, return a helpful message
+      return res.status(500).json({
+        success: false,
+        error: 'MCP Server Error',
+        message: mcpError?.message || 'Failed to generate design via MCP server',
+        note: 'The MCP server returned an error. Check the message for details.',
+      })
     }
     
     // Log why MCP routing didn't work

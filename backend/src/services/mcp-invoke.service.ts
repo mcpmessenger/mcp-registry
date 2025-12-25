@@ -309,6 +309,17 @@ export class MCPInvokeService {
             
             if (message.error) {
               reject(new Error(`MCP tool error: ${message.error.message || JSON.stringify(message.error)}`))
+            } else if (message.error) {
+              // Handle error response from MCP server
+              console.error(`[STDIO] MCP server returned error:`, JSON.stringify(message.error, null, 2))
+              const errorMessage = message.error.message || JSON.stringify(message.error)
+              
+              // Check if it's a Gemini API quota error
+              if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+                reject(new Error(`Gemini API quota exceeded: ${errorMessage.substring(0, 200)}. Please check your API key quota or wait for the rate limit to reset.`))
+              } else {
+                reject(new Error(`MCP tool error: ${errorMessage}`))
+              }
             } else if (message.result) {
               // Log the raw JSON-RPC result for debugging
               console.log(`[STDIO] ===== RAW JSON-RPC RESULT =====`)
