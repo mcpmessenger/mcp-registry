@@ -69,12 +69,17 @@ export default function ChatPage() {
   const [availableServers, setAvailableServers] = useState<MCPServer[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
-  // Fetch available servers on mount
+  // Fetch available servers on mount and register with native orchestrator
   useEffect(() => {
     async function loadAgents() {
       try {
         const servers = await getServers()
         setAvailableServers(servers)
+        
+        // Register servers with native orchestrator for workflow execution
+        const orchestrator = getNativeOrchestrator()
+        orchestrator.registerServers(servers)
+        console.log('[Native Orchestrator] Registered', servers.length, 'servers')
         
         // Transform servers to agent options
         const transformedAgents = transformServersToAgents(servers)
@@ -284,28 +289,66 @@ export default function ChatPage() {
           // Use intelligent routing based on tool context
           const routing = routeRequest(content, availableServers)
           
-          if (routing.primaryServer) {
-            // If orchestration is needed, ALWAYS prefer LangChain (even if primaryServer is found)
-            if (routing.orchestrationNeeded) {
-              const langchainServer = availableServers.find(s => 
-                s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
-              )
-              if (langchainServer) {
-                targetServer = langchainServer
-                agentName = "LangChain Orchestrator"
-              } else {
-                // Fallback to primary server if LangChain not available
-                targetServer = routing.primaryServer
-                const toolContext = getServerToolContext(routing.primaryServer)
-                agentName = toolContext?.tool || routing.primaryServer.name
+          // Check if native orchestration is available and needed
+          const orchestrator = getNativeOrchestrator()
+          const needsOrchestration = orchestrator.requiresOrchestration(content)
+          
+          if (needsOrchestration) {
+            // Use native orchestrator for complex multi-step workflows
+            try {
+              agentName = "Native Orchestrator"
+              
+              // Plan workflow
+              const plan = orchestrator.planWorkflow(content)
+              
+              // Display planning status
+              const planningMessage: ChatMessage = {
+                id: `planning-${Date.now()}`,
+                role: "assistant",
+                content: `🔀 **Planning workflow** (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''}):\n\n${plan.steps.map((s, i) => `${i + 1}. ${s.description} → ${s.toolContext?.tool || s.selectedServer?.name || 'Tool TBD'}`).join('\n')}`,
+                timestamp: new Date(),
+                agentName: agentName,
               }
-            } else {
-              // Simple single-step query, use the primary server
-              targetServer = routing.primaryServer
-              const toolContext = getServerToolContext(routing.primaryServer)
-              agentName = toolContext?.tool || routing.primaryServer.name
+              setMessages((prev) => [...prev, planningMessage])
+              
+              // Execute workflow
+              const workflowResult = await executeWorkflow(content, plan)
+              
+              if (workflowResult.success) {
+                // Format result from workflow
+                const resultText = typeof workflowResult.finalResult === 'object' 
+                  ? JSON.stringify(workflowResult.finalResult, null, 2)
+                  : String(workflowResult.finalResult || 'Workflow completed successfully')
+                
+                responseContent = `✅ **Workflow completed**\n\n${resultText}\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
+              } else {
+                responseContent = `❌ **Workflow failed**: ${workflowResult.error || 'Unknown error'}\n\n**Steps:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.error ? ` ✗ ${s.error}` : s.result ? ' ✓' : ''}`).join('\n')}`
+              }
+              
+              // Skip normal tool invocation, workflow result is ready
+              targetServer = null
+            } catch (workflowError) {
+              console.error('Native orchestration failed, falling back to LangChain:', workflowError)
+              // Fall through to LangChain fallback
+              if (routing.orchestrationNeeded) {
+                const langchainServer = availableServers.find(s => 
+                  s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
+                )
+                if (langchainServer) {
+                  targetServer = langchainServer
+                  agentName = "LangChain Orchestrator (Fallback)"
+                }
+              }
             }
-          } else {
+          }
+          
+          // Continue with normal routing if native orchestrator didn't handle it
+          if (!targetServer && routing.primaryServer) {
+            // Simple single-step query, use the primary server
+            targetServer = routing.primaryServer
+            const toolContext = getServerToolContext(routing.primaryServer)
+            agentName = toolContext?.tool || routing.primaryServer.name
+          } else if (!targetServer) {
             // Fallback to LangChain agent for general queries
             targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
                           availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
