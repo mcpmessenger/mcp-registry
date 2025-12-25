@@ -78,8 +78,16 @@ When LangChain agent orchestrates multi-tool queries:
 }
 ```
 
+## Troubleshooting
+
+If you're still getting 403 errors after configuring the API key:
+- See [Troubleshooting Guide](./TROUBLESHOOTING_GOOGLE_MAPS.md) for detailed steps
+- Use the debug endpoint: `GET /v0.1/debug/server/com.google/maps-mcp`
+- Check backend logs for "[HTTP] Google Maps API key present" message
+
 ## Related Documentation
 
+- [Troubleshooting Google Maps API Errors](./TROUBLESHOOTING_GOOGLE_MAPS.md)
 - [Google Maps Grounding Lite API](https://developers.google.com/maps/ai/grounding-lite)
 - [Google Cloud API Key Best Practices](https://cloud.google.com/docs/authentication/api-keys)
 - [Registry Service Documentation](./API.md)
