@@ -507,11 +507,24 @@ export default function ChatPage() {
               input: enhancedQuery,
             }
           } else {
-            // For other tools, pass content as appropriate argument
-            toolArgs = {
-              query: content,
-              text: content,
-              input: content,
+            // For Playwright tools that need URL, check if we already have toolArgs set
+            if (targetServer.serverId.includes('playwright') && toolArgs && Object.keys(toolArgs).length > 0) {
+              // Use existing toolArgs (already set from explicit detection)
+              // Ensure URL is present if it's a navigation tool
+              if (toolName.includes('navigate') && !toolArgs.url && toolArgs.query) {
+                // If we have a query but no URL, try to extract from query
+                const urlMatch = content.match(/([\w-]+\.(?:com|org|net|io))/i)
+                if (urlMatch) {
+                  toolArgs.url = `https://www.${urlMatch[1]}`
+                }
+              }
+            } else {
+              // For other tools, pass content as appropriate argument
+              toolArgs = {
+                query: content,
+                text: content,
+                input: content,
+              }
             }
           }
 
