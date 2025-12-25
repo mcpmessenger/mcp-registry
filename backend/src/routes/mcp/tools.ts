@@ -327,7 +327,6 @@ router.post('/generate', async (req, res) => {
             console.log('[Design Generate] Found image data in content array (type=image, has data)')
             return res.json({
               success: true,
-              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
               message: 'Design generated successfully via MCP server',
               imageData: item.data,
               mimeType: item.mimeType || 'image/png',
@@ -339,7 +338,6 @@ router.post('/generate', async (req, res) => {
             console.log('[Design Generate] Found image URL in content array (type=image, has url)')
             return res.json({
               success: true,
-              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
               message: 'Design generated successfully via MCP server',
               imageUrl: item.url,
               completed: true,
@@ -353,7 +351,6 @@ router.post('/generate', async (req, res) => {
           console.log('[Design Generate] Found resource URL in content array')
           return res.json({
             success: true,
-            jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             message: 'Design generated successfully via MCP server',
             imageUrl: item.url,
             completed: true,
@@ -375,7 +372,6 @@ router.post('/generate', async (req, res) => {
             console.log('[Design Generate] Found image URL in MCP response:', imageUrl)
             return res.json({
               success: true,
-              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
               message: 'Design generated successfully via MCP server',
               result: resultContent.text,
               imageUrl: imageUrl,
@@ -390,7 +386,6 @@ router.post('/generate', async (req, res) => {
             console.log('[Design Generate] Found base64 image in MCP response')
             return res.json({
               success: true,
-              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
               message: 'Design generated successfully via MCP server',
               result: resultContent.text,
               imageData: base64Match[0],
@@ -412,11 +407,10 @@ router.post('/generate', async (req, res) => {
             })
           }
           
-          // Otherwise, return the text result as completed
+          // Otherwise, return the text result as completed (no job ID needed for synchronous results)
           console.log('[Design Generate] Returning text result as completed')
           return res.json({
             success: true,
-            jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             message: 'Design generated via MCP server',
             result: resultContent.text,
             completed: true,
@@ -425,7 +419,7 @@ router.post('/generate', async (req, res) => {
         }
       
       // Fallback: Log what we got and return the raw result
-      const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
+      // If no image found, return as completed text result (no job ID)
       console.log('[Design Generate] ⚠️  No image found in MCP response!')
       console.log('[Design Generate] Content array length:', contentArray.length)
       console.log('[Design Generate] Returning raw result for debugging')
@@ -439,9 +433,9 @@ router.post('/generate', async (req, res) => {
       
       return res.json({
         success: true,
-        jobId: jobId,
         message: 'MCP server responded but no image was found in the response format we expected.',
         result: rawText || JSON.stringify(mcpResult),
+        completed: true, // Still completed, just no image
         debug: {
           contentItems: contentArray.length,
           contentTypes: contentArray.map((item: any) => item.type),
