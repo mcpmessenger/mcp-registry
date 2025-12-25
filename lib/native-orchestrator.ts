@@ -232,7 +232,21 @@ export class NativeOrchestrator {
    */
   requiresOrchestration(query: string): boolean {
     const intent = analyzeRoutingIntent(query)
-    return intent.requiresOrchestration || false
+    
+    // Also check for explicit multi-step indicators
+    const multiStepPatterns = [
+      /once you (?:have|find|get)/i,
+      /then (?:use|find|get)/i,
+      /after (?:finding|getting|having)/i,
+      /followed by/i,
+      /and then/i,
+      /please check.*then use/i,
+      /check.*and.*find/i,
+    ]
+    
+    const hasMultiStep = multiStepPatterns.some(pattern => pattern.test(query))
+    
+    return intent.requiresOrchestration || hasMultiStep || intent.needs.length > 1
   }
 
   /**

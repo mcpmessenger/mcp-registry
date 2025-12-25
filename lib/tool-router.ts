@@ -79,9 +79,19 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     'use that to',
     'use it to',
     'with that',
+    'please check',
+    'check.*then',
+    'check.*and.*find',
   ]
   
-  const hasMultiStep = multiStepIndicators.some(indicator => lowerContent.includes(indicator))
+  const hasMultiStep = multiStepIndicators.some(indicator => {
+    if (indicator.includes('.*')) {
+      // Regex pattern
+      const regex = new RegExp(indicator, 'i')
+      return regex.test(lowerContent)
+    }
+    return lowerContent.includes(indicator)
+  })
   
   if (
     needs.length > 1 ||
