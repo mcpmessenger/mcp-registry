@@ -32,6 +32,44 @@ router.get('/servers', async (req, res, next) => {
   }
 })
 
+// Debug endpoint - simple and direct
+router.get('/debug/server/:serverId', async (req, res, next) => {
+  try {
+    const { serverId } = req.params
+    const server = await registryService.getServerById(serverId)
+    
+    if (!server) {
+      return res.status(404).json({ success: false, error: `Server ${serverId} not found` })
+    }
+
+    const metadata = server.metadata as Record<string, unknown> | undefined
+    const httpHeaders = metadata?.httpHeaders as Record<string, unknown> | undefined
+
+    res.json({
+      success: true,
+      server: {
+        serverId: server.serverId,
+        name: server.name,
+        endpoint: metadata?.endpoint,
+        hasMetadata: !!metadata,
+        hasHttpHeaders: !!httpHeaders,
+        httpHeaders: httpHeaders ? Object.keys(httpHeaders) : [],
+        httpHeadersPreview: httpHeaders ? Object.fromEntries(
+          Object.entries(httpHeaders).map(([key, value]) => [
+            key,
+            typeof value === 'string' && key.toLowerCase().includes('key')
+              ? `${String(value).substring(0, 10)}...` 
+              : value
+          ])
+        ) : null,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 /**
  * GET /v0.1/servers/:serverId
  * Get a specific server by ID
