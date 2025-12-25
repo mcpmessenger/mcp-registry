@@ -49,7 +49,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 })
 
 // Add debug route directly to main app first (before v0.1 router)
-app.get('/v0.1/debug/server/:serverId', async (req, res, next) => {
+// Use wildcard pattern to match serverId with dots and slashes
+app.get('/v0.1/debug/server/*', async (req, res, next) => {
   console.log('[Server] ===== DIRECT DEBUG ROUTE HIT =====')
   console.log('[Server] Method:', req.method)
   console.log('[Server] Path:', req.path)
@@ -57,7 +58,9 @@ app.get('/v0.1/debug/server/:serverId', async (req, res, next) => {
   console.log('[Server] Params:', req.params)
   console.log('[Server] ===================================')
   try {
-    const { serverId } = req.params
+    // Extract serverId from path after '/server/'
+    const serverId = req.path.replace('/v0.1/debug/server/', '')
+    console.log('[Server] Extracted serverId:', serverId)
     const server = await registryService.getServerById(serverId)
     
     if (!server) {
