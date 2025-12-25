@@ -478,7 +478,13 @@ export default function ChatPage() {
           } catch (error) {
             console.error('Design generation error:', error)
             const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-            responseContent = `I encountered an issue: ${errorMessage}. Tool discovery may still be in progress. Please try again in a few seconds.`
+            
+            // Check for quota errors
+            if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+              responseContent = `⚠️ **API Quota Exceeded**: The Gemini API free tier has very limited quotas for image generation. The model \`gemini-2.5-flash-preview-image\` requires a paid plan.\n\n**Options:**\n1. Wait for quota reset (check: https://ai.dev/usage?tab=rate-limit)\n2. Upgrade to a paid Gemini API plan\n3. Try again later`
+            } else {
+              responseContent = `I encountered an issue: ${errorMessage}. Tool discovery may still be in progress. Please try again in a few seconds.`
+            }
           }
         } else if (server && server.tools && server.tools.length > 0) {
           agentName = selectedAgent?.name
@@ -581,10 +587,18 @@ export default function ChatPage() {
         errorStack: error instanceof Error ? error.stack : undefined,
       })
       
+      // Format quota errors nicely
+      let displayMessage = errorMessage
+      if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('exceeded')) {
+        displayMessage = `⚠️ **API Quota Exceeded**: The Gemini API free tier has very limited quotas for image generation. The model \`gemini-2.5-flash-preview-image\` requires a paid plan.\n\n**Options:**\n1. Wait for quota reset (check: https://ai.dev/usage?tab=rate-limit)\n2. Upgrade to a paid Gemini API plan\n3. Try again later`
+      } else if (!errorMessage.includes('⚠️')) {
+        displayMessage = `Sorry, I encountered an error: ${errorMessage}. Please try again or select a different agent. If this persists, the agent may be unavailable or misconfigured.`
+      }
+      
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: `Sorry, I encountered an error: ${errorMessage}. Please try again or select a different agent. If this persists, the agent may be unavailable or misconfigured.`,
+        content: displayMessage,
         timestamp: new Date(),
       }
 
