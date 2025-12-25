@@ -4,6 +4,7 @@ import type { ChatMessage } from "@/types/chat"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { FileText, ImageIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useState, useEffect } from "react"
 
 interface ChatMessageProps {
   message: ChatMessage
@@ -11,6 +12,48 @@ interface ChatMessageProps {
 
 export function ChatMessageComponent({ message }: ChatMessageProps) {
   const isUser = message.role === "user"
+  const [imageSrc, setImageSrc] = useState<string | null>(null)
+
+  // Convert base64 image data to blob URL to avoid 414 errors
+  useEffect(() => {
+    if (message.imageData) {
+      // Check if it's already a data URI
+      if (message.imageData.startsWith('data:')) {
+        // If it's a data URI, convert to blob URL
+        try {
+          const base64Data = message.imageData.split(',')[1] || message.imageData
+          const mimeMatch = message.imageData.match(/data:([^;]+);base64/)
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/png'
+          
+          // Convert base64 to binary
+          const binaryString = atob(base64Data)
+          const bytes = new Uint8Array(binaryString.length)
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i)
+          }
+          
+          // Create blob and URL
+          const blob = new Blob([bytes], { type: mimeType })
+          const blobUrl = URL.createObjectURL(blob)
+          setImageSrc(blobUrl)
+          
+          // Cleanup on unmount
+          return () => {
+            URL.revokeObjectURL(blobUrl)
+          }
+        } catch (error) {
+          console.error('Error converting base64 to blob:', error)
+          // Fallback to direct data URI if conversion fails
+          setImageSrc(message.imageData)
+        }
+      } else {
+        // Assume it's raw base64, add data URI prefix
+        setImageSrc(`data:image/png;base64,${message.imageData}`)
+      }
+    } else if (message.imageUrl) {
+      setImageSrc(message.imageUrl)
+    }
+  }, [message.imageData, message.imageUrl])
 
   return (
     <div className={cn("flex gap-3 py-4", isUser ? "justify-end" : "justify-start")}>
@@ -48,22 +91,16 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
           {message.content}
           
           {/* Display image if available */}
-          {message.imageUrl && (
+          {imageSrc && (
             <div className="mt-3 rounded-lg overflow-hidden">
               <img 
-                src={message.imageUrl} 
+                src={imageSrc} 
                 alt="Generated design" 
                 className="max-w-full h-auto rounded-lg"
-              />
-            </div>
-          )}
-          
-          {message.imageData && (
-            <div className="mt-3 rounded-lg overflow-hidden">
-              <img 
-                src={message.imageData} 
-                alt="Generated design" 
-                className="max-w-full h-auto rounded-lg"
+                onError={(e) => {
+                  console.error('Image failed to load:', e)
+                  setImageSrc(null)
+                }}
               />
             </div>
           )}
