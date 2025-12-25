@@ -33,8 +33,9 @@ app.get('/health', (req: Request, res: Response) => {
 })
 
 // API routes
-app.use('/v0.1', v0ServersRouter)
+// More specific routes must come before less specific ones
 app.use('/v0.1/debug', debugRouter)
+app.use('/v0.1', v0ServersRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/documents', documentsRouter)
 
