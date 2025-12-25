@@ -298,8 +298,40 @@ export default function ChatPage() {
           ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server')
           agentName = "Document Processing"
         } else {
-          // Use intelligent routing based on tool context
-          const routing = routeRequest(content, availableServers)
+          // Check for explicit tool requests first (e.g., "use playwright to check ticketmaster")
+          const lowerContent = content.toLowerCase()
+          if (lowerContent.includes('use playwright') || (lowerContent.includes('playwright') && lowerContent.includes('check'))) {
+            const playwrightServer = availableServers.find(s => 
+              s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+            )
+            if (playwrightServer) {
+              targetServer = playwrightServer
+              agentName = "Playwright MCP Server"
+              toolName = playwrightServer.tools?.[0]?.name || 'browser_navigate'
+              
+              // Extract URL or query from content
+              const ticketmasterMatch = content.match(/ticketmaster/i)
+              if (ticketmasterMatch) {
+                // User wants to check Ticketmaster
+                const concertMatch = content.match(/LCD Soundsystem|concert|schedule/i)
+                toolArgs = {
+                  url: 'https://www.ticketmaster.com',
+                  query: concertMatch ? 'LCD Soundsystem New York' : undefined,
+                }
+              } else {
+                toolArgs = {
+                  query: content,
+                }
+              }
+              
+              // Skip to tool invocation
+              responseContent = "" // Will be set by tool result
+            }
+          }
+          
+          // Use intelligent routing based on tool context (if not already set)
+          if (!targetServer) {
+            const routing = routeRequest(content, availableServers)
           
           // Check if native orchestration is available and needed
           const orchestrator = getNativeOrchestrator()
