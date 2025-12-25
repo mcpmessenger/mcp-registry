@@ -1,45 +1,29 @@
-feat: Add Server Identity Verification, Task Management Dashboard, and Trust Scoring Engine
+feat: Rebrand to SlashMCP.com and add slash commands
 
-Major upgrades implementing three key features:
+Major updates including rebranding, new features, and Amplify deployment prep:
 
-✨ Server Identity Verification (SEP-1302)
-- Implemented /.well-known/mcp-server-identity standard
-- Automatic identity verification on server registration
-- Cryptographic signature verification infrastructure
-- Database fields: identityPublicKey, identitySignature, identityVerified
+🎨 Rebranding
+- Updated all branding from "MCP Registry" to "SlashMCP.com"
+- Changed favicon to use logo.png
+- Updated navigation, metadata, and documentation
 
-📊 Task Management Dashboard (SEP-1686)
-- New /tasks route for monitoring durable requests
-- Real-time task tracking with auto-refresh
-- Task filtering by server, status, and type
-- API endpoints: /api/tasks/* for task management
-- New DurableTask model for async operation tracking
+⚡ New Features
+- Added slash commands (/) in chat to quickly switch between MCP servers
+- Chat is now the default landing page (redirects from / to /chat)
+- Registry moved to /registry route
+- New SlashCommandMenu component with keyboard navigation
 
-🔒 Trust Scoring Engine
-- Security scanning infrastructure
-- npm audit integration (ready for implementation)
-- LLM-based code analysis (ready for implementation)
-- Security score (0-100) tracking per server
-- API endpoints: /api/security/* for scanning and scores
-
-🎨 UI Improvements
-- Fixed background gradient issues in registry view
-- Changed default landing page to Chat (/)
-- Moved registry to /registry route
-- Added Progress component for task dashboard
+🚀 Amplify Deployment
+- Added amplify.yml build configuration
+- Updated API detection for AWS Amplify environment
+- Created AMPLIFY_SETUP.md deployment guide
 
 📝 Documentation
-- Updated README with new features and API endpoints
-- Comprehensive feature documentation
+- Updated README and all docs with SlashMCP.com branding
+- Added Amplify deployment instructions
 
-🗄️ Database
-- Migration: add_identity_tasks_security
-- New fields on McpServer model
-- New DurableTask model
-
-
-
-
-
-
-
+🔄 Code Changes
+- New components: slash-command-menu.tsx, popover.tsx
+- Updated ChatInput to detect "/" and show server menu
+- Enhanced navigation with proper route handling
+- Updated environment detection for multiple deployment platforms
