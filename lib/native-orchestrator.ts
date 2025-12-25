@@ -208,8 +208,58 @@ export class NativeOrchestrator {
    * Select tools for a specific step
    */
   selectToolsForStep(step: WorkflowStep): Array<{ server: MCPServer; tool: string }> {
+    // If step already has server and tool selected, use them
     if (step.selectedServer && step.selectedTool) {
+      // But verify it's the right tool type
+      const description = step.description.toLowerCase()
+      const isPlaywrightNeeded = description.includes('check') && (description.includes('website') || description.includes('site') || description.includes('ticket') || description.includes('concert') || description.includes('playwright'))
+      const isMapsNeeded = description.includes('google maps') || description.includes('car rental') || description.includes('closest') || description.includes('near')
+      
+      // Override if wrong tool selected
+      if (isPlaywrightNeeded && !step.selectedServer.serverId.includes('playwright')) {
+        // Find Playwright server
+        const playwrightServer = this.availableServers.find(s => 
+          s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+        )
+        if (playwrightServer && playwrightServer.tools && playwrightServer.tools.length > 0) {
+          return [{ server: playwrightServer, tool: playwrightServer.tools[0].name }]
+        }
+      }
+      
+      if (isMapsNeeded && !step.selectedServer.serverId.includes('maps')) {
+        // Find Google Maps server
+        const mapsServer = this.availableServers.find(s => 
+          s.serverId.includes('maps') || s.name.toLowerCase().includes('maps')
+        )
+        if (mapsServer && mapsServer.tools && mapsServer.tools.length > 0) {
+          return [{ server: mapsServer, tool: mapsServer.tools[0].name }]
+        }
+      }
+      
       return [{ server: step.selectedServer, tool: step.selectedTool }]
+    }
+
+    // Fallback: find tools by description keywords first
+    const description = step.description.toLowerCase()
+    
+    // Check for Playwright needs
+    if (description.includes('check') && (description.includes('website') || description.includes('site') || description.includes('ticket') || description.includes('concert') || description.includes('playwright'))) {
+      const playwrightServer = this.availableServers.find(s => 
+        s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+      )
+      if (playwrightServer && playwrightServer.tools && playwrightServer.tools.length > 0) {
+        return [{ server: playwrightServer, tool: playwrightServer.tools[0].name }]
+      }
+    }
+    
+    // Check for Google Maps needs
+    if (description.includes('google maps') || description.includes('car rental') || description.includes('closest') || description.includes('near')) {
+      const mapsServer = this.availableServers.find(s => 
+        s.serverId.includes('maps') || s.name.toLowerCase().includes('maps')
+      )
+      if (mapsServer && mapsServer.tools && mapsServer.tools.length > 0) {
+        return [{ server: mapsServer, tool: mapsServer.tools[0].name }]
+      }
     }
 
     // Fallback: find tools by output context
@@ -221,7 +271,9 @@ export class NativeOrchestrator {
         })
         .map(({ server, tool }) => ({ server, tool: tool.name }))
 
-      return matching
+      if (matching.length > 0) {
+        return matching
+      }
     }
 
     return []
