@@ -1,6 +1,8 @@
 import { prisma } from '../config/database'
 import { serverIdentityService } from './server-identity.service'
 import type { MCPServer, MCPTool } from '../types/mcp'
+import { spawn } from 'child_process'
+import { spawn } from 'child_process'
 
 interface GetServersOptions {
   search?: string
@@ -399,8 +401,166 @@ export class RegistryService {
         data: createData,
       })
 
+      // For STDIO servers, discover tools after registration
+      if (serverData.command && serverData.args) {
+        try {
+          console.log(`[Registry] Discovering tools for STDIO server: ${serverData.serverId}`)
+          const discoveredTools = await this.discoverStdioTools(serverData)
+          if (discoveredTools && discoveredTools.length > 0) {
+            console.log(`[Registry] Discovered ${discoveredTools.length} tools for ${serverData.serverId}`)
+            // Update server with discovered tools
+            await prisma.mcpServer.update({
+              where: { serverId: serverData.serverId },
+              data: {
+                tools: JSON.stringify(discoveredTools),
+              },
+            })
+            // Return updated server with tools
+            const updatedServer = await prisma.mcpServer.findUnique({
+              where: { serverId: serverData.serverId },
+            })
+            if (updatedServer) {
+              return this.transformToMCPFormat(updatedServer)
+            }
+          }
+        } catch (error) {
+          console.error(`[Registry] Failed to discover tools for ${serverData.serverId}:`, error)
+          // Continue even if tool discovery fails - server is still registered
+        }
+      }
+
       return this.transformToMCPFormat(server)
     }
+  }
+
+  /**
+   * Discover tools from a STDIO MCP server by spawning it and calling tools/list
+   */
+  private async discoverStdioTools(serverData: PublishServerData): Promise<MCPTool[]> {
+    return new Promise((resolve, reject) => {
+      if (!serverData.command || !serverData.args) {
+        resolve([])
+        return
+      }
+
+      const args = serverData.args
+      const env: Record<string, string> = { ...process.env }
+      if (serverData.env) {
+        Object.assign(env, serverData.env)
+      }
+
+      console.log(`[Tool Discovery] Spawning: ${serverData.command} ${args.join(' ')}`)
+      const proc = spawn(serverData.command, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true,
+        env,
+      })
+
+      let stdoutBuffer = ''
+      let requestId = 1
+      const timeout = 30000 // 30 second timeout for discovery
+      let timeoutId: NodeJS.Timeout
+      let initialized = false
+
+      // Handle stdout
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString()
+        const lines = stdoutBuffer.split('\n')
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const message = JSON.parse(line)
+              // Handle initialize response (requestId = 1)
+              if (message.id === 1 && !initialized) {
+                if (message.error) {
+                  clearTimeout(timeoutId)
+                  proc.kill()
+                  reject(new Error(`MCP initialize error: ${message.error.message || JSON.stringify(message.error)}`))
+                  return
+                }
+                if (message.result) {
+                  // Initialize successful, now request tools/list
+                  initialized = true
+                  requestId = 2
+                  const toolsListRequest = {
+                    jsonrpc: '2.0',
+                    id: requestId,
+                    method: 'tools/list',
+                    params: {},
+                  }
+                  proc.stdin?.write(JSON.stringify(toolsListRequest) + '\n')
+                }
+              }
+              // Handle tools/list response (requestId = 2)
+              else if (message.id === 2 && initialized) {
+                if (message.error) {
+                  clearTimeout(timeoutId)
+                  proc.kill()
+                  reject(new Error(`MCP tools/list error: ${message.error.message || JSON.stringify(message.error)}`))
+                  return
+                }
+                if (message.result) {
+                  // This is the tools/list response
+                  clearTimeout(timeoutId)
+                  proc.kill()
+                  const tools = message.result.tools || []
+                  resolve(tools)
+                  return
+                }
+              }
+            } catch (e) {
+              // Not a complete JSON message yet, continue accumulating
+            }
+          }
+        }
+      })
+
+      // Handle stderr
+      proc.stderr?.on('data', (data: Buffer) => {
+        const message = data.toString()
+        if (!message.includes('Downloading') && !message.includes('Installing')) {
+          console.log(`[Tool Discovery stderr]:`, message.trim())
+        }
+      })
+
+      // Handle errors
+      proc.on('error', (error) => {
+        clearTimeout(timeoutId)
+        reject(new Error(`Failed to spawn process: ${error.message}`))
+      })
+
+      proc.on('exit', (code) => {
+        clearTimeout(timeoutId)
+        if (code !== 0 && code !== null && !initialized) {
+          console.warn(`[Tool Discovery] Process exited with code ${code}`)
+        }
+      })
+
+      // Send initialize request
+      const initRequest = {
+        jsonrpc: '2.0',
+        id: requestId,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: {
+            name: 'mcp-registry-backend',
+            version: '1.0.0',
+          },
+        },
+      }
+
+      proc.stdin?.write(JSON.stringify(initRequest) + '\n')
+      proc.stdin?.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
+
+      // Set timeout
+      timeoutId = setTimeout(() => {
+        proc.kill()
+        console.warn(`[Tool Discovery] Timeout for ${serverData.serverId}`)
+        resolve([]) // Return empty array on timeout rather than rejecting
+      }, timeout)
+    })
   }
 
   /**
