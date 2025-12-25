@@ -6,6 +6,8 @@ export interface MCPAgent {
   lastActive: Date
   capabilities: string[]
   manifest: string
+  metadata?: Record<string, unknown>
+  httpHeaders?: string // JSON string of HTTP headers
   metrics?: {
     avgLatency: number
     p95Latency: number
