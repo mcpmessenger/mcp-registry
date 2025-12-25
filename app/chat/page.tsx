@@ -473,13 +473,19 @@ export default function ChatPage() {
         // (Design requests are handled above and responseContent is already set)
         if (!isDesignRequest(content) && targetServer && targetServer.tools && targetServer.tools.length > 0) {
           // Use agent_executor if available, otherwise use first tool
-          const executorTool = targetServer.tools.find(t => t.name === 'agent_executor')
-          toolName = executorTool ? 'agent_executor' : targetServer.tools[0].name
+          // BUT: If we already have toolName set from explicit detection, use that
+          if (!toolName) {
+            const executorTool = targetServer.tools.find(t => t.name === 'agent_executor')
+            toolName = executorTool ? 'agent_executor' : targetServer.tools[0].name
+          }
           
           console.log(`Routing to ${targetServer.name} using tool: ${toolName}`)
           
           // Prepare tool arguments based on tool type
-          let toolArgs: Record<string, unknown> = {}
+          // Only create new toolArgs if we don't already have them (from explicit detection)
+          if (!toolArgs || Object.keys(toolArgs).length === 0) {
+            toolArgs = {}
+          }
           
           if (toolName === 'agent_executor') {
             // For LangChain orchestrator, enhance the query to explicitly request tool usage
