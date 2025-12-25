@@ -1,5 +1,38 @@
 # Bug Bounty: Design Generation via STDIO MCP Server Hanging
 
+## 🔴 ROOT CAUSE IDENTIFIED (2025-12-24)
+
+### Primary Issue: Gemini API Quota Exceeded (429 Error)
+
+**Status**: ✅ **ROOT CAUSE CONFIRMED** - Not a code bug, but API quota limitation
+
+**Evidence from Direct Testing**:
+- Created `test-nano-banana-mcp.js` to test MCP server directly
+- MCP server protocol works correctly (initialize ✅, tool call ✅)
+- **Gemini API returns 429 error**: "You exceeded your current quota"
+- Model: `gemini-2.5-flash-preview-image`
+- Quota Type: Free Tier (very limited quotas)
+
+**Why Requests Appear to Hang**:
+- MCP server correctly returns error response with `"error"` field
+- Previous code only checked for `message.result`, not `message.error`
+- Error responses were not being handled, causing infinite polling
+- Frontend kept polling because no error was returned to stop it
+
+**Fix Applied**:
+- ✅ Now properly detects error responses (`message.error`)
+- ✅ Specifically detects quota/rate limit errors (429, quota, RESOURCE_EXHAUSTED)
+- ✅ Returns proper HTTP status codes (429 for quota errors)
+- ✅ Provides helpful error messages instead of hanging
+
+**Next Steps**:
+1. Update API key in Nano Banana MCP server registration
+2. Verify new key has available quota
+3. Test design generation - should work if quota available
+4. If quota still exceeded, will now show clear error message
+
+---
+
 ## 🎯 Objective
 
 Successfully generate design images through the MCP Registry by invoking the `generate_image` tool from the **Nano-Banana-MCP** server (an STDIO-based MCP server) and return the result to the frontend chat interface.
@@ -73,7 +106,10 @@ Successfully generate design images through the MCP Registry by invoking the `ge
 - Multiple `GET /api/mcp/tools/job/:jobId` requests (polling)
 - No final result returned
 
-**Hypothesis**: The STDIO tool invocation is not properly receiving or parsing the response from the MCP server.
+**Root Cause**: ✅ **CONFIRMED** - Gemini API quota exceeded (429 error)
+- MCP server returns error response, but code wasn't handling errors
+- Error responses caused infinite polling loop
+- **Fix**: Now properly detects and handles error responses
 
 ## 🔍 Debugging Information
 
@@ -123,17 +159,37 @@ Server → Client: {"jsonrpc":"2.0","id":2,"result":{...}}
 - `lib/api.ts` - API client functions
 - `backend/Dockerfile.debian` - Docker build configuration
 
-## 🚀 Next Steps to Try
+## 🚀 Next Steps to Resolve
+
+### Immediate Actions Required
+
+1. ✅ **Update API Key**: User has obtained new Gemini API key
+   - **Action**: Update `GEMINI_API_KEY` in Nano Banana MCP server registration
+   - **Location**: MCP Registry UI or via API PUT request
+   - **Status**: ⏳ Pending user action
+
+2. ✅ **Verify New Key Has Quota**: 
+   - Check quota at: https://ai.dev/usage?tab=rate-limit
+   - Ensure new key has available quota for `gemini-2.5-flash-preview-image` model
+   - **Note**: Free tier has very limited quotas - may need paid plan
+
+3. ✅ **Test After Key Update**:
+   - Deploy latest error handling fixes
+   - Test design generation request
+   - Should now see clear error message if quota still exceeded
+   - Should work if new key has available quota
+
+### Code Fixes Completed
 
 1. ✅ **Fix TypeScript Error**: Changed `requestId++` to `initRequestId` on line 333
-2. ✅ **Implement Line-Buffered Reading**: Replaced buffer accumulation with `readline` module for proper JSON-RPC message parsing
-3. ✅ **Add State Machine**: Implemented proper state management (`INITIALIZING` → `INITIALIZED` → `CALLING` → `COMPLETE`)
-4. ✅ **Fix Initialized Notification**: Now sends `notifications/initialized` AFTER receiving initialize response (not before)
-5. ✅ **Improve Stderr Logging**: All stderr output is now logged (except npm noise) to catch API errors
+2. ✅ **Implement Line-Buffered Reading**: Replaced buffer accumulation with `readline` module
+3. ✅ **Add State Machine**: Implemented proper state management
+4. ✅ **Fix Initialized Notification**: Now sends after receiving initialize response
+5. ✅ **Improve Stderr Logging**: All stderr output logged to catch API errors
 6. ✅ **Add Shell Mode**: Set `shell: true` for npx to work correctly
-7. ✅ **Enhanced Logging**: Log every JSON-RPC message received with truncated content
-8. **Test Deployment**: Deploy and test with actual design generation request
-9. **Monitor Cloud Run Logs**: Check logs for stderr output from Gemini API (401, 429, etc.)
+7. ✅ **Enhanced Logging**: Log every JSON-RPC message received
+8. ✅ **Error Response Handling**: Now properly detects and handles error responses
+9. ✅ **Quota Error Detection**: Specifically detects 429/quota errors and returns helpful messages
 
 ## 🔗 Related Resources
 
@@ -142,18 +198,52 @@ Server → Client: {"jsonrpc":"2.0","id":2,"result":{...}}
 - **Backend URL**: https://mcp-registry-backend-554655392699.us-central1.run.app
 - **Cloud Run Logs**: Available in Google Cloud Console
 
-## 💡 Potential Root Causes
+## 💡 Root Cause Analysis
 
-1. **JSON-RPC Parsing**: Buffer may not be split correctly on newlines
-2. **Response Format Mismatch**: Server may return different format than expected
-3. **Process Hanging**: Server process may be waiting for input or stuck
-4. **Environment Variables**: API key may not be passed correctly
-5. **Network/Timeout**: Cloud Run may have different timeout behavior
-6. **Buffer Accumulation**: May not handle large responses correctly
+### ✅ CONFIRMED: Gemini API Quota Exceeded
 
-## 📊 Test Cases
+**Evidence**:
+- Direct test of Nano Banana MCP server shows 429 error
+- Error message explicitly states: "You exceeded your current quota"
+- Free tier quotas for `gemini-2.5-flash-preview-image` are very limited
+- Model requires free tier quotas that may be exhausted
 
-### Test Case 1: Simple Tool Call
+**Why It Appeared to Hang**:
+- MCP server correctly returns error response
+- Previous code only checked for `message.result`, not `message.error`
+- Error responses were not being handled, causing infinite polling
+- Frontend kept polling because no error was returned
+
+### Other Potential Issues (Resolved)
+
+1. ✅ **JSON-RPC Parsing**: Fixed with `readline` module
+2. ✅ **Response Format**: Now handles both success and error responses
+3. ✅ **Process Hanging**: Fixed with proper state machine and timeouts
+4. ✅ **Environment Variables**: Verified API key is passed correctly
+5. ✅ **Error Handling**: Now properly detects and returns errors
+
+## 📊 Test Cases & Results
+
+### Test Case 1: Direct MCP Server Test ✅ COMPLETED
+**Command**: `node test-nano-banana-mcp.js`  
+**Result**: 
+- ✅ Initialize: Success
+- ✅ Tool Call: Success (protocol working)
+- ❌ Gemini API: 429 Quota Exceeded Error
+
+**Error Response Structure**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "error": {
+    "code": -32603,
+    "message": "MCP error -32603: Failed to generate image: {...429 error...}"
+  }
+}
+```
+
+### Test Case 2: Simple Design Request
 ```json
 {
   "toolName": "generate_image",
@@ -163,9 +253,9 @@ Server → Client: {"jsonrpc":"2.0","id":2,"result":{...}}
   }
 }
 ```
-**Expected**: Returns image URL within 30 seconds
+**Status**: ⏳ Pending - Waiting for new API key with available quota
 
-### Test Case 2: Complex Design Request
+### Test Case 3: Complex Design Request
 ```json
 {
   "toolName": "generate_image",
@@ -175,13 +265,59 @@ Server → Client: {"jsonrpc":"2.0","id":2,"result":{...}}
   }
 }
 ```
-**Expected**: Returns image URL within 60 seconds
+**Status**: ⏳ Pending - Waiting for new API key with available quota
+
+## 🔍 Testing Tools Created
+
+1. **`test-nano-banana-mcp.js`**: Direct STDIO MCP server test
+   - Spawns Nano Banana MCP server
+   - Tests initialize and tool call
+   - Shows exact JSON-RPC responses
+   - Identifies quota errors
+
+2. **`test-endpoint.ps1`**: Backend endpoint test
+   - Tests `/api/mcp/tools/generate` endpoint
+   - Shows backend response structure
+   - Useful for debugging after key update
+
+## 📋 Resolution Checklist
+
+- [x] Identify root cause (Gemini API quota exceeded)
+- [x] Fix error response handling in MCP invoke service
+- [x] Add quota error detection and helpful messages
+- [x] Create test scripts for debugging
+- [x] Improve logging for troubleshooting
+- [ ] **User Action Required**: Update API key in server registration
+- [ ] **User Action Required**: Verify new key has available quota
+- [ ] Test design generation with new API key
+- [ ] Verify images are returned correctly
+- [ ] Update status to "Resolved" once working
+
+## 🎯 Expected Outcome After Key Update
+
+Once the new API key is set and has available quota:
+
+1. **Request Flow**:
+   - User sends design request
+   - Backend routes to Nano Banana MCP
+   - MCP server calls Gemini API
+   - **Gemini API returns image** (instead of 429 error)
+   - MCP server returns image in JSON-RPC response
+   - Backend parses response and extracts image URL/data
+   - Frontend displays image
+
+2. **If Quota Still Exceeded**:
+   - Backend now returns clear error message
+   - Frontend shows: "Gemini API quota exceeded: ..."
+   - No more infinite polling
+   - User knows exactly what the issue is
 
 ---
 
-**Last Updated**: 2025-12-24
-**Status**: 🟡 In Progress - Implemented recommended fixes, awaiting deployment and testing
-**Priority**: 🔥 Critical - Core feature not working
+**Last Updated**: 2025-12-24  
+**Status**: 🔴 **ROOT CAUSE IDENTIFIED** - Gemini API Quota Exceeded (429 Error)  
+**Priority**: 🔥 Critical - Core feature not working  
+**Blocked By**: API key quota limits (user action required to update key)
 
 ## ✅ Recent Fixes Applied (2025-12-24)
 
