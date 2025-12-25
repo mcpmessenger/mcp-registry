@@ -60,3 +60,4 @@ backend/prisma/data/
 
 
 
+.env*.local

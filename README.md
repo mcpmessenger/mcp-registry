@@ -27,6 +27,7 @@ The MCP Registry is a platform designed to help developers discover, register, a
 - **Search & Filter**: Find services by name, endpoint, or status
 - **Service Management**: Create, update, and delete service entries
 - **Service Details**: View comprehensive information about each service
+- **One-Click Installation**: Install STDIO servers directly to Cursor or Claude Desktop with a single click
 - **Chat Interface**: Interact with MCP agents through a chat interface (default landing page)
 - **Voice Transcription**: Real-time voice-to-text using OpenAI Whisper API
 - **Document Analysis**: AI-powered analysis of PDFs, images, and text files using Google Gemini Vision
@@ -41,6 +42,13 @@ The MCP Registry is a platform designed to help developers discover, register, a
 - **Modern UI**: Built with Next.js and Tailwind CSS for a responsive experience
 
 ### 🆕 Latest Upgrades (December 2024)
+
+#### One-Click Installation
+- **Cursor Deep-Link Support**: Install STDIO servers directly to Cursor with automatic deep-link navigation
+- **Claude Desktop Clipboard**: One-click copy-to-clipboard for Claude Desktop configuration
+- **Smart Client Detection**: Automatically disables one-click options for HTTP servers (which require manual setup)
+- **Permissions Preview**: View server capabilities and permissions before installation
+- **Streamlined UX**: Bypasses generic dialog for supported clients, providing instant installation
 
 #### Image Generation with Nano Banana MCP
 - **Gemini-Powered Image Generation**: Full integration with Nano Banana MCP for AI image generation
@@ -184,15 +192,12 @@ npm start
 
 **Frontend (http://localhost:3000)**
 ```bash
-# If using the mcp-registry-main directory:
-cd mcp-registry-main
-pnpm install
-NEXT_PUBLIC_API_URL=http://localhost:3001 pnpm dev
-
-# Or from root:
+# From project root:
 pnpm install
 NEXT_PUBLIC_API_URL=http://localhost:3001 pnpm dev
 ```
+
+**Note:** The `.env.local` file is automatically created with `NEXT_PUBLIC_API_URL=http://localhost:3001` for local development.
 
 **Common env (backend)**
 ```env
@@ -291,10 +296,10 @@ Comprehensive documentation is available in the `docs/` directory:
 
 - **[Development Guide](docs/DEVELOPMENT.md)** - Complete setup and development workflow
 - **[API Documentation](docs/API.md)** - Complete API reference
-- **[Architecture Documentation](docs/ARCHITECTURE.md)** - System architecture overview
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment instructions
 - **[Event-Driven Architecture](docs/EVENT_DRIVEN_ARCHITECTURE.md)** - Kafka and event processing
-- **[Kafka Setup](docs/KAFKA_SETUP.md)** - Kafka configuration and setup
+- **[Testing Guide](docs/TESTING_ONE_CLICK_INSTALL.md)** - One-click installation feature testing
+- **[Strategic Roadmap](docs/STRATEGIC_ROADMAP.md)** - Long-term vision and strategy
 
 ## 💻 Development
 
@@ -412,7 +417,13 @@ Here's how to use the image generation feature:
 - Get a new key from [Google AI Studio](https://aistudio.google.com/apikey)
 - Keys must start with `AIza...`
 - Update via Registry UI or API
-- See [HOW_TO_GET_GEMINI_API_KEY.md](HOW_TO_GET_GEMINI_API_KEY.md) for details
+- See [docs/HOW_TO_GET_GEMINI_API_KEY.md](docs/HOW_TO_GET_GEMINI_API_KEY.md) for details
+
+### One-Click Installation Not Working
+- **HTTP servers**: One-click installation only works for STDIO servers (with commands). HTTP servers require manual configuration via the generic install dialog.
+- **Missing command**: Ensure the server has a `command` field configured (e.g., `npx`, `node`, `python`)
+- **Cursor not opening**: Verify Cursor is installed and the browser allows deep-link navigation
+- **Clipboard not working**: Ensure you're testing on `http://localhost` (clipboard API requires secure context)
 
 ### STDIO Server Not Working
 - Verify command and arguments are correct
