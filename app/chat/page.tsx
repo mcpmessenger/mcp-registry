@@ -116,6 +116,7 @@ export default function ChatPage() {
     try {
       let responseContent = ""
       let agentName: string | undefined = undefined
+      let generateResponse: any = null // Declare at function scope so it's accessible when creating message
 
       const isRouter = selectedAgentId === "router"
       
@@ -128,8 +129,6 @@ export default function ChatPage() {
         if (isDesignRequest(content)) {
           // Route to design generation API - will be updated with actual server name from response
           agentName = "Design Generator" // Temporary, will be replaced
-          
-          let generateResponse: any = null
           
           try {
             // Extract design details from the request
@@ -384,8 +383,6 @@ export default function ChatPage() {
           // Route to design generation API, but use the selected agent name
           agentName = selectedAgent?.name || "Design Generator"
           
-          let generateResponse: any = null
-          
           try {
             // Extract design details from the request
             const description = content
@@ -581,7 +578,7 @@ export default function ChatPage() {
       }
       
       // Add image data if this was a design generation response
-      if (isDesignRequest && generateResponse) {
+      if (isDesignRequest(content) && generateResponse) {
         if (generateResponse.imageUrl) {
           assistantMessage.imageUrl = generateResponse.imageUrl
         }
