@@ -114,3 +114,20 @@ Route:
 - Routing logic should match user intent to tool capabilities
 - LangChain should be used when multiple tools are needed
 
+## Limitations & Considerations
+
+### LangChain Orchestrator
+- **Iteration Limits**: Complex multi-step queries may hit iteration or time limits
+- **Recommendation**: For very complex queries, consider breaking them into smaller sub-queries
+- **Timeout**: Frontend timeout is 180 seconds; backend may have additional limits
+
+### Multi-Tool Queries
+When a query requires multiple tools (e.g., Search → Google Maps → Playwright → LangChain):
+1. The system routes to LangChain Orchestrator
+2. LangChain coordinates the sequence of tool calls
+3. If the sequence is too long, it may hit iteration limits
+4. In such cases, consider:
+   - Breaking the query into separate requests
+   - Increasing agent iteration limits in backend configuration
+   - Simplifying the query structure
+

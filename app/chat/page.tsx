@@ -366,6 +366,16 @@ export default function ChatPage() {
             responseContent = JSON.stringify(result, null, 2)
           }
 
+          // Check for iteration/time limit messages and add helpful context
+          if (responseContent && (
+            responseContent.toLowerCase().includes('iteration limit') || 
+            responseContent.toLowerCase().includes('time limit') ||
+            responseContent.toLowerCase().includes('stopped due to')
+          )) {
+            console.warn('[Chat] Agent hit limit:', responseContent)
+            responseContent = `${responseContent}\n\n💡 **Tip**: For complex multi-step queries, consider breaking them into smaller requests. The agent may need higher iteration limits for very complex tasks.`
+          }
+
           // Validate response is not empty
           if (!responseContent || responseContent.trim().length === 0) {
             throw new Error("The agent didn't return a valid response. Please try again or select a different agent.")

@@ -1,29 +1,8 @@
-feat: Rebrand to SlashMCP.com and add slash commands
+docs: Add iteration limit documentation and improve error handling
 
-Major updates including rebranding, new features, and Amplify deployment prep:
+- Updated TOOL_CONTEXT_SPECIFICATION.md with limitations section
+- Added helpful error messages when agents hit iteration/time limits
+- Documented best practices for complex multi-step queries
 
-🎨 Rebranding
-- Updated all branding from "MCP Registry" to "SlashMCP.com"
-- Changed favicon to use logo.png
-- Updated navigation, metadata, and documentation
-
-⚡ New Features
-- Added slash commands (/) in chat to quickly switch between MCP servers
-- Chat is now the default landing page (redirects from / to /chat)
-- Registry moved to /registry route
-- New SlashCommandMenu component with keyboard navigation
-
-🚀 Amplify Deployment
-- Added amplify.yml build configuration
-- Updated API detection for AWS Amplify environment
-- Created AMPLIFY_SETUP.md deployment guide
-
-📝 Documentation
-- Updated README and all docs with SlashMCP.com branding
-- Added Amplify deployment instructions
-
-🔄 Code Changes
-- New components: slash-command-menu.tsx, popover.tsx
-- Updated ChatInput to detect "/" and show server menu
-- Enhanced navigation with proper route handling
-- Updated environment detection for multiple deployment platforms
+This addresses cases where LangChain orchestrator hits iteration limits
+on complex multi-tool queries by providing clearer user feedback.
