@@ -455,6 +455,7 @@ export class MCPInvokeService {
   private getServerEnv(server: MCPServer): Record<string, string> {
     const env: Record<string, string> = {}
     
+    // First, get env from server.env (primary source)
     if (server.env && typeof server.env === 'object') {
       Object.assign(env, server.env)
     }
@@ -472,7 +473,20 @@ export class MCPInvokeService {
           env.GEMINI_API_KEY = String(authConfig.geminiApiKey)
         }
       }
+      // Also check if API key is directly in metadata
+      if (metadata.apiKey) {
+        env.GEMINI_API_KEY = String(metadata.apiKey)
+      }
     }
+    
+    // Ensure GEMINI_API_KEY is set if API_KEY exists (common alias)
+    if (env.API_KEY && !env.GEMINI_API_KEY) {
+      env.GEMINI_API_KEY = env.API_KEY
+    }
+    
+    // Log what we're returning for debugging
+    console.log(`[getServerEnv] Server ${server.serverId} env keys:`, Object.keys(env))
+    console.log(`[getServerEnv] GEMINI_API_KEY set: ${!!env.GEMINI_API_KEY}`)
     
     return env
   }
