@@ -333,12 +333,12 @@ export default function ChatPage() {
           if (!targetServer) {
             const routing = routeRequest(content, availableServers)
           
-          // Check if native orchestration is available and needed
-          const orchestrator = getNativeOrchestrator()
-          // Use enhanced content for orchestration detection (includes context)
-          const needsOrchestration = orchestrator.requiresOrchestration(enhancedContent || content)
+            // Check if native orchestration is available and needed
+            const orchestrator = getNativeOrchestrator()
+            // Use enhanced content for orchestration detection (includes context)
+            const needsOrchestration = orchestrator.requiresOrchestration(enhancedContent || content)
           
-          if (needsOrchestration) {
+            if (needsOrchestration) {
             // Use native orchestrator for complex multi-step workflows
             try {
               agentName = "Native Orchestrator"
@@ -416,20 +416,20 @@ export default function ChatPage() {
                 }
               }
             }
-          }
-          
-          // Continue with normal routing if native orchestrator didn't handle it
-          if (!targetServer && routing.primaryServer) {
-            // Simple single-step query, use the primary server
-            targetServer = routing.primaryServer
-            const toolContext = getServerToolContext(routing.primaryServer)
-            agentName = toolContext?.tool || routing.primaryServer.name
-          } else if (!targetServer) {
-            // Fallback to LangChain agent for general queries
-            targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
-                          availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
-                          availableServers[0]
-            agentName = "AI Assistant"
+            
+            // Continue with normal routing if native orchestrator didn't handle it
+            if (!targetServer && routing.primaryServer) {
+              // Simple single-step query, use the primary server
+              targetServer = routing.primaryServer
+              const toolContext = getServerToolContext(routing.primaryServer)
+              agentName = toolContext?.tool || routing.primaryServer.name
+            } else if (!targetServer) {
+              // Fallback to LangChain agent for general queries
+              targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
+                            availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
+                            availableServers[0]
+              agentName = "AI Assistant"
+            }
           }
         }
 
