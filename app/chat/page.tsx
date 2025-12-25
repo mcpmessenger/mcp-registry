@@ -21,7 +21,6 @@ const initialMessages: ChatMessage[] = [
     content:
       "Hello! I'm your MCP assistant. I can help you with vision analysis, data processing, document analysis, and more. How can I assist you today?",
     timestamp: new Date(Date.now() - 1000 * 60 * 5),
-    audioUrl: "https://example.com/tts/1.mp3",
   },
 ]
 

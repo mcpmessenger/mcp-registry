@@ -2,7 +2,6 @@
 
 import type { ChatMessage } from "@/types/chat"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { AudioPlayer } from "@/components/audio-player"
 import { FileText, ImageIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -57,12 +56,6 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
             }).format(message.timestamp)}
           </span>
         </div>
-
-        {message.audioUrl && !isUser && (
-          <div className="w-full max-w-sm">
-            <AudioPlayer audioUrl={message.audioUrl} />
-          </div>
-        )}
       </div>
 
       {isUser && (
