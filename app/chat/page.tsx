@@ -514,20 +514,38 @@ export default function ChatPage() {
               query: enhancedQuery,
               input: enhancedQuery,
             }
-          } else {
-            // For Playwright tools that need URL, check if we already have toolArgs set
-            if (targetServer.serverId.includes('playwright') && toolArgs && Object.keys(toolArgs).length > 0) {
-              // Use existing toolArgs (already set from explicit detection)
-              // Ensure URL is present if it's a navigation tool
-              if (toolName.includes('navigate') && !toolArgs.url && toolArgs.query) {
-                // If we have a query but no URL, try to extract from query
-                const urlMatch = content.match(/([\w-]+\.(?:com|org|net|io))/i)
-                if (urlMatch) {
-                  toolArgs.url = `https://www.${urlMatch[1]}`
+          } else if (toolName.includes('browser_navigate') || toolName.includes('navigate')) {
+            // For Playwright browser_navigate tool, ensure URL is present
+            // If toolArgs was already set (from explicit detection), preserve it
+            if (Object.keys(toolArgs).length === 0 || !toolArgs.url) {
+              // Extract URL from content
+              const urlMatch = content.match(/(https?:\/\/[^\s]+|[\w-]+\.(?:com|org|net|io))/i)
+              if (urlMatch) {
+                let url = urlMatch[1]
+                if (!url.startsWith('http')) {
+                  url = `https://www.${url}`
+                }
+                toolArgs.url = url
+              } else {
+                // Try common domains mentioned in query
+                const domainMatch = content.match(/(ticketmaster|google|amazon|facebook|twitter)/i)
+                if (domainMatch) {
+                  toolArgs.url = `https://www.${domainMatch[1].toLowerCase()}.com`
+                } else {
+                  throw new Error(`browser_navigate requires a URL. Please specify a website (e.g., "go to ticketmaster.com")`)
                 }
               }
-            } else {
-              // For other tools, pass content as appropriate argument
+            }
+            // Preserve or add search query if present
+            if (!toolArgs.query) {
+              const searchMatch = content.match(/(?:look for|search for|find|get)\s+(.+?)(?:\.|$)/i)
+              if (searchMatch) {
+                toolArgs.query = searchMatch[1].trim()
+              }
+            }
+          } else {
+            // For other tools, pass content as appropriate argument
+            if (Object.keys(toolArgs).length === 0) {
               toolArgs = {
                 query: content,
                 text: content,
