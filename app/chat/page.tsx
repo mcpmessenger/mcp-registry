@@ -16,6 +16,7 @@ import { invokeMCPTool } from "@/lib/api"
 import { routeRequest, getServerToolContext } from "@/lib/tool-router"
 import { getNativeOrchestrator } from "@/lib/native-orchestrator"
 import { executeWorkflow } from "@/lib/workflow-executor"
+import { getChatContextManager } from "@/lib/chat-context"
 
 const initialMessages: ChatMessage[] = [
   {
@@ -110,6 +111,17 @@ export default function ChatPage() {
   }, [messages])
 
   const handleSendMessage = async (content: string, attachment?: ChatMessage["contextAttachment"]) => {
+    // Add to chat context for follow-up questions
+    const contextManager = getChatContextManager()
+    contextManager.addMessage({
+      role: 'user',
+      content,
+      timestamp: new Date(),
+    })
+    
+    // Enhance query with context if it's a follow-up
+    const enhancedContent = contextManager.enhanceQueryWithContext(content)
+    
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -291,15 +303,19 @@ export default function ChatPage() {
           
           // Check if native orchestration is available and needed
           const orchestrator = getNativeOrchestrator()
-          const needsOrchestration = orchestrator.requiresOrchestration(content)
+          // Use enhanced content for orchestration detection (includes context)
+          const needsOrchestration = orchestrator.requiresOrchestration(enhancedContent || content)
           
           if (needsOrchestration) {
             // Use native orchestrator for complex multi-step workflows
             try {
               agentName = "Native Orchestrator"
               
-              // Plan workflow
-              const plan = orchestrator.planWorkflow(content)
+              // Plan workflow (use enhanced content with context)
+              const plan = orchestrator.planWorkflow(enhancedContent || content)
+              
+              // Generate workflow ID for context tracking
+              const workflowId = `workflow-${Date.now()}`
               
               // Display planning status
               const planningMessage: ChatMessage = {
@@ -321,8 +337,8 @@ export default function ChatPage() {
                 console.warn('[Native Orchestrator] Some steps missing tools:', plan.steps.filter(s => !s.selectedServer))
               }
               
-              // Execute workflow
-              const workflowResult = await executeWorkflow(content, plan)
+              // Execute workflow (use original content for execution, enhanced for planning)
+              const workflowResult = await executeWorkflow(enhancedContent || content, plan)
               
               if (workflowResult.success) {
                 // Format result from workflow
@@ -331,6 +347,19 @@ export default function ChatPage() {
                   : String(workflowResult.finalResult || 'Workflow completed successfully')
                 
                 responseContent = `✅ **Workflow completed**\n\n${resultText}\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
+                
+                // Store workflow result in context
+                contextManager.addMessage({
+                  role: 'assistant',
+                  content: responseContent,
+                  timestamp: new Date(),
+                  agentName: agentName,
+                  workflowId: workflowId,
+                  stepResults: workflowResult.steps.reduce((acc, s) => {
+                    if (s.result) acc[`step${s.step}`] = s.result
+                    return acc
+                  }, {} as Record<string, unknown>),
+                })
               } else {
                 responseContent = `❌ **Workflow failed**: ${workflowResult.error || 'Unknown error'}\n\n**Steps:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.error ? ` ✗ ${s.error}` : s.result ? ' ✓' : ''}`).join('\n')}`
               }
