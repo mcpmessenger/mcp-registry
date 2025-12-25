@@ -94,6 +94,23 @@ export class MCPInvokeService {
       const metadata = server.metadata as Record<string, unknown> | undefined
       const apiFormat = metadata?.apiFormat as string | undefined
 
+      // Extract HTTP headers from metadata (for API keys, auth, etc.)
+      const httpHeaders: Record<string, string> = {}
+      if (metadata?.httpHeaders && typeof metadata.httpHeaders === 'object') {
+        const headers = metadata.httpHeaders as Record<string, unknown>
+        for (const [key, value] of Object.entries(headers)) {
+          if (typeof value === 'string') {
+            httpHeaders[key] = value
+          }
+        }
+      }
+
+      // Build request headers - merge metadata headers with defaults
+      const requestHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...httpHeaders, // Metadata headers override defaults
+      }
+
       let response: Response
 
       if (apiFormat === 'custom' || endpoint.includes('/mcp/invoke')) {
@@ -103,24 +120,32 @@ export class MCPInvokeService {
           ? endpoint 
           : `${endpoint.replace(/\/$/, '')}/mcp/invoke`
 
+        console.log(`[HTTP] Invoking ${toolName} on ${server.serverId} at ${invokeUrl}`)
+        console.log(`[HTTP] Headers:`, Object.keys(requestHeaders).join(', '))
+        if (httpHeaders['X-Goog-Api-Key']) {
+          console.log(`[HTTP] Google Maps API key present: ${httpHeaders['X-Goog-Api-Key'].substring(0, 10)}...`)
+        }
+
         response = await fetch(invokeUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: requestHeaders,
           body: JSON.stringify({
             tool: toolName,
             arguments: toolArgs,
           }),
         })
       } else {
-        // Standard MCP JSON-RPC format
+        // Standard MCP JSON-RPC format (e.g., Google Maps Grounding Lite)
         // POST to endpoint with JSON-RPC request
+        console.log(`[HTTP] Invoking ${toolName} on ${server.serverId} at ${endpoint}`)
+        console.log(`[HTTP] Headers:`, Object.keys(requestHeaders).join(', '))
+        if (httpHeaders['X-Goog-Api-Key']) {
+          console.log(`[HTTP] Google Maps API key present: ${httpHeaders['X-Goog-Api-Key'].substring(0, 10)}...`)
+        }
+
         response = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: requestHeaders,
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 1,

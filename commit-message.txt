@@ -1,18 +1,10 @@
-docs: Add LangChain Agent Development Server Specification
+docs: Update LangChain spec with resolved iteration limit issues
 
-Comprehensive specification document for the LangChain agent dev server team
-covering requirements, capabilities, limitations, and recommended improvements.
+- Updated LANGCHAIN_AGENT_SPEC.md to reflect resolved iteration limits
+- Created CLIENT_UPDATE_ITERATION_LIMITS.md with deployment details
+- Marked Priority 1 improvement as completed
+- Updated performance requirements with current values (100 iterations, 180s timeout)
+- Added client-facing update document for easy reference
 
-Key sections:
-- Core responsibility and output context
-- Functional and performance requirements
-- Tool integration requirements
-- Current limitations and known issues
-- Recommended improvements (Priority 1-6)
-- Testing requirements
-- API contract
-- Monitoring and observability
-- Security considerations
-
-This addresses the iteration limit issues and provides clear guidance for
-improving the agent's ability to handle complex multi-step queries.
+Iteration limits increased from 10 → 100, execution timeout 120s → 180s,
+tool timeout 30s → 60s. Complex multi-step queries now complete successfully.
