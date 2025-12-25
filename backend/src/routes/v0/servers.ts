@@ -519,6 +519,7 @@ router.post('/invoke', async (req, res, next) => {
  */
 router.get('/debug/server/:serverId', async (req, res, next) => {
   try {
+    console.log('[Debug Route in Servers Router] Route matched! Path:', req.path, 'Params:', req.params, 'Original URL:', req.originalUrl)
     const { serverId } = req.params
     console.log('[Debug] Fetching server:', serverId)
     const server = await registryService.getServerById(serverId)

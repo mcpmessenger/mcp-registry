@@ -16,7 +16,7 @@ console.log('[Debug Router] Debug router initialized')
  * Returns detailed server information including metadata and HTTP headers
  */
 router.get('/server/:serverId', async (req, res) => {
-  console.log('[Debug Router] Route hit:', req.path, req.params)
+  console.log('[Debug Router] Route hit! Path:', req.path, 'Params:', req.params, 'Original URL:', req.originalUrl)
   try {
     const { serverId } = req.params
     const server = await registryService.getServerById(serverId)

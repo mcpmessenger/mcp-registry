@@ -35,9 +35,15 @@ app.get('/health', (req: Request, res: Response) => {
 // API routes
 // More specific routes must come before less specific ones
 console.log('[Server] Registering debug router at /v0.1/debug')
-app.use('/v0.1/debug', debugRouter)
+app.use('/v0.1/debug', (req, res, next) => {
+  console.log('[Server] Debug router middleware - Path:', req.path, 'Original URL:', req.originalUrl)
+  debugRouter(req, res, next)
+})
 console.log('[Server] Registering v0 servers router at /v0.1')
-app.use('/v0.1', v0ServersRouter)
+app.use('/v0.1', (req, res, next) => {
+  console.log('[Server] V0 router middleware - Path:', req.path, 'Original URL:', req.originalUrl)
+  v0ServersRouter(req, res, next)
+})
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/documents', documentsRouter)
 
