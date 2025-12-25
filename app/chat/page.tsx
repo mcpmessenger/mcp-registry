@@ -581,6 +581,15 @@ export default function ChatPage() {
               .filter(item => item.type === 'text' && item.text)
               .map(item => item.text)
               .join('\n\n')
+            
+            // Check for bot detection / 403 errors in Playwright responses
+            if (targetServer.serverId.includes('playwright') && 
+                (responseContent.includes('403') || 
+                 responseContent.includes('unusual behavior') ||
+                 responseContent.includes('Browsing Activity Has Been Paused') ||
+                 responseContent.includes('bot detection'))) {
+              responseContent = `⚠️ **Website Bot Detection**: ${responseContent}\n\n**Note**: Some websites like Ticketmaster have strong bot protection that blocks automated browsers. The page was accessed but may require:\n- Human verification\n- Different browser headers\n- Stealth techniques\n\nConsider using a different approach or trying again later.`
+            }
           } else if (typeof result === 'string') {
             responseContent = result
           } else {
