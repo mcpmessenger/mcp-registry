@@ -294,13 +294,17 @@ router.put('/servers/:serverId', authenticateUser, async (req, res, next) => {
     }))
 
     // Merge update data with existing server data, ensuring required fields are present
+    // For command/args: explicitly check if they're in updateData to allow clearing (null/undefined)
+    // Use 'command' in updateData to detect if it was explicitly provided (even if null/undefined)
     const server = await registryService.publishServer({
       serverId: decodedServerId,
       name: updateData.name || existingServer.name, // Ensure name is always provided
       description: updateData.description ?? existingServer.description,
       version: updateData.version || existingServer.version,
-      command: updateData.command ?? existingServer.command,
-      args: updateData.args ?? existingServer.args,
+      // Explicitly pass command/args if they're in the update data (even if null/undefined)
+      // This allows clearing STDIO mode when converting to HTTP
+      command: 'command' in updateData ? updateData.command : existingServer.command,
+      args: 'args' in updateData ? updateData.args : existingServer.args,
       env: updateData.env ?? existingServer.env,
       tools: normalizedTools ?? existingServer.tools,
       capabilities: updateData.capabilities ?? existingServer.capabilities,

@@ -270,9 +270,16 @@ export default function RegistryPage() {
         name,
         description: manifestData.description || (isStdioServer ? `${(data as any).command} ${(data as any).args}` : data.endpoint) || undefined,
         version: manifestData.version || "v0.1",
-        // For HTTP servers, explicitly set command/args to null to clear STDIO mode
-        command: isStdioServer ? (data as any).command : null,
-        args: isStdioServer ? args : null,
+        // For HTTP servers, explicitly set command/args to undefined (not null) to clear STDIO mode
+        // Only include command/args if it's STDIO
+        ...(isStdioServer ? {
+          command: (data as any).command,
+          args: args,
+        } : {
+          // HTTP servers: explicitly exclude command/args (undefined means clear/remove)
+          command: undefined,
+          args: undefined,
+        }),
         tools: manifestData.tools || [],
         capabilities: manifestData.capabilities || [],
         env: env,
