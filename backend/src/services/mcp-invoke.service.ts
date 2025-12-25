@@ -309,6 +309,20 @@ export class MCPInvokeService {
             if (message.error) {
               reject(new Error(`MCP tool error: ${message.error.message || JSON.stringify(message.error)}`))
             } else if (message.result) {
+              // Log the raw JSON-RPC result for debugging
+              console.log(`[STDIO] ===== RAW JSON-RPC RESULT =====`)
+              console.log(`[STDIO] Full message.result:`, JSON.stringify(message.result, null, 2))
+              console.log(`[STDIO] message.result.content:`, JSON.stringify(message.result.content, null, 2))
+              console.log(`[STDIO] message.result.content type:`, typeof message.result.content)
+              console.log(`[STDIO] message.result.content isArray:`, Array.isArray(message.result.content))
+              if (message.result.content && Array.isArray(message.result.content)) {
+                message.result.content.forEach((item: any, index: number) => {
+                  console.log(`[STDIO] Content item ${index}:`, JSON.stringify(item, null, 2))
+                  console.log(`[STDIO] Content item ${index} keys:`, Object.keys(item))
+                })
+              }
+              console.log(`[STDIO] =================================`)
+              
               // Convert MCP result to our format
               let content: InvokeToolResponse['result']['content'] = []
               
@@ -322,7 +336,16 @@ export class MCPInvokeService {
                 content = [{ type: 'text', text: JSON.stringify(message.result, null, 2) }]
               }
               
-              console.log(`[STDIO] Tool call completed for ${server.serverId}, result type: ${content[0]?.type || 'unknown'}`)
+              console.log(`[STDIO] Tool call completed for ${server.serverId}`)
+              console.log(`[STDIO] Converted content array length:`, content.length)
+              console.log(`[STDIO] First content item type:`, content[0]?.type || 'unknown')
+              console.log(`[STDIO] First content item has text:`, !!content[0]?.text)
+              console.log(`[STDIO] First content item has data:`, !!content[0]?.data)
+              console.log(`[STDIO] First content item has url:`, !!content[0]?.url)
+              if (content[0]?.text) {
+                console.log(`[STDIO] First content item text (first 500 chars):`, content[0].text.substring(0, 500))
+              }
+              
               resolve({
                 result: {
                   content,

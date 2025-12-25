@@ -262,16 +262,96 @@ router.post('/generate', async (req, res) => {
     
     // If MCP server handled it, return the result
     if (mcpServerUsed && mcpResult) {
-      console.log('[Design Generate] MCP server result received:', JSON.stringify(mcpResult, null, 2))
+      // Log the FULL response structure for debugging
+      console.log('[Design Generate] ===== MCP SERVER RESPONSE DEBUG =====')
+      console.log('[Design Generate] Full mcpResult:', JSON.stringify(mcpResult, null, 2))
+      console.log('[Design Generate] mcpResult.result:', JSON.stringify(mcpResult.result, null, 2))
+      console.log('[Design Generate] mcpResult.result?.content:', JSON.stringify(mcpResult.result?.content, null, 2))
+      if (mcpResult.result?.content && Array.isArray(mcpResult.result.content)) {
+        mcpResult.result.content.forEach((item: any, index: number) => {
+          console.log(`[Design Generate] Content item ${index}:`, JSON.stringify(item, null, 2))
+          console.log(`[Design Generate] Content item ${index} type:`, item.type)
+          console.log(`[Design Generate] Content item ${index} text (first 500 chars):`, item.text?.substring(0, 500))
+          console.log(`[Design Generate] Content item ${index} data (first 100 chars):`, item.data?.substring(0, 100))
+          console.log(`[Design Generate] Content item ${index} url:`, item.url)
+          console.log(`[Design Generate] Content item ${index} mimeType:`, item.mimeType)
+        })
+      }
+      console.log('[Design Generate] =====================================')
+      
+      // Get the server name for the response
+      let serverName = 'Design Generator' // Fallback
+      if (validated.serverId) {
+        const server = await registryService.getServerById(validated.serverId)
+        if (server) serverName = server.name
+      } else {
+        // Find which server was used (from auto-discovery)
+        const allServers = await registryService.getServers()
+        const usedServer = allServers.find(s => 
+          s.tools && s.tools.length > 0 && s.tools.some(t => 
+            t.name.includes('generate') || t.name.includes('design') || t.name.includes('image')
+          )
+        )
+        if (usedServer) serverName = usedServer.name
+      }
       
       // Check if result contains an image URL or data
-      const resultContent = mcpResult.result?.content?.[0]
-      if (resultContent) {
-        // Check for image URL in text response
-        if (resultContent.text) {
-          // Try to extract image URL from response
-          const urlMatch = resultContent.text.match(/https?:\/\/[^\s]+/i)
-          const imageUrl = urlMatch ? urlMatch[0] : null
+      // Try all content items, not just the first one
+      const contentArray = mcpResult.result?.content || []
+      console.log(`[Design Generate] Checking ${contentArray.length} content items for image data`)
+      
+      // First, check for direct image content items
+      for (const item of contentArray) {
+        console.log(`[Design Generate] Checking content item:`, { type: item.type, hasText: !!item.text, hasData: !!item.data, hasUrl: !!item.url })
+        
+        // Check for image type with data or URL
+        if (item.type === 'image') {
+          if (item.data) {
+            console.log('[Design Generate] Found image data in content array (type=image, has data)')
+            return res.json({
+              success: true,
+              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              message: 'Design generated successfully via MCP server',
+              imageData: item.data,
+              mimeType: item.mimeType || 'image/png',
+              completed: true,
+              serverName: serverName,
+            })
+          }
+          if (item.url) {
+            console.log('[Design Generate] Found image URL in content array (type=image, has url)')
+            return res.json({
+              success: true,
+              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              message: 'Design generated successfully via MCP server',
+              imageUrl: item.url,
+              completed: true,
+              serverName: serverName,
+            })
+          }
+        }
+        
+        // Check for resource type with URL
+        if (item.type === 'resource' && item.url) {
+          console.log('[Design Generate] Found resource URL in content array')
+          return res.json({
+            success: true,
+            jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            message: 'Design generated successfully via MCP server',
+            imageUrl: item.url,
+            completed: true,
+            serverName: serverName,
+          })
+        }
+      }
+      
+      // If no direct image found, check text content for URLs or base64
+      const resultContent = contentArray.find(item => item.text) || contentArray[0]
+      if (resultContent && resultContent.text) {
+        console.log('[Design Generate] Checking text content for image URLs or base64')
+        // Try to extract image URL from response
+        const urlMatch = resultContent.text.match(/https?:\/\/[^\s"']+/i)
+        const imageUrl = urlMatch ? urlMatch[0] : null
           
           // If we have an image URL, return it directly (synchronous result)
           if (imageUrl) {
@@ -283,6 +363,7 @@ router.post('/generate', async (req, res) => {
               result: resultContent.text,
               imageUrl: imageUrl,
               completed: true, // Indicate this is a completed result, not a job
+              serverName: serverName, // Include server name
             })
           }
           
@@ -297,6 +378,7 @@ router.post('/generate', async (req, res) => {
               result: resultContent.text,
               imageData: base64Match[0],
               completed: true,
+              serverName: serverName,
             })
           }
           
@@ -309,6 +391,7 @@ router.post('/generate', async (req, res) => {
               jobId: jobId,
               message: 'Design generation started via MCP server',
               result: resultContent.text,
+              serverName: serverName,
             })
           }
           
@@ -320,30 +403,37 @@ router.post('/generate', async (req, res) => {
             message: 'Design generated via MCP server',
             result: resultContent.text,
             completed: true,
+            serverName: serverName,
           })
         }
         
-        // Check for image in content array
-        if (resultContent.type === 'image' && resultContent.data) {
-          console.log('[Design Generate] Found image data in MCP response')
-          return res.json({
-            success: true,
-            jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-            message: 'Design generated successfully via MCP server',
-            imageData: resultContent.data,
-            completed: true,
-          })
-        }
       }
       
-      // Fallback: return generic job ID
+      // Fallback: Log what we got and return the raw result
       const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
-      console.log('[Design Generate] No parseable result, returning job ID:', jobId)
+      console.log('[Design Generate] ⚠️  No image found in MCP response!')
+      console.log('[Design Generate] Content array length:', contentArray.length)
+      console.log('[Design Generate] Returning raw result for debugging')
+      console.log('[Design Generate] Full result structure:', JSON.stringify(mcpResult, null, 2))
+      
+      // Return the raw text result so user can see what was returned
+      const rawText = contentArray
+        .filter(item => item.text)
+        .map(item => item.text)
+        .join('\n\n')
+      
       return res.json({
         success: true,
         jobId: jobId,
-        message: 'Design generation started via MCP server',
-        result: JSON.stringify(mcpResult),
+        message: 'MCP server responded but no image was found in the response format we expected.',
+        result: rawText || JSON.stringify(mcpResult),
+        debug: {
+          contentItems: contentArray.length,
+          contentTypes: contentArray.map((item: any) => item.type),
+          rawResponse: mcpResult,
+        },
+        serverName: serverName,
+        note: 'The MCP server returned a response, but it may be in a format we don\'t recognize. Check the result field for the actual response.',
       })
     }
 

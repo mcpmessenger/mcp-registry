@@ -83,6 +83,11 @@ export interface GenerateSVGResponse {
   jobId: string
   assetId?: string
   message: string
+  serverName?: string // Name of the MCP server that handled the request
+  completed?: boolean // True if result is immediate (synchronous)
+  imageUrl?: string // Image URL if completed synchronously
+  imageData?: string // Base64 image data if completed synchronously
+  result?: string // Result text
 }
 
 export interface RefineDesignRequest {

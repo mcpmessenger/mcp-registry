@@ -126,8 +126,8 @@ export default function ChatPage() {
         
         // Check for design/generation requests first
         if (isDesignRequest(content)) {
-          // Route to design generation API
-          agentName = "Design Generator"
+          // Route to design generation API - will be updated with actual server name from response
+          agentName = "Design Generator" // Temporary, will be replaced
           
           try {
             // Extract design details from the request
@@ -146,11 +146,16 @@ export default function ChatPage() {
               },
             })
             
+            // Use actual server name from response if available
+            if (generateResponse.serverName) {
+              agentName = generateResponse.serverName
+            }
+            
             // Check if result is already completed (synchronous MCP response)
-            if ((generateResponse as any).completed && ((generateResponse as any).imageUrl || (generateResponse as any).imageData)) {
+            if (generateResponse.completed && (generateResponse.imageUrl || generateResponse.imageData)) {
               // MCP server returned result immediately
-              const imageUrl = (generateResponse as any).imageUrl
-              const imageData = (generateResponse as any).imageData
+              const imageUrl = generateResponse.imageUrl
+              const imageData = generateResponse.imageData
               
               if (imageUrl) {
                 responseContent = `Your design is ready! View it here: ${imageUrl}`
@@ -158,7 +163,7 @@ export default function ChatPage() {
                 responseContent = `Your design is ready! [Image generated]`
                 // TODO: Display image data in chat
               } else {
-                responseContent = (generateResponse as any).result || generateResponse.message || "Design generated successfully!"
+                responseContent = generateResponse.result || generateResponse.message || "Design generated successfully!"
               }
             } else if (generateResponse.jobId) {
               // Async job - poll for completion
@@ -393,8 +398,27 @@ export default function ChatPage() {
               serverId: server.serverId, // Pass serverId so backend can discover tools
             })
             
+            // Use actual server name from response if available, otherwise use selected agent name
+            if (generateResponse.serverName) {
+              agentName = generateResponse.serverName
+            } else {
+              agentName = selectedAgent?.name || server.name || "Design Generator"
+            }
+            
             // Handle response (same as router mode)
-            if (generateResponse.jobId) {
+            if (generateResponse.completed && (generateResponse.imageUrl || generateResponse.imageData)) {
+              // Synchronous result
+              const imageUrl = generateResponse.imageUrl
+              const imageData = generateResponse.imageData
+              
+              if (imageUrl) {
+                responseContent = `Your design is ready! View it here: ${imageUrl}`
+              } else if (imageData) {
+                responseContent = `Your design is ready! [Image generated]`
+              } else {
+                responseContent = generateResponse.result || generateResponse.message || "Design generated successfully!"
+              }
+            } else if (generateResponse.jobId) {
               responseContent = `I've started creating your design! Job ID: ${generateResponse.jobId}. I'll notify you when it's ready.`
               
               // Poll for job completion (same logic as router mode)
