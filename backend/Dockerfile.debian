@@ -110,11 +110,19 @@ RUN npx --yes nano-banana-mcp --version || echo "nano-banana-mcp pre-install ski
 # But ensure it exists, regenerate if needed
 RUN npx prisma generate || echo "Prisma generate completed or skipped"
 
-# Create non-root user
-RUN groupadd -r nodejs && useradd -r -g nodejs nodejs
+# Create non-root user with home directory
+RUN groupadd -r nodejs && useradd -r -g nodejs -m -d /home/nodejs nodejs
+
+# Create npm cache directory and set permissions
+RUN mkdir -p /home/nodejs/.npm && \
+    chown -R nodejs:nodejs /home/nodejs
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
+
+# Set npm cache to writable location
+ENV NPM_CONFIG_CACHE=/home/nodejs/.npm
+ENV HOME=/home/nodejs
 
 USER nodejs
 
