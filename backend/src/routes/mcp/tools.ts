@@ -62,7 +62,14 @@ router.post('/generate', async (req, res) => {
           const serverIdForError = server.serverId // Store for error handling
           try {
             console.log(`[Design Generate] Server ${server.serverId} has no tools, attempting discovery`)
-            await registryService.discoverToolsForServer(server.serverId)
+            // Add a 15-second timeout to prevent hanging
+            const discoveryPromise = registryService.discoverToolsForServer(server.serverId)
+            const timeoutPromise = new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('Tool discovery timeout after 15 seconds')), 15000)
+            )
+            
+            await Promise.race([discoveryPromise, timeoutPromise])
+            
             // Refresh server data
             const refreshedServer = await registryService.getServerById(validated.serverId)
             if (refreshedServer) {
@@ -70,6 +77,10 @@ router.post('/generate', async (req, res) => {
             }
           } catch (discoverError: any) {
             console.warn(`[Design Generate] Failed to discover tools for ${serverIdForError}:`, discoverError?.message)
+            // Trigger discovery in background for next time (don't await)
+            registryService.discoverToolsForServer(serverIdForError).catch(err => 
+              console.warn(`[Design Generate] Background discovery failed for ${serverIdForError}:`, err?.message)
+            )
           }
         }
         
@@ -138,6 +149,7 @@ router.post('/generate', async (req, res) => {
         )
         
         // If no server with tools found, try STDIO servers that might need tool discovery
+        // Use Promise.race with a timeout to prevent hanging
         if (!designServer) {
           const stdioServers = allServers.filter(s => s.command && s.args)
           for (const server of stdioServers) {
@@ -145,7 +157,14 @@ router.post('/generate', async (req, res) => {
             if (!server.tools || server.tools.length === 0) {
               try {
                 console.log(`[Design Generate] Attempting to discover tools for ${server.serverId}`)
-                const discoveredTools = await registryService.discoverToolsForServer(server.serverId)
+                // Add a 15-second timeout to prevent hanging
+                const discoveryPromise = registryService.discoverToolsForServer(server.serverId)
+                const timeoutPromise = new Promise<never>((_, reject) => 
+                  setTimeout(() => reject(new Error('Tool discovery timeout after 15 seconds')), 15000)
+                )
+                
+                const discoveredTools = await Promise.race([discoveryPromise, timeoutPromise])
+                
                 if (discoveredTools && discoveredTools.length > 0) {
                   // Refresh server data
                   const refreshedServer = await registryService.getServerById(server.serverId)
@@ -163,6 +182,10 @@ router.post('/generate', async (req, res) => {
                 }
               } catch (discoverError: any) {
                 console.warn(`[Design Generate] Failed to discover tools for ${server.serverId}:`, discoverError?.message)
+                // Trigger discovery in background for next time (don't await)
+                registryService.discoverToolsForServer(server.serverId).catch(err => 
+                  console.warn(`[Design Generate] Background discovery failed for ${server.serverId}:`, err?.message)
+                )
                 // Continue to next server
               }
             }
