@@ -646,6 +646,16 @@ export class RegistryService {
       throw new Error(`Server ${serverId} not found`)
     }
 
+    // Emit discovery event before deletion
+    try {
+      const { createDiscoveryEvent, emitDiscoveryEvent } = await import('./mcp-discovery.service')
+      const event = createDiscoveryEvent('server.removed', { serverId })
+      await emitDiscoveryEvent(event)
+    } catch (error) {
+      console.warn('[Registry] Failed to emit discovery event for deletion:', error)
+      // Continue with deletion even if event emission fails
+    }
+
     // Soft delete by setting isActive to false
     await prisma.mcpServer.update({
       where: { serverId },
