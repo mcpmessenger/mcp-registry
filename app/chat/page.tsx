@@ -13,6 +13,7 @@ import { getServers, generateSVG, getJobStatus, createJobProgressStream } from "
 import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPServer } from "@/lib/api"
 import { invokeMCPTool } from "@/lib/api"
+import { routeRequest, getServerToolContext } from "@/lib/tool-router"
 
 const initialMessages: ChatMessage[] = [
   {
@@ -278,11 +279,31 @@ export default function ChatPage() {
           ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server')
           agentName = "Document Processing"
         } else {
-          // Route to LangChain agent for general queries
-          targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
-                        availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
-                        availableServers[0]
-          agentName = "AI Assistant"
+          // Use intelligent routing based on tool context
+          const routing = routeRequest(content, availableServers)
+          
+          if (routing.primaryServer) {
+            targetServer = routing.primaryServer
+            const toolContext = getServerToolContext(routing.primaryServer)
+            agentName = toolContext?.tool || routing.primaryServer.name
+            
+            // If orchestration is needed, prefer LangChain
+            if (routing.orchestrationNeeded) {
+              const langchainServer = availableServers.find(s => 
+                s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
+              )
+              if (langchainServer) {
+                targetServer = langchainServer
+                agentName = "LangChain Orchestrator"
+              }
+            }
+          } else {
+            // Fallback to LangChain agent for general queries
+            targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
+                          availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
+                          availableServers[0]
+            agentName = "AI Assistant"
+          }
         }
 
         // Only invoke tool if we didn't handle it as a design request
