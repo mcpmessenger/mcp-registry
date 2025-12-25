@@ -40,7 +40,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     command: "",
     args: "",
     credentials: "", // Unified credentials field (JSON or simple key)
-    httpHeaders: "", // HTTP headers for HTTP servers (JSON object)
+    httpHeaders: agent?.httpHeaders || "", // HTTP headers for HTTP servers (JSON object)
   })
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
