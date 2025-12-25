@@ -1,16 +1,13 @@
-fix: Forward HTTP headers from metadata when invoking HTTP-based MCP tools
+feat: Add debug endpoint and verify HTTP headers forwarding
 
-Fixed critical bug where HTTP headers (like X-Goog-Api-Key for Google Maps) 
-were not being passed when invoking HTTP-based MCP servers.
+- Added /v0.1/debug/server/:serverId endpoint to inspect server metadata
+- Useful for troubleshooting API key configuration issues
+- Verifies that httpHeaders are stored correctly in metadata
 
-Changes:
-- Updated invokeHttpTool to extract httpHeaders from server metadata
-- Merge metadata headers with default Content-Type header
-- Added logging to verify API keys are being passed
-- Created GOOGLE_MAPS_API_KEY_SETUP.md guide
+This helps diagnose 403 PERMISSION_DENIED errors by checking:
+- Whether metadata.httpHeaders exists
+- Which headers are configured
+- If API keys are present (masked for security)
 
-This fixes 403 PERMISSION_DENIED errors when using Google Maps MCP Grounding
-Lite through the LangChain orchestrator or direct tool invocations.
-
-The headers stored in registry metadata.httpHeaders are now properly forwarded
-to HTTP-based MCP servers like Google Maps.
+The endpoint is useful for verifying Google Maps API key setup
+before attempting tool invocations.

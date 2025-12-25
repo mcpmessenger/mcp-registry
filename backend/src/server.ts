@@ -34,7 +34,9 @@ app.get('/health', (req: Request, res: Response) => {
 
 // API routes
 // More specific routes must come before less specific ones
+console.log('[Server] Registering debug router at /v0.1/debug')
 app.use('/v0.1/debug', debugRouter)
+console.log('[Server] Registering v0 servers router at /v0.1')
 app.use('/v0.1', v0ServersRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/documents', documentsRouter)

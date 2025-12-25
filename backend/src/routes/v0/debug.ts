@@ -8,11 +8,15 @@ import { registryService } from '../../services/registry.service'
 
 const router = Router()
 
+// Log when router is initialized
+console.log('[Debug Router] Debug router initialized')
+
 /**
  * GET /v0.1/debug/server/:serverId
  * Returns detailed server information including metadata and HTTP headers
  */
 router.get('/server/:serverId', async (req, res) => {
+  console.log('[Debug Router] Route hit:', req.path, req.params)
   try {
     const { serverId } = req.params
     const server = await registryService.getServerById(serverId)
