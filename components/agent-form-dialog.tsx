@@ -199,30 +199,40 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
             {serverType === "http" ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="httpHeaders">HTTP Headers (JSON, Optional)</Label>
+                  <Label htmlFor="httpHeaders">HTTP Headers (Required for Google Maps, etc.)</Label>
                   <Textarea
                     id="httpHeaders"
-                    placeholder='{"X-Goog-Api-Key": "your-api-key-here"}'
+                    placeholder='{"X-Goog-Api-Key": "your-api-key-here"} or just paste API key (will auto-wrap)'
                     value={formData.httpHeaders}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, httpHeaders: e.target.value }))}
+                    onChange={(e) => {
+                      let value = e.target.value.trim()
+                      // Auto-wrap plain API key in JSON format if it's not already JSON
+                      if (value && !value.startsWith('{') && !value.startsWith('[')) {
+                        // Try to detect if it's a Google Maps API key (starts with AIza)
+                        if (value.startsWith('AIza')) {
+                          value = JSON.stringify({ "X-Goog-Api-Key": value }, null, 2)
+                        }
+                      }
+                      setFormData((prev) => ({ ...prev, httpHeaders: value }))
+                    }}
                     className="font-mono text-xs min-h-[80px]"
                   />
                   <p className="text-xs text-muted-foreground">
-                    HTTP headers to send with requests (e.g., API keys). Must be valid JSON object.
-                    Example: {"{"}"X-Goog-Api-Key": "your-key"{"}"}
+                    HTTP headers to send with requests. For Google Maps, paste your API key here (it will auto-format).
+                    Or enter as JSON: {"{"}"X-Goog-Api-Key": "your-key"{"}"}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="credentials">Credentials/Env Vars (Optional)</Label>
+                  <Label htmlFor="credentials">Environment Variables (Optional, for STDIO servers only)</Label>
                   <Textarea
                     id="credentials"
-                    placeholder='API key or {"API_KEY": "value"} JSON'
+                    placeholder='{"API_KEY": "value"} JSON format'
                     value={formData.credentials}
                     onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
                     className="font-mono text-xs min-h-[80px]"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Environment variables (if server needs them). Not used for HTTP requests.
+                    Environment variables for STDIO servers. Not used for HTTP servers (use HTTP Headers above instead).
                   </p>
                 </div>
               </>

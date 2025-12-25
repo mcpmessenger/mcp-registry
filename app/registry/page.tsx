@@ -165,8 +165,24 @@ export default function RegistryPage() {
       let httpHeaders: Record<string, unknown> | undefined
       if (data.httpHeaders && data.httpHeaders.trim() !== "") {
         try {
-          const parsed = JSON.parse(data.httpHeaders)
-          if (parsed && typeof parsed === 'object') {
+          const headerValue = data.httpHeaders.trim()
+          let parsed: Record<string, unknown>
+          
+          // Try parsing as JSON first
+          try {
+            parsed = JSON.parse(headerValue)
+          } catch {
+            // If not JSON, treat as plain API key and wrap it
+            // Check if it looks like a Google Maps API key
+            if (headerValue.startsWith('AIza')) {
+              parsed = { "X-Goog-Api-Key": headerValue }
+            } else {
+              // Generic API key - user needs to specify header name
+              throw new Error('Plain API key detected. Please use JSON format: {"X-Goog-Api-Key": "your-key"}')
+            }
+          }
+          
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
             httpHeaders = parsed
           } else {
             throw new Error('Headers must be a JSON object')
@@ -174,7 +190,7 @@ export default function RegistryPage() {
         } catch (e) {
           toast({
             title: "Invalid HTTP headers",
-            description: "HTTP headers must be valid JSON object.",
+            description: e instanceof Error ? e.message : "HTTP headers must be valid JSON object.",
             variant: "destructive",
           })
           return
