@@ -330,7 +330,7 @@ export class MCPInvokeService {
       // Send initialize request first
       const initRequest = {
         jsonrpc: '2.0',
-        id: requestId++,
+        id: initRequestId,
         method: 'initialize',
         params: {
           protocolVersion: '2024-11-05',
