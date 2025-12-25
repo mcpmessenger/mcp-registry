@@ -228,20 +228,56 @@ export class MCPInvokeService {
       })
 
       let stdoutBuffer = ''
-      let requestId = 1
-      const timeout = 60000 // 60 second timeout
+      let initRequestId = 1
+      let toolRequestId = 2
+      const timeout = 120000 // 120 second timeout for image generation
       let timeoutId: NodeJS.Timeout
+      let initialized = false
 
       // Handle stdout - accumulate JSON-RPC messages
       proc.stdout?.on('data', (data: Buffer) => {
         stdoutBuffer += data.toString()
         this.processStdioBuffer(stdoutBuffer, (message: any) => {
-          if (message.id === requestId) {
+          // Handle initialize response
+          if (message.id === initRequestId && !initialized) {
+            if (message.error) {
+              clearTimeout(timeoutId)
+              proc.kill()
+              reject(new Error(`MCP initialize error: ${message.error.message || JSON.stringify(message.error)}`))
+              return
+            }
+            if (message.result) {
+              initialized = true
+              console.log(`[STDIO] Initialize successful for ${server.serverId}, sending tool call`)
+              
+              // Now send the tool call
+              const toolRequest = {
+                jsonrpc: '2.0',
+                id: toolRequestId,
+                method: 'tools/call',
+                params: {
+                  name: toolName,
+                  arguments: toolArgs,
+                },
+              }
+              
+              proc.stdin?.write(JSON.stringify(toolRequest) + '\n')
+              console.log(`[STDIO] Sent tool call: ${toolName} to ${server.serverId}`)
+              
+              // Set timeout for tool call
+              timeoutId = setTimeout(() => {
+                proc.kill()
+                reject(new Error(`Tool call timeout after ${timeout / 1000} seconds`))
+              }, timeout)
+            }
+          }
+          // Handle tool call response
+          else if (message.id === toolRequestId && initialized) {
             clearTimeout(timeoutId)
             proc.kill()
             
             if (message.error) {
-              reject(new Error(`MCP error: ${message.error.message || JSON.stringify(message.error)}`))
+              reject(new Error(`MCP tool error: ${message.error.message || JSON.stringify(message.error)}`))
             } else if (message.result) {
               // Convert MCP result to our format
               let content: InvokeToolResponse['result']['content'] = []
@@ -256,6 +292,7 @@ export class MCPInvokeService {
                 content = [{ type: 'text', text: JSON.stringify(message.result, null, 2) }]
               }
               
+              console.log(`[STDIO] Tool call completed for ${server.serverId}, result length: ${JSON.stringify(content).length}`)
               resolve({
                 result: {
                   content,
@@ -307,27 +344,16 @@ export class MCPInvokeService {
 
       proc.stdin?.write(JSON.stringify(initRequest) + '\n')
       proc.stdin?.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
-
-      // Wait a bit for initialization, then send tool call
-      setTimeout(() => {
-        const toolRequest = {
-          jsonrpc: '2.0',
-          id: requestId,
-          method: 'tools/call',
-          params: {
-            name: toolName,
-            arguments: toolArgs,
-          },
-        }
-
-        proc.stdin?.write(JSON.stringify(toolRequest) + '\n')
-        
-        // Set timeout
-        timeoutId = setTimeout(() => {
+      
+      console.log(`[STDIO] Sent initialize request to ${server.serverId}`)
+      
+      // Set timeout for initialization (should happen quickly)
+      timeoutId = setTimeout(() => {
+        if (!initialized) {
           proc.kill()
-          reject(new Error(`Request timeout after ${timeout / 1000} seconds`))
-        }, timeout)
-      }, 500)
+          reject(new Error(`Initialize timeout after 10 seconds`))
+        }
+      }, 10000)
     })
   }
 
