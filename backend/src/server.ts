@@ -8,6 +8,7 @@ dotenv.config()
 
 // Import routes
 import v0ServersRouter from './routes/v0/servers'
+import debugRouter from './routes/v0/debug'
 import mcpToolsRouter from './routes/mcp/tools'
 import documentsRouter from './routes/documents/analyze'
 
@@ -33,6 +34,7 @@ app.get('/health', (req: Request, res: Response) => {
 
 // API routes
 app.use('/v0.1', v0ServersRouter)
+app.use('/v0.1/debug', debugRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/documents', documentsRouter)
 

@@ -1,10 +1,16 @@
-docs: Update LangChain spec with resolved iteration limit issues
+fix: Forward HTTP headers from metadata when invoking HTTP-based MCP tools
 
-- Updated LANGCHAIN_AGENT_SPEC.md to reflect resolved iteration limits
-- Created CLIENT_UPDATE_ITERATION_LIMITS.md with deployment details
-- Marked Priority 1 improvement as completed
-- Updated performance requirements with current values (100 iterations, 180s timeout)
-- Added client-facing update document for easy reference
+Fixed critical bug where HTTP headers (like X-Goog-Api-Key for Google Maps) 
+were not being passed when invoking HTTP-based MCP servers.
 
-Iteration limits increased from 10 → 100, execution timeout 120s → 180s,
-tool timeout 30s → 60s. Complex multi-step queries now complete successfully.
+Changes:
+- Updated invokeHttpTool to extract httpHeaders from server metadata
+- Merge metadata headers with default Content-Type header
+- Added logging to verify API keys are being passed
+- Created GOOGLE_MAPS_API_KEY_SETUP.md guide
+
+This fixes 403 PERMISSION_DENIED errors when using Google Maps MCP Grounding
+Lite through the LangChain orchestrator or direct tool invocations.
+
+The headers stored in registry metadata.httpHeaders are now properly forwarded
+to HTTP-based MCP servers like Google Maps.
