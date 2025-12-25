@@ -146,8 +146,22 @@ export default function ChatPage() {
               },
             })
             
-            // If job was created, poll for completion
-            if (generateResponse.jobId) {
+            // Check if result is already completed (synchronous MCP response)
+            if ((generateResponse as any).completed && ((generateResponse as any).imageUrl || (generateResponse as any).imageData)) {
+              // MCP server returned result immediately
+              const imageUrl = (generateResponse as any).imageUrl
+              const imageData = (generateResponse as any).imageData
+              
+              if (imageUrl) {
+                responseContent = `Your design is ready! View it here: ${imageUrl}`
+              } else if (imageData) {
+                responseContent = `Your design is ready! [Image generated]`
+                // TODO: Display image data in chat
+              } else {
+                responseContent = (generateResponse as any).result || generateResponse.message || "Design generated successfully!"
+              }
+            } else if (generateResponse.jobId) {
+              // Async job - poll for completion
               responseContent = `I've started creating your design! Job ID: ${generateResponse.jobId}. I'll notify you when it's ready.`
               
               // Poll for job completion in the background
