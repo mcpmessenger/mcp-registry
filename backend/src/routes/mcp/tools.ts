@@ -242,21 +242,89 @@ router.post('/generate', async (req, res) => {
     
     // If MCP server handled it, return the result
     if (mcpServerUsed && mcpResult) {
-      console.log('[Design Generate] MCP server result received')
-      // Extract job ID or result from MCP response
+      console.log('[Design Generate] MCP server result received:', JSON.stringify(mcpResult, null, 2))
+      
+      // Check if result contains an image URL or data
       const resultContent = mcpResult.result?.content?.[0]
-      if (resultContent?.text) {
-        // Try to parse job ID from response
-        const jobIdMatch = resultContent.text.match(/job[_-]?[\w-]+/i)
-        const jobId = jobIdMatch ? jobIdMatch[0] : `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
+      if (resultContent) {
+        // Check for image URL in text response
+        if (resultContent.text) {
+          // Try to extract image URL from response
+          const urlMatch = resultContent.text.match(/https?:\/\/[^\s]+/i)
+          const imageUrl = urlMatch ? urlMatch[0] : null
+          
+          // If we have an image URL, return it directly (synchronous result)
+          if (imageUrl) {
+            console.log('[Design Generate] Found image URL in MCP response:', imageUrl)
+            return res.json({
+              success: true,
+              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              message: 'Design generated successfully via MCP server',
+              result: resultContent.text,
+              imageUrl: imageUrl,
+              completed: true, // Indicate this is a completed result, not a job
+            })
+          }
+          
+          // Check if result contains base64 image data
+          const base64Match = resultContent.text.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/i)
+          if (base64Match) {
+            console.log('[Design Generate] Found base64 image in MCP response')
+            return res.json({
+              success: true,
+              jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              message: 'Design generated successfully via MCP server',
+              result: resultContent.text,
+              imageData: base64Match[0],
+              completed: true,
+            })
+          }
+          
+          // If no image found, check for job ID (async job)
+          const jobIdMatch = resultContent.text.match(/job[_-]?[\w-]+/i)
+          if (jobIdMatch) {
+            const jobId = jobIdMatch[0]
+            return res.json({
+              success: true,
+              jobId: jobId,
+              message: 'Design generation started via MCP server',
+              result: resultContent.text,
+            })
+          }
+          
+          // Otherwise, return the text result as completed
+          console.log('[Design Generate] Returning text result as completed')
+          return res.json({
+            success: true,
+            jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            message: 'Design generated via MCP server',
+            result: resultContent.text,
+            completed: true,
+          })
+        }
         
-        return res.json({
-          success: true,
-          jobId: jobId,
-          message: 'Design generation started via MCP server',
-          result: resultContent.text,
-        })
+        // Check for image in content array
+        if (resultContent.type === 'image' && resultContent.data) {
+          console.log('[Design Generate] Found image data in MCP response')
+          return res.json({
+            success: true,
+            jobId: `job-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            message: 'Design generated successfully via MCP server',
+            imageData: resultContent.data,
+            completed: true,
+          })
+        }
       }
+      
+      // Fallback: return generic job ID
+      const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
+      console.log('[Design Generate] No parseable result, returning job ID:', jobId)
+      return res.json({
+        success: true,
+        jobId: jobId,
+        message: 'Design generation started via MCP server',
+        result: JSON.stringify(mcpResult),
+      })
     }
 
     // Strategy 2: Try native service if it exists
