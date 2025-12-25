@@ -273,6 +273,9 @@ export default function RegistryPage() {
         hasCommand: !!publishData.command,
         hasArgs: !!publishData.args,
         hasEnv: !!publishData.env,
+        hasHttpHeaders: !!httpHeaders,
+        httpHeaders: httpHeaders,
+        metadataKeys: publishData.metadata ? Object.keys(publishData.metadata) : [],
         toolsCount: publishData.tools?.length || 0,
       })
 
