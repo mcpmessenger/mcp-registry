@@ -11,6 +11,7 @@ import v0ServersRouter from './routes/v0/servers'
 import debugRouter from './routes/v0/debug'
 import mcpToolsRouter from './routes/mcp/tools'
 import documentsRouter from './routes/documents/analyze'
+import { registryService } from './services/registry.service'
 
 const app = express()
 
@@ -40,7 +41,6 @@ app.get('/v0.1/debug/server/:serverId', async (req, res) => {
   console.log('[Server] Direct debug route hit! Params:', req.params)
   try {
     const { serverId } = req.params
-    const { registryService } = await import('./services/registry.service')
     const server = await registryService.getServerById(serverId)
     
     if (!server) {
