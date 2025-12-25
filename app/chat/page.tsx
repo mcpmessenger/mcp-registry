@@ -356,7 +356,88 @@ export default function ChatPage() {
         const selectedAgent = agentOptions.find((a) => a.id === selectedAgentId)
         const server = availableServers.find(s => s.serverId === selectedAgentId)
         
-        if (server && server.tools && server.tools.length > 0) {
+        // If it's a design request, route to design generation endpoint (handles tool discovery)
+        if (isDesignRequest(content) && server) {
+          // Route to design generation API (same as router mode)
+          agentName = "Design Generator"
+          
+          try {
+            // Extract design details from the request
+            const description = content
+            const styleMatch = content.match(/(cosmic|dark|modern|minimalist|vintage|retro)/i)
+            const colorMatch = content.match(/(purple|blue|red|green|yellow|orange|pink|neon)/i)
+            
+            // Generate the design (backend will discover tools if needed)
+            const generateResponse = await generateSVG({
+              description: description,
+              style: styleMatch ? styleMatch[1].toLowerCase() : 'modern',
+              colorPalette: colorMatch ? [colorMatch[1]] : undefined,
+              size: {
+                width: 1920,
+                height: 1080,
+              },
+              serverId: server.serverId, // Pass serverId so backend can discover tools
+            })
+            
+            // Handle response (same as router mode)
+            if (generateResponse.jobId) {
+              responseContent = `I've started creating your design! Job ID: ${generateResponse.jobId}. I'll notify you when it's ready.`
+              
+              // Poll for job completion (same logic as router mode)
+              const pollJob = async () => {
+                try {
+                  const maxAttempts = 60
+                  let attempts = 0
+                  
+                  while (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 5000))
+                    
+                    try {
+                      const jobStatus = await getJobStatus(generateResponse.jobId)
+                      
+                      if (jobStatus.job.status === 'COMPLETED' && jobStatus.asset) {
+                        const updateMessage: ChatMessage = {
+                          id: `assistant-${Date.now()}`,
+                          role: "assistant",
+                          content: `Your design is ready! ${jobStatus.asset.url ? `View it here: ${jobStatus.asset.url}` : 'Design completed successfully.'}`,
+                          timestamp: new Date(),
+                          agentName: agentName,
+                        }
+                        setMessages((prev) => [...prev, updateMessage])
+                        break
+                      } else if (jobStatus.job.status === 'FAILED') {
+                        const errorMessage: ChatMessage = {
+                          id: `assistant-${Date.now()}`,
+                          role: "assistant",
+                          content: `Design generation failed: ${jobStatus.job.errorMessage || 'Unknown error'}`,
+                          timestamp: new Date(),
+                          agentName: agentName,
+                        }
+                        setMessages((prev) => [...prev, errorMessage])
+                        break
+                      }
+                    } catch (pollError) {
+                      console.error('Error polling job status:', pollError)
+                      if (attempts > 10) break
+                    }
+                    
+                    attempts++
+                  }
+                } catch (error) {
+                  console.error('Error in polling loop:', error)
+                }
+              }
+              
+              pollJob().catch(console.error)
+            } else {
+              responseContent = generateResponse.message || "Design generation started successfully."
+            }
+          } catch (error) {
+            console.error('Design generation error:', error)
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+            responseContent = `I encountered an issue: ${errorMessage}. Tool discovery may still be in progress. Please try again in a few seconds.`
+          }
+        } else if (server && server.tools && server.tools.length > 0) {
           agentName = selectedAgent?.name
           const tool = server.tools[0] // Use first available tool
           
@@ -425,7 +506,14 @@ export default function ChatPage() {
             preview: responseContent.substring(0, 100),
           })
         } else {
-          responseContent = `The selected agent "${selectedAgent?.name}" doesn't have available tools. Please try a different agent.`
+          // If it's a design request, route to design generation endpoint (handles tool discovery)
+          if (isDesignRequest) {
+            // This will be handled by the design generation endpoint above
+            // But we're already past that, so show helpful message
+            responseContent = `The selected agent "${selectedAgent?.name}" doesn't have available tools yet. Tool discovery is in progress. Please try again in a few seconds, or use "Auto-Route" mode.`
+          } else {
+            responseContent = `The selected agent "${selectedAgent?.name}" doesn't have available tools. Please try a different agent.`
+          }
         }
       }
 
