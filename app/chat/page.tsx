@@ -327,9 +327,7 @@ export default function ChatPage() {
                 if (!url.startsWith('http')) {
                   url = `https://www.${url}`
                 }
-                toolArgs = {
-                  url: url,
-                }
+                toolArgs.url = url
                 
                 // If there's a search query (e.g., "look for iration tickets")
                 const searchMatch = content.match(/(?:look for|search for|find|get)\s+(.+?)(?:\.|$)/i)
@@ -338,9 +336,7 @@ export default function ChatPage() {
                 }
               } else if (ticketmasterMatch) {
                 // User wants to check Ticketmaster
-                toolArgs = {
-                  url: 'https://www.ticketmaster.com',
-                }
+                toolArgs.url = 'https://www.ticketmaster.com'
                 
                 // Extract search query if present
                 const searchMatch = content.match(/(?:look for|search for|find)\s+(.+?)(?:\.|$)/i)
@@ -353,9 +349,12 @@ export default function ChatPage() {
                   }
                 }
               } else {
-                // Generic query
-                toolArgs = {
-                  query: content,
+                // Generic query - try to extract URL first
+                const urlMatch = content.match(/([\w-]+\.(?:com|org|net|io))/i)
+                if (urlMatch) {
+                  toolArgs.url = `https://www.${urlMatch[1]}`
+                } else {
+                  toolArgs.query = content
                 }
               }
               
