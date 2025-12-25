@@ -55,8 +55,21 @@ router.post('/generate', async (req, res) => {
       // Look for a design generation MCP server
       // Check if a specific serverId was provided
       if (validated.serverId) {
-        const server = await registryService.getServerById(validated.serverId)
-        if (server && server.tools?.some(t => 
+        let server = await registryService.getServerById(validated.serverId)
+        
+        // If server has no tools but is a STDIO server, try to discover tools
+        if (server && (!server.tools || server.tools.length === 0) && server.command && server.args) {
+          try {
+            console.log(`[Design Generate] Server ${server.serverId} has no tools, attempting discovery`)
+            await registryService.discoverToolsForServer(server.serverId)
+            // Refresh server data
+            server = await registryService.getServerById(validated.serverId)
+          } catch (discoverError: any) {
+            console.warn(`[Design Generate] Failed to discover tools for ${server.serverId}:`, discoverError?.message)
+          }
+        }
+        
+        if (server && server.tools && server.tools.some(t => 
           t.name.includes('generate') || 
           t.name.includes('design') || 
           t.name.includes('svg') ||
@@ -108,8 +121,10 @@ router.post('/generate', async (req, res) => {
       } else {
         // Auto-discover design generation servers
         const allServers = await registryService.getServers()
-        const designServer = allServers.find(s => 
-          s.tools?.some(t => 
+        
+        // First, try to find a server with tools already discovered
+        let designServer = allServers.find(s => 
+          s.tools && s.tools.length > 0 && s.tools.some(t => 
             t.name.includes('generate') || 
             t.name.includes('design') || 
             t.name.includes('svg') ||
@@ -117,6 +132,38 @@ router.post('/generate', async (req, res) => {
             t.name.includes('image')
           )
         )
+        
+        // If no server with tools found, try STDIO servers that might need tool discovery
+        if (!designServer) {
+          const stdioServers = allServers.filter(s => s.command && s.args)
+          for (const server of stdioServers) {
+            // If server has no tools or empty tools array, try to discover
+            if (!server.tools || server.tools.length === 0) {
+              try {
+                console.log(`[Design Generate] Attempting to discover tools for ${server.serverId}`)
+                const discoveredTools = await registryService.discoverToolsForServer(server.serverId)
+                if (discoveredTools && discoveredTools.length > 0) {
+                  // Refresh server data
+                  const refreshedServer = await registryService.getServerById(server.serverId)
+                  if (refreshedServer && refreshedServer.tools && refreshedServer.tools.some(t => 
+                    t.name.includes('generate') || 
+                    t.name.includes('design') || 
+                    t.name.includes('svg') ||
+                    t.name.includes('create') ||
+                    t.name.includes('image')
+                  )) {
+                    designServer = refreshedServer
+                    console.log(`[Design Generate] Successfully discovered tools for ${server.serverId}`)
+                    break
+                  }
+                }
+              } catch (discoverError: any) {
+                console.warn(`[Design Generate] Failed to discover tools for ${server.serverId}:`, discoverError?.message)
+                // Continue to next server
+              }
+            }
+          }
+        }
         
         if (designServer) {
           // Prefer generate_image, then other generation tools
