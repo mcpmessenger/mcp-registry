@@ -222,13 +222,19 @@ export class MCPInvokeService {
       
       console.log(`[STDIO] Spawning process: ${server.command} ${args.join(' ')}`)
       console.log(`[STDIO] Environment keys: ${Object.keys(env).join(', ')}`)
+      console.log(`[STDIO] GEMINI_API_KEY present: ${!!env.GEMINI_API_KEY}`)
+      console.log(`[STDIO] GEMINI_API_KEY value (first 10 chars): ${env.GEMINI_API_KEY ? env.GEMINI_API_KEY.substring(0, 10) + '...' : 'MISSING'}`)
+      console.log(`[STDIO] API_KEY present: ${!!env.API_KEY}`)
+      
+      // Merge with process.env but ensure our env vars take precedence
+      const mergedEnv = { ...process.env, ...env }
       
       // Spawn the MCP server process
       // Use shell: true for npx to work correctly
       const proc = spawn(server.command, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: true, // npx requires shell: true
-        env: { ...process.env, ...env },
+        env: mergedEnv,
       })
 
       // State machine for MCP protocol
