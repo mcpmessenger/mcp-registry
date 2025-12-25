@@ -129,6 +129,8 @@ export default function ChatPage() {
           // Route to design generation API - will be updated with actual server name from response
           agentName = "Design Generator" // Temporary, will be replaced
           
+          let generateResponse: any = null
+          
           try {
             // Extract design details from the request
             const description = content
@@ -136,7 +138,7 @@ export default function ChatPage() {
             const colorMatch = content.match(/(purple|blue|red|green|yellow|orange|pink|neon)/i)
             
             // Generate the design
-            const generateResponse = await generateSVG({
+            generateResponse = await generateSVG({
               description: description,
               style: styleMatch ? styleMatch[1].toLowerCase() : 'modern',
               colorPalette: colorMatch ? [colorMatch[1]] : undefined,
@@ -382,6 +384,8 @@ export default function ChatPage() {
           // Route to design generation API, but use the selected agent name
           agentName = selectedAgent?.name || "Design Generator"
           
+          let generateResponse: any = null
+          
           try {
             // Extract design details from the request
             const description = content
@@ -389,7 +393,7 @@ export default function ChatPage() {
             const colorMatch = content.match(/(purple|blue|red|green|yellow|orange|pink|neon)/i)
             
             // Generate the design (backend will discover tools if needed)
-            const generateResponse = await generateSVG({
+            generateResponse = await generateSVG({
               description: description,
               style: styleMatch ? styleMatch[1].toLowerCase() : 'modern',
               colorPalette: colorMatch ? [colorMatch[1]] : undefined,
