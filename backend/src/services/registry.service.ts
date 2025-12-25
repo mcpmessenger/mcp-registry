@@ -375,6 +375,16 @@ export class RegistryService {
         data: updatePayload,
       })
 
+      // Emit discovery event for orchestrators (Kafka/webhook)
+      try {
+        const { createDiscoveryEvent, emitDiscoveryEvent } = await import('./mcp-discovery.service')
+        const event = createDiscoveryEvent('server.updated', this.transformToMCPFormat(updated))
+        await emitDiscoveryEvent(event)
+      } catch (error) {
+        console.warn('[Registry] Failed to emit discovery event:', error)
+        // Don't fail the update if event emission fails
+      }
+
       return this.transformToMCPFormat(updated)
     } else {
       // Create new server
@@ -442,7 +452,7 @@ export class RegistryService {
         }
       }
 
-      return this.transformToMCPFormat(server)
+      return transformedServer
     }
   }
 

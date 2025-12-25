@@ -18,14 +18,25 @@ const router = Router()
  * Query parameters:
  * - search: Search term to filter servers by name or description
  * - capability: Filter by capability (e.g., "tools", "resources", "prompts")
+ * - for_orchestrator: If true, returns enhanced format with tool context for orchestrators
  */
 router.get('/servers', async (req, res, next) => {
   try {
-    const { search, capability } = req.query
-    const servers = await registryService.getServers({
+    const { search, capability, for_orchestrator } = req.query
+    const options = {
       search: typeof search === 'string' ? search : undefined,
       capability: typeof capability === 'string' ? capability : undefined,
-    })
+    }
+    
+    // If for_orchestrator=true, use discovery service for enhanced format
+    if (for_orchestrator === 'true') {
+      const { getServersForOrchestrator } = await import('../../services/mcp-discovery.service')
+      const discoveryResponse = await getServersForOrchestrator(options)
+      return res.json(discoveryResponse)
+    }
+    
+    // Standard response for frontend
+    const servers = await registryService.getServers(options)
     res.json(servers)
   } catch (error) {
     next(error)

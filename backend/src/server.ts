@@ -137,6 +137,19 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 // Cloud Run sets PORT automatically, fallback to env config or 8080
 const PORT: number = parseInt(process.env.PORT || String(env.server.port || 8080), 10)
 
+// Initialize Kafka producer for discovery events (if available)
+if (process.env.KAFKA_BROKERS || process.env.ENABLE_KAFKA === 'true') {
+  import('./services/mcp-discovery.service').then(async ({ initializeKafkaProducer }) => {
+    try {
+      await initializeKafkaProducer()
+    } catch (error) {
+      console.warn('[Server] Kafka initialization failed, continuing without event streaming:', error)
+    }
+  }).catch(() => {
+    // Kafka optional, continue without it
+  })
+}
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`)
   console.log(`📊 Environment: ${env.server.nodeEnv}`)
