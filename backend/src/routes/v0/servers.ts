@@ -492,7 +492,17 @@ router.post('/invoke', async (req, res, next) => {
     }
 
     if (error instanceof Error) {
-      return res.status(404).json({
+      // Check for quota/rate limit errors
+      if (error.message.includes('quota') || error.message.includes('429') || error.message.includes('RESOURCE_EXHAUSTED') || error.message.includes('rate limit')) {
+        return res.status(429).json({
+          success: false,
+          error: 'API Quota Exceeded',
+          message: error.message,
+          note: 'The Gemini API quota has been exceeded. The free tier has very limited quotas for image generation. Please check your quota, wait for the rate limit to reset, or upgrade to a paid plan.',
+        })
+      }
+      
+      return res.status(500).json({
         success: false,
         error: error.message,
       })
