@@ -44,8 +44,8 @@ function isPlaceholderResponse(content: string): boolean {
  */
 function isDesignRequest(content: string): boolean {
   const designKeywords = [
-    /(create|generate|make|design|build).*(poster|banner|image|graphic|logo|artwork|visual|design|svg|illustration)/i,
-    /(poster|banner|marketing.*material|graphic|logo|artwork|visual|design|svg|illustration).*(for|with|in)/i,
+    /(create|generate|make|design|build).*(poster|banner|image|picture|photo|graphic|logo|artwork|visual|design|svg|illustration)/i,
+    /(poster|banner|marketing.*material|graphic|logo|artwork|visual|design|svg|illustration|picture|photo).*(for|with|in)/i,
     /high.resolution.*(poster|banner|image|graphic|logo|artwork|visual|design)/i,
     /(cosmic|dark mode|neon|color|palette|style).*(poster|banner|image|graphic|logo|artwork|visual|design)/i,
   ]
