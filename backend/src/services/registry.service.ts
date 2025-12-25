@@ -434,6 +434,47 @@ export class RegistryService {
   }
 
   /**
+   * Manually discover tools for an existing STDIO server
+   */
+  async discoverToolsForServer(serverId: string): Promise<MCPTool[]> {
+    const server = await prisma.mcpServer.findUnique({
+      where: { serverId },
+    })
+
+    if (!server) {
+      throw new Error(`Server ${serverId} not found`)
+    }
+
+    if (!server.command || !server.args) {
+      throw new Error(`Server ${serverId} is not a STDIO server (no command/args)`)
+    }
+
+    const serverData: PublishServerData = {
+      serverId: server.serverId,
+      name: server.name,
+      description: server.description || undefined,
+      version: server.version,
+      command: server.command,
+      args: server.args ? JSON.parse(server.args) : [],
+      env: server.env ? JSON.parse(server.env) : undefined,
+    }
+
+    const discoveredTools = await this.discoverStdioTools(serverData)
+    
+    if (discoveredTools && discoveredTools.length > 0) {
+      // Update server with discovered tools
+      await prisma.mcpServer.update({
+        where: { serverId },
+        data: {
+          tools: JSON.stringify(discoveredTools),
+        },
+      })
+    }
+
+    return discoveredTools
+  }
+
+  /**
    * Discover tools from a STDIO MCP server by spawning it and calling tools/list
    */
   private async discoverStdioTools(serverData: PublishServerData): Promise<MCPTool[]> {

@@ -412,6 +412,34 @@ router.get('/servers/:serverId/permissions', async (req, res, next) => {
 })
 
 /**
+ * POST /v0.1/servers/:serverId/discover-tools
+ * Manually discover tools for a STDIO server
+ */
+router.post('/servers/:serverId/discover-tools', async (req, res, next) => {
+  try {
+    const { serverId } = req.params
+    const decodedServerId = decodeURIComponent(serverId)
+
+    console.log(`[Discover Tools] Requested for server: ${decodedServerId}`)
+    const tools = await registryService.discoverToolsForServer(decodedServerId)
+
+    res.json({
+      success: true,
+      message: `Discovered ${tools.length} tools`,
+      tools,
+    })
+  } catch (error) {
+    if (error instanceof Error) {
+      return res.status(404).json({
+        success: false,
+        error: error.message,
+      })
+    }
+    next(error)
+  }
+})
+
+/**
  * POST /v0.1/invoke
  * Invoke an MCP tool on a registered server
  * 
