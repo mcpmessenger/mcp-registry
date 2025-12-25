@@ -42,7 +42,13 @@ app.get('/test-debug', (req: Request, res: Response) => {
 // API routes
 // More specific routes must come before less specific ones
 
-// Add debug route directly to main app first (before v0.1 router)  
+// Request logger - placed before routes to see all requests
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log('[Server] === REQUEST ===', req.method, req.originalUrl, 'Path:', req.path)
+  next()
+})
+
+// Add debug route directly to main app first (before v0.1 router)
 app.get('/v0.1/debug/server/:serverId', async (req, res, next) => {
   console.log('[Server] ===== DIRECT DEBUG ROUTE HIT =====')
   console.log('[Server] Method:', req.method)
@@ -93,12 +99,6 @@ app.get('/v0.1/debug/server/:serverId', async (req, res, next) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     })
   }
-})
-
-// Also add a catch-all logger before 404 to see what's being requested
-app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log('[Server] Request:', req.method, req.path, '| Original:', req.originalUrl)
-  next()
 })
 
 console.log('[Server] Registering debug router at /v0.1/debug')
