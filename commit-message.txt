@@ -1,8 +1,18 @@
-docs: Add iteration limit documentation and improve error handling
+docs: Add LangChain Agent Development Server Specification
 
-- Updated TOOL_CONTEXT_SPECIFICATION.md with limitations section
-- Added helpful error messages when agents hit iteration/time limits
-- Documented best practices for complex multi-step queries
+Comprehensive specification document for the LangChain agent dev server team
+covering requirements, capabilities, limitations, and recommended improvements.
 
-This addresses cases where LangChain orchestrator hits iteration limits
-on complex multi-tool queries by providing clearer user feedback.
+Key sections:
+- Core responsibility and output context
+- Functional and performance requirements
+- Tool integration requirements
+- Current limitations and known issues
+- Recommended improvements (Priority 1-6)
+- Testing requirements
+- API contract
+- Monitoring and observability
+- Security considerations
+
+This addresses the iteration limit issues and provides clear guidance for
+improving the agent's ability to handle complex multi-step queries.
