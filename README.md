@@ -31,13 +31,32 @@ The MCP Registry is a platform designed to help developers discover, register, a
 - **Voice Transcription**: Real-time voice-to-text using OpenAI Whisper API
 - **Document Analysis**: AI-powered analysis of PDFs, images, and text files using Google Gemini Vision
 - **Screen Capture**: Capture and analyze screen content using browser APIs
-- **SVG Generation**: Generate SVG graphics from natural language descriptions using Google Gemini AI
-- **Visual SVG Rendering**: View generated SVGs directly in the chat with code toggle
+- **Image Generation**: Generate images from natural language using Nano Banana MCP (Gemini-powered)
+- **Image Display**: View generated images directly in chat with automatic blob URL conversion
+- **STDIO Server Support**: Full support for STDIO-based MCP servers (like Nano Banana MCP)
+- **HTTP Server Support**: Support for HTTP-based MCP servers with custom headers
+- **Auto Tool Discovery**: Automatic tool discovery for STDIO servers on registration
 - **Real-time Progress**: Server-Sent Events (SSE) for live job progress updates
 - **Multi-Tier Fallback**: Robust API fallback strategy for reliable AI generation
 - **Modern UI**: Built with Next.js and Tailwind CSS for a responsive experience
 
 ### 🆕 Latest Upgrades (December 2024)
+
+#### Image Generation with Nano Banana MCP
+- **Gemini-Powered Image Generation**: Full integration with Nano Banana MCP for AI image generation
+- **Synchronous & Asynchronous Support**: Handles both immediate results and async job polling
+- **Base64 to Blob Conversion**: Automatic conversion of large base64 images to blob URLs (fixes 414 errors)
+- **Image Display in Chat**: Generated images display directly in the chat interface
+- **API Key Management**: Easy API key configuration via UI or API
+- **Quota Error Handling**: User-friendly error messages for API quota issues
+
+#### STDIO Server Support
+- **Full STDIO Protocol**: Complete support for STDIO-based MCP servers using JSON-RPC
+- **Automatic Tool Discovery**: Tools are automatically discovered when STDIO servers are registered
+- **On-Demand Discovery**: Tool discovery happens on-demand if tools aren't pre-registered
+- **Background Discovery**: Tool discovery continues in background if initial discovery times out
+- **Environment Variable Passing**: Secure environment variable injection for STDIO processes
+- **State Machine**: Robust state management for STDIO communication (INITIALIZING → INITIALIZED → CALLING → COMPLETE)
 
 #### Server Identity Verification (SEP-1302)
 - **Dynamic Identity Provider**: Registry now supports the `/.well-known/mcp-server-identity` standard
@@ -97,23 +116,37 @@ mcp-registry/
 └── README.md            # This file
 ```
 
-## ⚡ Quick Start (The "Google Era" Update)
+## ⚡ Quick Start
 
-Google officially launched Managed MCP Servers (Dec 15). Here is how to add the official Google Maps grounding directly to your agent:
+### 1. Generate Images with Nano Banana MCP
 
-### 1. Add Official Google Maps (Grounding Lite)
-
-**Option A: Via Registry UI (Recommended)**
+**Via Registry UI (Recommended)**
 1. Start the backend and frontend (see [Development Setup](#development-setup) below)
 2. Navigate to the Registry UI at `http://localhost:3000/registry`
-3. Find "Google Maps MCP (Grounding Lite)" and click Edit
-4. In **HTTP Headers (JSON)**, set: `{"X-Goog-Api-Key":"YOUR_API_KEY_HERE"}`
-5. Enable **Maps Grounding Lite API** in your Google Cloud Console
-6. Save and start chatting!
+3. Find "Nano Banana MCP" or add it:
+   - **Server Type**: STDIO Server
+   - **Command**: `npx`
+   - **Arguments**: `["-y", "nano-banana-mcp"]`
+   - **Credentials**: Your Gemini API key (starts with `AIza...`)
+4. Get a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
+5. Save and start chatting!
 
-**Option B: For Cline or Claude Desktop**
-Add this to your `mcp_config.json`:
+**Try it in Chat:**
+- Go to the Chat page
+- Select "Nano Banana MCP" from the agent dropdown
+- Type: "make me a picture of a kitty"
+- The image will appear directly in the chat!
 
+### 2. Add Official Google Maps (Grounding Lite)
+
+**Via Registry UI:**
+1. Navigate to the Registry UI at `http://localhost:3000/registry`
+2. Find "Google Maps MCP (Grounding Lite)" and click Edit
+3. In **HTTP Headers (JSON)**, set: `{"X-Goog-Api-Key":"YOUR_API_KEY_HERE"}`
+4. Enable **Maps Grounding Lite API** in your Google Cloud Console
+5. Save and start chatting!
+
+**For Cline or Claude Desktop:**
 ```json
 "google-maps": {
   "command": "npx",
@@ -124,7 +157,7 @@ Add this to your `mcp_config.json`:
 }
 ```
 
-### 2. Add the Playwright Registry Bridge
+### 3. Add the Playwright Registry Bridge
 
 To browse the web and interact with maps via a real browser:
 
@@ -277,10 +310,27 @@ See the [Development Guide](docs/DEVELOPMENT.md) for detailed instructions.
 For production deployment, see the [Deployment Guide](docs/DEPLOYMENT.md).
 
 **Quick Summary:**
-- **Frontend**: Deploy to Vercel (already configured)
-- **Backend**: Deploy to GCP Cloud Run (recommended)
-- **Database**: Cloud SQL (PostgreSQL)
-- **Event Bus**: Confluent Cloud (Kafka) or Cloud Pub/Sub
+- **Frontend**: Deploy to Vercel (auto-deploys on push to main)
+- **Backend**: Deploy to GCP Cloud Run using Artifact Registry
+- **Database**: Cloud SQL (PostgreSQL) or SQLite for development
+- **Event Bus**: Confluent Cloud (Kafka) or Cloud Pub/Sub (optional)
+
+**Backend Deployment (Cloud Run):**
+```bash
+cd backend
+cp Dockerfile.debian Dockerfile
+gcloud builds submit --tag us-central1-docker.pkg.dev/PROJECT_ID/mcp-registry/mcp-registry-backend --region us-central1 .
+gcloud run deploy mcp-registry-backend \
+  --image us-central1-docker.pkg.dev/PROJECT_ID/mcp-registry/mcp-registry-backend \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated
+rm Dockerfile
+```
+
+**Frontend Deployment (Vercel):**
+- Auto-deploys on push to main branch
+- Or manually: `vercel --prod`
 
 ## 🛠️ The Stack
 
@@ -325,6 +375,50 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 ## 📄 License
 
 This project is licensed under the ISC License - see the [LICENSE](LICENSE) file for details.
+
+## 🎨 Image Generation Example
+
+Here's how to use the image generation feature:
+
+1. **Register Nano Banana MCP** (if not already registered):
+   - Server Type: STDIO Server
+   - Command: `npx`
+   - Arguments: `["-y", "nano-banana-mcp"]`
+   - Credentials: Your Gemini API key
+
+2. **Generate an Image**:
+   - Go to Chat page
+   - Select "Nano Banana MCP" or use "Auto-Route"
+   - Type: "make me a picture of a kitty"
+   - Wait a few seconds...
+   - Image appears in chat! 🎉
+
+3. **Features**:
+   - Works with both HTTP and STDIO MCP servers
+   - Automatic tool discovery
+   - Handles large images (converts base64 to blob URLs)
+   - Shows quota errors with helpful messages
+   - Supports both synchronous and asynchronous generation
+
+## 🔧 Troubleshooting
+
+### Image Not Displaying
+- Check browser console for errors
+- Verify API key is set correctly in registry
+- Ensure billing is enabled for Gemini API (free tier has limited quotas)
+- Check network tab for 414 errors (should be fixed with blob URL conversion)
+
+### API Key Issues
+- Get a new key from [Google AI Studio](https://aistudio.google.com/apikey)
+- Keys must start with `AIza...`
+- Update via Registry UI or API
+- See [HOW_TO_GET_GEMINI_API_KEY.md](HOW_TO_GET_GEMINI_API_KEY.md) for details
+
+### STDIO Server Not Working
+- Verify command and arguments are correct
+- Check environment variables are set
+- Look at backend logs for initialization errors
+- Ensure `npx` is available in the container
 
 ## 📞 Support
 
