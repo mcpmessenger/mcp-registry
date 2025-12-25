@@ -30,13 +30,32 @@ interface AgentFormDialogProps {
 }
 
 export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentFormDialogProps) {
-  // Determine server type from agent or default to HTTP
-  const isStdioServer = agent?.endpoint?.startsWith('stdio://') || false
-  const [serverType, setServerType] = useState<"http" | "stdio">(isStdioServer ? "stdio" : "http")
+  // Determine server type from agent
+  // Check if endpoint starts with stdio:// (STDIO) OR if metadata has endpoint (HTTP)
+  let initialServerType: "http" | "stdio" = "http"
+  let initialEndpoint = ""
+  
+  if (agent) {
+    if (agent.endpoint?.startsWith('stdio://')) {
+      initialServerType = "stdio"
+      initialEndpoint = ""
+    } else if (agent.endpoint && !agent.endpoint.startsWith('stdio://')) {
+      initialServerType = "http"
+      initialEndpoint = agent.endpoint
+    } else if (agent.metadata && typeof agent.metadata === 'object') {
+      const metadata = agent.metadata as Record<string, unknown>
+      if (metadata.endpoint && typeof metadata.endpoint === 'string') {
+        initialServerType = "http"
+        initialEndpoint = metadata.endpoint
+      }
+    }
+  }
+  
+  const [serverType, setServerType] = useState<"http" | "stdio">(initialServerType)
   
   const [formData, setFormData] = useState({
     name: agent?.name || "",
-    endpoint: agent?.endpoint?.replace('stdio://', '') || "",
+    endpoint: initialEndpoint,
     command: "",
     args: "",
     credentials: "", // Unified credentials field (JSON or simple key)
