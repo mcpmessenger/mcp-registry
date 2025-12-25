@@ -4,6 +4,8 @@ export interface ChatMessage {
   content: string
   timestamp: Date
   agentName?: string
+  imageUrl?: string
+  imageData?: string // Base64 encoded image data
   contextAttachment?: {
     type: "image" | "document" | "glazyr"
     url?: string

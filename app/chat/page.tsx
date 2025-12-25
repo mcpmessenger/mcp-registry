@@ -158,10 +158,11 @@ export default function ChatPage() {
               const imageData = generateResponse.imageData
               
               if (imageUrl) {
-                responseContent = `Your design is ready! View it here: ${imageUrl}`
+                responseContent = `Your design is ready!`
+                // Store image URL in message (will be rendered by component)
               } else if (imageData) {
-                responseContent = `Your design is ready! [Image generated]`
-                // TODO: Display image data in chat
+                responseContent = `Your design is ready!`
+                // Store image data in message (will be rendered by component)
               } else {
                 // Completed but no image - return text result
                 responseContent = generateResponse.result || generateResponse.message || "Design generated successfully!"
@@ -413,9 +414,9 @@ export default function ChatPage() {
               const imageData = generateResponse.imageData
               
               if (imageUrl) {
-                responseContent = `Your design is ready! View it here: ${imageUrl}`
+                responseContent = `Your design is ready!`
               } else if (imageData) {
-                responseContent = `Your design is ready! [Image generated]`
+                responseContent = `Your design is ready!`
               } else {
                 responseContent = generateResponse.result || generateResponse.message || "Design generated successfully!"
               }
@@ -566,12 +567,23 @@ export default function ChatPage() {
         }
       }
 
+      // Create assistant message with image data if available
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
         content: responseContent,
         timestamp: new Date(),
         agentName: agentName,
+      }
+      
+      // Add image data if this was a design generation response
+      if (isDesignRequest && generateResponse) {
+        if (generateResponse.imageUrl) {
+          assistantMessage.imageUrl = generateResponse.imageUrl
+        }
+        if (generateResponse.imageData) {
+          assistantMessage.imageData = generateResponse.imageData
+        }
       }
 
       setMessages((prev) => [...prev, assistantMessage])

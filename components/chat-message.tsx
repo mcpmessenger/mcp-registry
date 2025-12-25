@@ -46,6 +46,27 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
           )}
         >
           {message.content}
+          
+          {/* Display image if available */}
+          {message.imageUrl && (
+            <div className="mt-3 rounded-lg overflow-hidden">
+              <img 
+                src={message.imageUrl} 
+                alt="Generated design" 
+                className="max-w-full h-auto rounded-lg"
+              />
+            </div>
+          )}
+          
+          {message.imageData && (
+            <div className="mt-3 rounded-lg overflow-hidden">
+              <img 
+                src={message.imageData} 
+                alt="Generated design" 
+                className="max-w-full h-auto rounded-lg"
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 px-1">
