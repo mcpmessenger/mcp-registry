@@ -84,6 +84,13 @@ router.post('/generate', async (req, res) => {
           }
         }
         
+        console.log(`[Design Generate] Server ${server?.serverId} status:`, {
+          exists: !!server,
+          hasTools: !!(server?.tools && server.tools.length > 0),
+          toolCount: server?.tools?.length || 0,
+          toolNames: server?.tools?.map(t => t.name) || [],
+        })
+        
         if (server && server.tools && server.tools.some(t => 
           t.name.includes('generate') || 
           t.name.includes('design') || 
@@ -236,8 +243,21 @@ router.post('/generate', async (req, res) => {
         }
       }
     } catch (mcpError: any) {
-      console.error('[Design Generate] MCP routing failed:', mcpError?.message)
+      console.error('[Design Generate] MCP routing failed:', {
+        message: mcpError?.message,
+        stack: mcpError?.stack?.substring(0, 500),
+        name: mcpError?.name,
+      })
       // Fall through to native/fallback
+    }
+    
+    // Log why MCP routing didn't work
+    if (!mcpServerUsed) {
+      console.log('[Design Generate] MCP server not used. Reasons:', {
+        hasServerId: !!validated.serverId,
+        mcpResult: mcpResult ? 'has result' : 'no result',
+        mcpServerUsed,
+      })
     }
     
     // If MCP server handled it, return the result
