@@ -132,13 +132,21 @@ router.post('/generate', async (req, res) => {
               if (validated.size) toolArgs.size = validated.size
             }
             
-            mcpResult = await mcpInvokeService.invokeTool({
-              serverId: server.serverId,
-              tool: designTool.name,
-              arguments: toolArgs,
-            })
-            mcpServerUsed = true
+            try {
+              mcpResult = await mcpInvokeService.invokeTool({
+                serverId: server.serverId,
+                tool: designTool.name,
+                arguments: toolArgs,
+              })
+              mcpServerUsed = true
+            } catch (invokeError: any) {
+              // If invocation fails, throw it so it's caught by outer try-catch
+              throw invokeError
+            }
           }
+        } else if (server) {
+          // Server found but no matching tools
+          console.warn(`[Design Generate] Server ${server.serverId} found but has no matching design tools`)
         }
       } else {
         // Auto-discover design generation servers
