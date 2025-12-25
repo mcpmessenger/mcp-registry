@@ -40,6 +40,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     command: "",
     args: "",
     credentials: "", // Unified credentials field (JSON or simple key)
+    httpHeaders: "", // HTTP headers for HTTP servers (JSON object)
   })
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
@@ -76,6 +77,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       command: "",
       args: "",
       credentials: "",
+      httpHeaders: "",
     })
     setServerType("http")
   }
@@ -192,23 +194,51 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
               </>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="credentials">Credentials (Optional)</Label>
-              <Textarea
-                id="credentials"
-                placeholder={serverType === "stdio" 
-                  ? '{"GEMINI_API_KEY": "your-key-here"} or just paste API key'
-                  : 'API key or {"API_KEY": "value"} JSON'}
-                value={formData.credentials}
-                onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
-                className="font-mono text-xs min-h-[80px]"
-              />
-              <p className="text-xs text-muted-foreground">
-                {serverType === "stdio" 
-                  ? "Environment variables as JSON object, or a simple API key (will be mapped to GEMINI_API_KEY for Nano-Banana)"
-                  : "API key or credentials as JSON object. Credentials are securely stored."}
-              </p>
-            </div>
+            {serverType === "http" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="httpHeaders">HTTP Headers (JSON, Optional)</Label>
+                  <Textarea
+                    id="httpHeaders"
+                    placeholder='{"X-Goog-Api-Key": "your-api-key-here"}'
+                    value={formData.httpHeaders}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, httpHeaders: e.target.value }))}
+                    className="font-mono text-xs min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    HTTP headers to send with requests (e.g., API keys). Must be valid JSON object.
+                    Example: {"{"}"X-Goog-Api-Key": "your-key"{"}"}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="credentials">Credentials/Env Vars (Optional)</Label>
+                  <Textarea
+                    id="credentials"
+                    placeholder='API key or {"API_KEY": "value"} JSON'
+                    value={formData.credentials}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
+                    className="font-mono text-xs min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Environment variables (if server needs them). Not used for HTTP requests.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="credentials">Credentials (Optional)</Label>
+                <Textarea
+                  id="credentials"
+                  placeholder='{"GEMINI_API_KEY": "your-key-here"} or just paste API key'
+                  value={formData.credentials}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
+                  className="font-mono text-xs min-h-[80px]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Environment variables as JSON object, or a simple API key (will be mapped to GEMINI_API_KEY for Nano-Banana)
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
