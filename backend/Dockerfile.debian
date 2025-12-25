@@ -102,6 +102,10 @@ COPY --from=builder /app/dist ./dist
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm install -g playwright
 
+# Pre-install common MCP servers to avoid download delays on first use
+# This speeds up tool discovery from 30+ seconds to <5 seconds
+RUN npx --yes nano-banana-mcp --version || echo "nano-banana-mcp pre-install skipped"
+
 # Prisma Client should already be generated from postinstall script
 # But ensure it exists, regenerate if needed
 RUN npx prisma generate || echo "Prisma generate completed or skipped"
