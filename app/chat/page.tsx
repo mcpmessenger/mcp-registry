@@ -339,80 +339,81 @@ export default function ChatPage() {
             const needsOrchestration = orchestrator.requiresOrchestration(enhancedContent || content)
           
             if (needsOrchestration) {
-            // Use native orchestrator for complex multi-step workflows
-            try {
-              agentName = "Native Orchestrator"
-              
-              // Plan workflow (use enhanced content with context)
-              const plan = orchestrator.planWorkflow(enhancedContent || content)
-              
-              // Generate workflow ID for context tracking
-              const workflowId = `workflow-${Date.now()}`
-              
-              // Display planning status
-              const planningMessage: ChatMessage = {
-                id: `planning-${Date.now()}`,
-                role: "assistant",
-                content: `🔀 **Planning workflow** (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''}):\n\n${plan.steps.map((s, i) => {
-                  const toolName = s.selectedServer?.name || s.toolContext?.tool || 'Tool TBD'
-                  const status = s.selectedServer ? '✓' : '⚠️'
-                  return `${i + 1}. ${s.description} → ${status} ${toolName}`
-                }).join('\n')}`,
-                timestamp: new Date(),
-                agentName: agentName,
-              }
-              setMessages((prev) => [...prev, planningMessage])
-              
-              // Check if all steps have tools selected
-              const allStepsHaveTools = plan.steps.every(s => s.selectedServer && s.selectedTool)
-              if (!allStepsHaveTools) {
-                console.warn('[Native Orchestrator] Some steps missing tools:', plan.steps.filter(s => !s.selectedServer))
-              }
-              
-              // Execute workflow (use original content for execution, enhanced for planning)
-              const workflowResult = await executeWorkflow(enhancedContent || content, plan)
-              
-              if (workflowResult.success) {
-                // Format result from workflow
-                const resultText = typeof workflowResult.finalResult === 'object' 
-                  ? JSON.stringify(workflowResult.finalResult, null, 2)
-                  : String(workflowResult.finalResult || 'Workflow completed successfully')
+              // Use native orchestrator for complex multi-step workflows
+              try {
+                agentName = "Native Orchestrator"
                 
-                responseContent = `✅ **Workflow completed**\n\n${resultText}\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
+                // Plan workflow (use enhanced content with context)
+                const plan = orchestrator.planWorkflow(enhancedContent || content)
                 
-                // Store workflow result in context
-                contextManager.addMessage({
-                  role: 'assistant',
-                  content: responseContent,
+                // Generate workflow ID for context tracking
+                const workflowId = `workflow-${Date.now()}`
+                
+                // Display planning status
+                const planningMessage: ChatMessage = {
+                  id: `planning-${Date.now()}`,
+                  role: "assistant",
+                  content: `🔀 **Planning workflow** (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''}):\n\n${plan.steps.map((s, i) => {
+                    const toolName = s.selectedServer?.name || s.toolContext?.tool || 'Tool TBD'
+                    const status = s.selectedServer ? '✓' : '⚠️'
+                    return `${i + 1}. ${s.description} → ${status} ${toolName}`
+                  }).join('\n')}`,
                   timestamp: new Date(),
                   agentName: agentName,
-                  workflowId: workflowId,
-                  stepResults: workflowResult.steps.reduce((acc, s) => {
-                    if (s.result) acc[`step${s.step}`] = s.result
-                    return acc
-                  }, {} as Record<string, unknown>),
-                })
-              } else {
-                responseContent = `❌ **Workflow failed**: ${workflowResult.error || 'Unknown error'}\n\n**Steps:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.error ? ` ✗ ${s.error}` : s.result ? ' ✓' : ''}`).join('\n')}`
-              }
-              
-              // Skip normal tool invocation, workflow result is ready
-              targetServer = null
+                }
+                setMessages((prev) => [...prev, planningMessage])
+                
+                // Check if all steps have tools selected
+                const allStepsHaveTools = plan.steps.every(s => s.selectedServer && s.selectedTool)
+                if (!allStepsHaveTools) {
+                  console.warn('[Native Orchestrator] Some steps missing tools:', plan.steps.filter(s => !s.selectedServer))
+                }
+                
+                // Execute workflow (use original content for execution, enhanced for planning)
+                const workflowResult = await executeWorkflow(enhancedContent || content, plan)
+                
+                if (workflowResult.success) {
+                  // Format result from workflow
+                  const resultText = typeof workflowResult.finalResult === 'object' 
+                    ? JSON.stringify(workflowResult.finalResult, null, 2)
+                    : String(workflowResult.finalResult || 'Workflow completed successfully')
+                  
+                  responseContent = `✅ **Workflow completed**\n\n${resultText}\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
+                  
+                  // Store workflow result in context
+                  contextManager.addMessage({
+                    role: 'assistant',
+                    content: responseContent,
+                    timestamp: new Date(),
+                    agentName: agentName,
+                    workflowId: workflowId,
+                    stepResults: workflowResult.steps.reduce((acc, s) => {
+                      if (s.result) acc[`step${s.step}`] = s.result
+                      return acc
+                    }, {} as Record<string, unknown>),
+                  })
+                } else {
+                  responseContent = `❌ **Workflow failed**: ${workflowResult.error || 'Unknown error'}\n\n**Steps:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.error ? ` ✗ ${s.error}` : s.result ? ' ✓' : ''}`).join('\n')}`
+                }
+                
+                // Skip normal tool invocation, workflow result is ready
+                targetServer = null
               } catch (workflowError) {
-              console.error('Native orchestration failed, falling back to LangChain:', workflowError)
-              // Set error message but don't throw - let it fall through to LangChain
-              responseContent = `⚠️ Native orchestrator encountered an error: ${workflowError instanceof Error ? workflowError.message : 'Unknown error'}. Falling back to LangChain.`
-              
-              // Fall through to LangChain fallback
-              if (routing.orchestrationNeeded) {
-                const langchainServer = availableServers.find(s => 
-                  s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
-                )
-                if (langchainServer) {
-                  targetServer = langchainServer
-                  agentName = "LangChain Orchestrator (Fallback)"
-                  // Clear responseContent so LangChain can respond
-                  responseContent = ""
+                console.error('Native orchestration failed, falling back to LangChain:', workflowError)
+                // Set error message but don't throw - let it fall through to LangChain
+                responseContent = `⚠️ Native orchestrator encountered an error: ${workflowError instanceof Error ? workflowError.message : 'Unknown error'}. Falling back to LangChain.`
+                
+                // Fall through to LangChain fallback
+                if (routing.orchestrationNeeded) {
+                  const langchainServer = availableServers.find(s => 
+                    s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
+                  )
+                  if (langchainServer) {
+                    targetServer = langchainServer
+                    agentName = "LangChain Orchestrator (Fallback)"
+                    // Clear responseContent so LangChain can respond
+                    responseContent = ""
+                  }
                 }
               }
             }
