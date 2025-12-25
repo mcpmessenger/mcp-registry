@@ -14,6 +14,8 @@ import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPServer } from "@/lib/api"
 import { invokeMCPTool } from "@/lib/api"
 import { routeRequest, getServerToolContext } from "@/lib/tool-router"
+import { getNativeOrchestrator } from "@/lib/native-orchestrator"
+import { executeWorkflow } from "@/lib/workflow-executor"
 
 const initialMessages: ChatMessage[] = [
   {
