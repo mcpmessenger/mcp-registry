@@ -33,9 +33,12 @@ router.get('/servers', async (req, res, next) => {
 })
 
 // Debug endpoint - simple and direct
-router.get('/debug/server/:serverId', async (req, res, next) => {
+// Use wildcard to match serverId with dots and slashes
+router.get('/debug/server/*', async (req, res, next) => {
   try {
-    const { serverId } = req.params
+    // Extract serverId from path after '/debug/server/'
+    const serverId = req.path.replace('/debug/server/', '')
+    console.log('[Servers Router] Extracted serverId:', serverId)
     const server = await registryService.getServerById(serverId)
     
     if (!server) {
@@ -555,10 +558,11 @@ router.post('/invoke', async (req, res, next) => {
  * Debug endpoint to check server metadata and HTTP headers
  * Useful for troubleshooting API key issues
  */
-router.get('/debug/server/:serverId', async (req, res, next) => {
+router.get('/debug/server/*', async (req, res, next) => {
   try {
-    console.log('[Debug Route in Servers Router] Route matched! Path:', req.path, 'Params:', req.params, 'Original URL:', req.originalUrl)
-    const { serverId } = req.params
+    // Extract serverId from path after '/debug/server/'
+    const serverId = req.path.replace('/debug/server/', '')
+    console.log('[Debug Route in Servers Router] Route matched! Path:', req.path, 'Extracted serverId:', serverId, 'Original URL:', req.originalUrl)
     console.log('[Debug] Fetching server:', serverId)
     const server = await registryService.getServerById(serverId)
     
