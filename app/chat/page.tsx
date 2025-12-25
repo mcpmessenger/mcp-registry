@@ -325,9 +325,29 @@ export default function ChatPage() {
           let toolArgs: Record<string, unknown> = {}
           
           if (toolName === 'agent_executor') {
+            // For LangChain orchestrator, enhance the query to explicitly request tool usage
+            let enhancedQuery = content
+            
+            // If query mentions things that require Playwright (web browsing, concerts, events)
+            const needsWebBrowsing = /concert|event|show|ticket|venue|price|rental|car|hotel/i.test(content)
+            const mentionsPlaywright = /playwright|browser|web page|website|scrape/i.test(content)
+            
+            if (needsWebBrowsing && !mentionsPlaywright) {
+              // Suggest using Playwright for web browsing tasks
+              enhancedQuery = `${content}\n\nNote: This requires web browsing to find current information. Use the Playwright MCP server to navigate websites, search for information, and extract data from web pages.`
+            }
+            
+            // If query mentions location/maps, suggest Google Maps
+            const needsLocation = /location|map|near|closest|distance|address|coordinates/i.test(content)
+            const mentionsMaps = /google maps|maps|map/i.test(content.toLowerCase())
+            
+            if (needsLocation && !mentionsMaps) {
+              enhancedQuery += ` Use the Google Maps MCP server to find locations, addresses, and nearby places.`
+            }
+            
             toolArgs = {
-              query: content,
-              input: content,
+              query: enhancedQuery,
+              input: enhancedQuery,
             }
           } else {
             // For other tools, pass content as appropriate argument
