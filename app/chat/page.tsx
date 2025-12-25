@@ -547,12 +547,20 @@ export default function ChatPage() {
                 }
               }
             }
-            // Preserve or add search query if present
-            if (!toolArgs.query) {
-              const searchMatch = content.match(/(?:look for|search for|find|get)\s+(.+?)(?:\.|$)/i)
-              if (searchMatch) {
-                toolArgs.query = searchMatch[1].trim()
-              }
+            // Extract search query if present and construct a search instruction
+            const searchMatch = content.match(/(?:look for|search for|find|get|check for)\s+(.+?)(?:\.|$|in |near )/i)
+            if (searchMatch) {
+              const searchQuery = searchMatch[1].trim()
+              // Also extract location if present (e.g., "in iowa", "near New York")
+              const locationMatch = content.match(/(?:in|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+              const location = locationMatch ? locationMatch[1] : ''
+              const fullQuery = location ? `${searchQuery} ${location}` : searchQuery
+              
+              // Enhance the query with explicit search instructions
+              // For Playwright, we'll need to chain operations: navigate -> snapshot -> type in search box -> click search
+              // For now, include search query in the response to guide the agent
+              toolArgs.query = fullQuery
+              toolArgs.searchQuery = fullQuery // Store separately for potential multi-step workflow
             }
           } else {
             // For other tools, pass content as appropriate argument
@@ -593,6 +601,24 @@ export default function ChatPage() {
               .filter(item => item.type === 'text' && item.text)
               .map(item => item.text)
               .join('\n\n')
+            
+            // If we have a search query and got a homepage/navigation result,
+            // enhance the response to guide the user or suggest next steps
+            if (toolArgs?.searchQuery && toolName?.includes('browser_navigate')) {
+              const searchQueryLower = toolArgs.searchQuery.toLowerCase()
+              const responseLower = responseContent.toLowerCase()
+              const hasSearchResults = responseLower.includes(searchQueryLower.split(' ')[0]) && 
+                                       !responseLower.includes('trending events') &&
+                                       !responseLower.includes('popular categories')
+              
+              if (!hasSearchResults && (responseLower.includes('search') || responseLower.includes('textbox') || responseLower.includes('search events'))) {
+                // Page was navigated but search wasn't performed - provide helpful context
+                responseContent += `\n\n⚠️ **Search Not Performed**: I navigated to the website, but couldn't automatically perform the search for "${toolArgs.searchQuery}". Performing searches requires multiple sequential browser operations (navigate → find search box → type query → click search).\n\n**Current Status**: The homepage is loaded. The search box is visible in the page snapshot above.\n\n💡 **Tip**: For better results, try using the LangChain orchestrator which can chain multiple Playwright tool calls together.`
+              } else if (hasSearchResults) {
+                // Search results might be present
+                responseContent += `\n\n✅ **Search performed** for "${toolArgs.searchQuery}"`
+              }
+            }
             
             // Check for bot detection / 403 errors in Playwright responses
             if (targetServer.serverId.includes('playwright') && 
