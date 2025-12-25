@@ -4,6 +4,7 @@
  */
 
 import { spawn, ChildProcess } from 'child_process'
+import * as readline from 'readline'
 import { registryService } from './registry.service'
 import type { MCPServer } from '../types/mcp'
 
@@ -219,38 +220,63 @@ export class MCPInvokeService {
       const env = this.getServerEnv(server)
       
       console.log(`[STDIO] Spawning process: ${server.command} ${args.join(' ')}`)
+      console.log(`[STDIO] Environment keys: ${Object.keys(env).join(', ')}`)
       
       // Spawn the MCP server process
+      // Use shell: true for npx to work correctly
       const proc = spawn(server.command, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        shell: process.platform === 'win32',
+        shell: true, // npx requires shell: true
         env: { ...process.env, ...env },
       })
 
-      let stdoutBuffer = ''
-      let initRequestId = 1
-      let toolRequestId = 2
+      // State machine for MCP protocol
+      type ConnectionState = 'INITIALIZING' | 'INITIALIZED' | 'CALLING' | 'COMPLETE'
+      let state: ConnectionState = 'INITIALIZING'
+      
+      const initRequestId = 1
+      const toolRequestId = 2
       const timeout = 120000 // 120 second timeout for image generation
       let timeoutId: NodeJS.Timeout
-      let initialized = false
 
-      // Handle stdout - accumulate JSON-RPC messages
-      proc.stdout?.on('data', (data: Buffer) => {
-        stdoutBuffer += data.toString()
-        this.processStdioBuffer(stdoutBuffer, (message: any) => {
+      // Use readline for line-buffered JSON-RPC message reading
+      const rl = readline.createInterface({
+        input: proc.stdout!,
+        terminal: false,
+      })
+
+      // Handle each line (JSON-RPC message)
+      rl.on('line', (line: string) => {
+        if (!line.trim()) return
+        
+        try {
+          const message = JSON.parse(line)
+          console.log(`[STDIO] Received message (id=${message.id}, method=${message.method || 'response'}):`, JSON.stringify(message).substring(0, 200))
+          
           // Handle initialize response
-          if (message.id === initRequestId && !initialized) {
+          if (message.id === initRequestId && state === 'INITIALIZING') {
             if (message.error) {
               clearTimeout(timeoutId)
               proc.kill()
+              rl.close()
               reject(new Error(`MCP initialize error: ${message.error.message || JSON.stringify(message.error)}`))
               return
             }
+            
             if (message.result) {
-              initialized = true
-              console.log(`[STDIO] Initialize successful for ${server.serverId}, sending tool call`)
+              state = 'INITIALIZED'
+              console.log(`[STDIO] Initialize successful for ${server.serverId}`)
+              
+              // CRITICAL: Send initialized notification AFTER receiving initialize response
+              const initializedNotification = {
+                jsonrpc: '2.0',
+                method: 'notifications/initialized',
+              }
+              proc.stdin?.write(JSON.stringify(initializedNotification) + '\n')
+              console.log(`[STDIO] Sent initialized notification`)
               
               // Now send the tool call
+              state = 'CALLING'
               const toolRequest = {
                 jsonrpc: '2.0',
                 id: toolRequestId,
@@ -265,16 +291,20 @@ export class MCPInvokeService {
               console.log(`[STDIO] Sent tool call: ${toolName} to ${server.serverId}`)
               
               // Set timeout for tool call
+              clearTimeout(timeoutId)
               timeoutId = setTimeout(() => {
                 proc.kill()
+                rl.close()
                 reject(new Error(`Tool call timeout after ${timeout / 1000} seconds`))
               }, timeout)
             }
           }
           // Handle tool call response
-          else if (message.id === toolRequestId && initialized) {
+          else if (message.id === toolRequestId && state === 'CALLING') {
+            state = 'COMPLETE'
             clearTimeout(timeoutId)
             proc.kill()
+            rl.close()
             
             if (message.error) {
               reject(new Error(`MCP tool error: ${message.error.message || JSON.stringify(message.error)}`))
@@ -292,7 +322,7 @@ export class MCPInvokeService {
                 content = [{ type: 'text', text: JSON.stringify(message.result, null, 2) }]
               }
               
-              console.log(`[STDIO] Tool call completed for ${server.serverId}, result length: ${JSON.stringify(content).length}`)
+              console.log(`[STDIO] Tool call completed for ${server.serverId}, result type: ${content[0]?.type || 'unknown'}`)
               resolve({
                 result: {
                   content,
@@ -303,27 +333,48 @@ export class MCPInvokeService {
               reject(new Error('Invalid MCP response format'))
             }
           }
-        })
+        } catch (e) {
+          console.error(`[STDIO] Failed to parse MCP line: ${line.substring(0, 100)}`, e)
+          // Continue processing - might be partial JSON
+        }
       })
 
-      // Handle stderr
+      // Handle stderr - log ALL errors (this is where API errors show up)
+      let stderrBuffer = ''
       proc.stderr?.on('data', (data: Buffer) => {
-        const message = data.toString()
-        if (!message.includes('Downloading') && !message.includes('Installing')) {
-          console.error(`[STDIO ${server.serverId} stderr]:`, message.trim())
+        stderrBuffer += data.toString()
+        const lines = stderrBuffer.split('\n')
+        stderrBuffer = lines.pop() || '' // Keep incomplete line
+        
+        for (const line of lines) {
+          if (line.trim()) {
+            // Log all stderr except npm download noise
+            if (!line.includes('Downloading') && !line.includes('Installing') && !line.includes('npm')) {
+              console.error(`[STDIO ${server.serverId} stderr]:`, line.trim())
+            }
+          }
         }
       })
 
       // Handle process errors
       proc.on('error', (error) => {
         clearTimeout(timeoutId)
+        rl.close()
         reject(new Error(`Failed to spawn process: ${error.message}`))
       })
 
-      proc.on('exit', (code) => {
+      proc.on('exit', (code, signal) => {
         clearTimeout(timeoutId)
-        if (code !== 0 && code !== null) {
-          console.warn(`[STDIO] Process exited with code ${code}`)
+        rl.close()
+        if (state !== 'COMPLETE') {
+          if (code !== 0 && code !== null) {
+            console.warn(`[STDIO] Process exited with code ${code} (signal: ${signal}) before completion`)
+            if (state === 'INITIALIZING') {
+              reject(new Error(`Process exited during initialization with code ${code}`))
+            } else if (state === 'CALLING') {
+              reject(new Error(`Process exited during tool call with code ${code}`))
+            }
+          }
         }
       })
 
@@ -343,36 +394,19 @@ export class MCPInvokeService {
       }
 
       proc.stdin?.write(JSON.stringify(initRequest) + '\n')
-      proc.stdin?.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
-      
       console.log(`[STDIO] Sent initialize request to ${server.serverId}`)
       
       // Set timeout for initialization (should happen quickly)
       timeoutId = setTimeout(() => {
-        if (!initialized) {
+        if (state === 'INITIALIZING') {
           proc.kill()
+          rl.close()
           reject(new Error(`Initialize timeout after 10 seconds`))
         }
       }, 10000)
     })
   }
 
-  /**
-   * Process stdout buffer and extract complete JSON-RPC messages
-   */
-  private processStdioBuffer(buffer: string, callback: (message: any) => void): void {
-    const lines = buffer.split('\n')
-    for (const line of lines) {
-      if (line.trim()) {
-        try {
-          const message = JSON.parse(line)
-          callback(message)
-        } catch (e) {
-          // Not a complete JSON message yet, continue accumulating
-        }
-      }
-    }
-  }
 
   /**
    * Get environment variables for the server

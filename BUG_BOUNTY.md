@@ -125,13 +125,15 @@ Server → Client: {"jsonrpc":"2.0","id":2,"result":{...}}
 
 ## 🚀 Next Steps to Try
 
-1. **Fix TypeScript Error**: Change `requestId++` to `initRequestId` on line 333
-2. **Add More Logging**: Log every JSON-RPC message received from STDIO server
-3. **Test Locally**: Run STDIO invocation locally to see actual server responses
-4. **Check Response Format**: Verify MCP server returns expected JSON-RPC format
-5. **Handle Streaming**: If server streams results, handle partial responses
-6. **Error Handling**: Catch and log any errors from spawned process
-7. **Timeout Debugging**: Add intermediate timeouts to identify where it hangs
+1. ✅ **Fix TypeScript Error**: Changed `requestId++` to `initRequestId` on line 333
+2. ✅ **Implement Line-Buffered Reading**: Replaced buffer accumulation with `readline` module for proper JSON-RPC message parsing
+3. ✅ **Add State Machine**: Implemented proper state management (`INITIALIZING` → `INITIALIZED` → `CALLING` → `COMPLETE`)
+4. ✅ **Fix Initialized Notification**: Now sends `notifications/initialized` AFTER receiving initialize response (not before)
+5. ✅ **Improve Stderr Logging**: All stderr output is now logged (except npm noise) to catch API errors
+6. ✅ **Add Shell Mode**: Set `shell: true` for npx to work correctly
+7. ✅ **Enhanced Logging**: Log every JSON-RPC message received with truncated content
+8. **Test Deployment**: Deploy and test with actual design generation request
+9. **Monitor Cloud Run Logs**: Check logs for stderr output from Gemini API (401, 429, etc.)
 
 ## 🔗 Related Resources
 
@@ -178,6 +180,33 @@ Server → Client: {"jsonrpc":"2.0","id":2,"result":{...}}
 ---
 
 **Last Updated**: 2025-12-24
-**Status**: 🔴 Blocked - Requests hanging, no response received
+**Status**: 🟡 In Progress - Implemented recommended fixes, awaiting deployment and testing
 **Priority**: 🔥 Critical - Core feature not working
+
+## ✅ Recent Fixes Applied (2025-12-24)
+
+### Fix A: Line-Buffered Reading
+- ✅ Replaced buffer accumulation with `readline.createInterface()` for proper newline-delimited JSON parsing
+- ✅ Each line is parsed as a complete JSON-RPC message
+
+### Fix B: State Machine
+- ✅ Implemented proper state management: `INITIALIZING` → `INITIALIZED` → `CALLING` → `COMPLETE`
+- ✅ Fixed request ID management (initRequestId = 1, toolRequestId = 2)
+
+### Fix C: Initialized Notification
+- ✅ Now sends `notifications/initialized` AFTER receiving initialize response (was sent before)
+- ✅ This is critical for MCP protocol compliance
+
+### Fix D: Environment & Shell
+- ✅ Set `shell: true` for npx to work correctly
+- ✅ Improved environment variable logging
+
+### Fix E: Enhanced Error Logging
+- ✅ All stderr output is logged (filters npm noise)
+- ✅ This will catch Gemini API errors (401, 429, etc.)
+- ✅ Enhanced logging for every JSON-RPC message received
+
+### Fix F: Cleanup
+- ✅ Removed unused `processStdioBuffer` method
+- ✅ Proper cleanup of readline interface on completion/error
 
