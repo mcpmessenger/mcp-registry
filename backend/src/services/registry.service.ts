@@ -2,7 +2,6 @@ import { prisma } from '../config/database'
 import { serverIdentityService } from './server-identity.service'
 import type { MCPServer, MCPTool } from '../types/mcp'
 import { spawn } from 'child_process'
-import { spawn } from 'child_process'
 
 interface GetServersOptions {
   search?: string
@@ -485,7 +484,13 @@ export class RegistryService {
       }
 
       const args = serverData.args
-      const env: Record<string, string> = { ...process.env }
+      // Filter out undefined values from process.env and convert to Record<string, string>
+      const env: Record<string, string> = {}
+      for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined) {
+          env[key] = value
+        }
+      }
       if (serverData.env) {
         Object.assign(env, serverData.env)
       }
