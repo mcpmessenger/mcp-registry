@@ -480,7 +480,7 @@ export default function ChatPage() {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error'
             
             // Check for quota errors
-            if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+            if (errorMessage.includes('quota') || errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('exceeded')) {
               responseContent = `⚠️ **API Quota Exceeded**: The Gemini API free tier has very limited quotas for image generation. The model \`gemini-2.5-flash-preview-image\` requires a paid plan.\n\n**Options:**\n1. Wait for quota reset (check: https://ai.dev/usage?tab=rate-limit)\n2. Upgrade to a paid Gemini API plan\n3. Try again later`
             } else {
               responseContent = `I encountered an issue: ${errorMessage}. Tool discovery may still be in progress. Please try again in a few seconds.`
