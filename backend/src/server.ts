@@ -33,12 +33,23 @@ app.get('/health', (req: Request, res: Response) => {
   })
 })
 
+// Simple test route to verify routing works
+app.get('/test-debug', (req: Request, res: Response) => {
+  console.log('[TEST] Test route hit!')
+  res.json({ success: true, message: 'Test route works', timestamp: new Date().toISOString() })
+})
+
 // API routes
 // More specific routes must come before less specific ones
 
-// Add debug route directly to main app first (before v0.1 router)
-app.get('/v0.1/debug/server/:serverId', async (req, res) => {
-  console.log('[Server] Direct debug route hit! Params:', req.params)
+// Add debug route directly to main app first (before v0.1 router)  
+app.get('/v0.1/debug/server/:serverId', async (req, res, next) => {
+  console.log('[Server] ===== DIRECT DEBUG ROUTE HIT =====')
+  console.log('[Server] Method:', req.method)
+  console.log('[Server] Path:', req.path)
+  console.log('[Server] Original URL:', req.originalUrl)
+  console.log('[Server] Params:', req.params)
+  console.log('[Server] ===================================')
   try {
     const { serverId } = req.params
     const server = await registryService.getServerById(serverId)
@@ -77,11 +88,17 @@ app.get('/v0.1/debug/server/:serverId', async (req, res) => {
     })
   } catch (error) {
     console.error('[Debug] Error:', error)
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     })
   }
+})
+
+// Also add a catch-all logger before 404 to see what's being requested
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log('[Server] Request:', req.method, req.path, '| Original:', req.originalUrl)
+  next()
 })
 
 console.log('[Server] Registering debug router at /v0.1/debug')
@@ -93,6 +110,11 @@ app.use('/api/documents', documentsRouter)
 
 // 404 handler
 app.use((req: Request, res: Response) => {
+  console.log('[Server] ===== 404 HANDLER =====')
+  console.log('[Server] Method:', req.method)
+  console.log('[Server] Path:', req.path)
+  console.log('[Server] Original URL:', req.originalUrl)
+  console.log('[Server] =======================')
   res.status(404).json({
     error: 'Not Found',
     message: `Route ${req.method} ${req.path} not found`,
