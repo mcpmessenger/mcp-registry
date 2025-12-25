@@ -358,8 +358,8 @@ export default function ChatPage() {
         
         // If it's a design request, route to design generation endpoint (handles tool discovery)
         if (isDesignRequest(content) && server) {
-          // Route to design generation API (same as router mode)
-          agentName = "Design Generator"
+          // Route to design generation API, but use the selected agent name
+          agentName = selectedAgent?.name || "Design Generator"
           
           try {
             // Extract design details from the request
