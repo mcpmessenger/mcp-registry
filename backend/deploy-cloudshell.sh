@@ -1,0 +1,56 @@
+#!/bin/bash
+# Deployment script for Google Cloud Shell
+# This script handles the correct project ID and builds before deploying
+
+PROJECT_ID="554655392699"
+SERVICE_NAME="mcp-registry-backend"
+REGION="us-central1"
+IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+
+echo "🚀 Deploying MCP Registry Backend to Cloud Run"
+echo "Project ID: ${PROJECT_ID}"
+echo "Service: ${SERVICE_NAME}"
+echo "Region: ${REGION}"
+echo ""
+
+# Step 1: Set the correct project
+echo "📋 Setting project to ${PROJECT_ID}..."
+gcloud config set project ${PROJECT_ID}
+
+# Step 2: Build and push container image
+echo "📦 Building and pushing container image..."
+echo "This may take 5-10 minutes..."
+gcloud builds submit --tag ${IMAGE_NAME} --region ${REGION} .
+
+if [ $? -ne 0 ]; then
+    echo "❌ Build failed!"
+    exit 1
+fi
+
+echo "✅ Image built and pushed successfully"
+echo ""
+
+# Step 3: Deploy to Cloud Run
+echo "☁️  Deploying to Cloud Run..."
+gcloud run deploy ${SERVICE_NAME} \
+    --image ${IMAGE_NAME} \
+    --platform managed \
+    --region ${REGION} \
+    --allow-unauthenticated \
+    --project ${PROJECT_ID}
+
+if [ $? -ne 0 ]; then
+    echo "❌ Deployment failed!"
+    exit 1
+fi
+
+# Get the service URL
+SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region ${REGION} --format 'value(status.url)' --project ${PROJECT_ID})
+
+echo ""
+echo "✅ Deployment successful!"
+echo "📍 Service URL: ${SERVICE_URL}"
+echo "🏥 Health check: ${SERVICE_URL}/health"
+echo ""
+echo "🎉 Your backend is now live with the Kafka error fix!"
+

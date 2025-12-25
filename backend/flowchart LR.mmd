@@ -1,0 +1,35 @@
+flowchart LR
+  subgraph UI
+    Frontend["Frontend (Vercel)"]
+  end
+  subgraph Registry
+    RegistryAPI["Registry + Memory API\n(/v0.1 + /api/memory)"]
+    MemoryDB[(Prisma Memory DB)]
+    Kafka[Kafka Event Bus]
+  end
+  subgraph Agents
+    Vision["Vision MCP"]
+    Researcher["Researcher Orchestrator\n(Kafka consumer)"]
+    Valuation["Valuation MCP"]
+    Playwright["Playwright HTTP sidecar"]
+    Healer["Healer Agent\n(DLQ watcher)"]
+  end
+  subgraph Observability
+    TraceStream["Observability Dashboard / SSE"]
+    DLQ["DLQ + Retry Queue"]
+  end
+
+  Frontend --> RegistryAPI
+  RegistryAPI --> MemoryDB
+  RegistryAPI --> Kafka
+  Vision --> Kafka["vision.analysis.completed\n(context_id + intent + memory_snapshot_url)"]
+  Kafka --> Researcher
+  Researcher --> RegistryAPI["Memory sync (`/api/memory?context_id=...`)"]
+  Researcher --> Kafka["trigger next tools + updated context"]
+  Kafka --> Valuation
+  Kafka --> Playwright
+  Kafka --> TraceStream
+  Kafka --> DLQ
+  DLQ --> Healer
+  Healer --> Kafka["compensating action / plan B"]
+  TraceStream --> Frontend["WebSocket/SSE stream"]
