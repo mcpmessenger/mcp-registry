@@ -80,11 +80,11 @@ export interface GenerateSVGRequest {
 
 export interface GenerateSVGResponse {
   success: boolean
-  jobId: string
+  jobId?: string // Only present for async jobs (not for completed: true responses)
   assetId?: string
   message: string
   serverName?: string // Name of the MCP server that handled the request
-  completed?: boolean // True if result is immediate (synchronous)
+  completed?: boolean // True if result is immediate (synchronous) - no jobId needed
   imageUrl?: string // Image URL if completed synchronously
   imageData?: string // Base64 image data if completed synchronously
   result?: string // Result text

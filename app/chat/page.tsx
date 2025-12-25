@@ -152,8 +152,8 @@ export default function ChatPage() {
             }
             
             // Check if result is already completed (synchronous MCP response)
-            if (generateResponse.completed && (generateResponse.imageUrl || generateResponse.imageData)) {
-              // MCP server returned result immediately
+            if (generateResponse.completed) {
+              // MCP server returned result immediately - no job ID needed
               const imageUrl = generateResponse.imageUrl
               const imageData = generateResponse.imageData
               
@@ -163,6 +163,7 @@ export default function ChatPage() {
                 responseContent = `Your design is ready! [Image generated]`
                 // TODO: Display image data in chat
               } else {
+                // Completed but no image - return text result
                 responseContent = generateResponse.result || generateResponse.message || "Design generated successfully!"
               }
             } else if (generateResponse.jobId) {
@@ -407,7 +408,7 @@ export default function ChatPage() {
             
             // Handle response (same as router mode)
             if (generateResponse.completed && (generateResponse.imageUrl || generateResponse.imageData)) {
-              // Synchronous result
+              // Synchronous result - no job ID needed
               const imageUrl = generateResponse.imageUrl
               const imageData = generateResponse.imageData
               
@@ -418,7 +419,11 @@ export default function ChatPage() {
               } else {
                 responseContent = generateResponse.result || generateResponse.message || "Design generated successfully!"
               }
+            } else if (generateResponse.completed && generateResponse.result) {
+              // Completed but no image - just return the result
+              responseContent = generateResponse.result || generateResponse.message || "Design generated successfully!"
             } else if (generateResponse.jobId) {
+              // Only create job ID message if we actually have a job ID (async processing)
               responseContent = `I've started creating your design! Job ID: ${generateResponse.jobId}. I'll notify you when it's ready.`
               
               // Poll for job completion (same logic as router mode)
