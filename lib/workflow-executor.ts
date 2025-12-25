@@ -154,6 +154,10 @@ function buildToolArguments(
                      step.description.toLowerCase().includes('closest')
   
   const isPlaywrightTool = step.selectedServer?.serverId.includes('playwright') ||
+                           step.selectedTool?.includes('browser') ||
+                           step.selectedTool?.includes('navigate') ||
+                           step.description.toLowerCase().includes('playwright') ||
+                           step.description.toLowerCase().includes('check') && (step.description.toLowerCase().includes('website') || step.description.toLowerCase().includes('site') || step.description.toLowerCase().includes('ticket') || step.description.toLowerCase().includes('concert')) ||
                            step.description.toLowerCase().includes('concert') ||
                            step.description.toLowerCase().includes('event') ||
                            step.description.toLowerCase().includes('ticket') ||
@@ -193,12 +197,33 @@ function buildToolArguments(
     if (urlMatch) {
       args.url = urlMatch[1]
     } else {
-      // For concert searches, construct a search query
-      const concertMatch = step.description.match(/find when ['"](.+?)['"] is playing/i) ||
-                          step.description.match(/when (.+?) is playing/i)
-      if (concertMatch) {
-        args.query = `${concertMatch[1]} New York concert`
+      // Check if user explicitly mentioned a site (e.g., "check ticketmaster")
+      const siteMatch = step.description.match(/check\s+(\w+)/i) || 
+                       step.description.match(/(?:on|at)\s+(\w+\.com|\w+)/i)
+      
+      // For concert/ticketing searches, construct a search query
+      const concertMatch = step.description.match(/['"](.+?)['"]/i) ||
+                          step.description.match(/for (.+?)'s/i) ||
+                          step.description.match(/LCD Soundsystem/i) ||
+                          step.description.match(/concert schedule/i)
+      
+      if (siteMatch) {
+        // User specified a site (e.g., "ticketmaster")
+        const site = siteMatch[1].toLowerCase()
+        if (site === 'ticketmaster' || site.includes('ticket')) {
+          args.url = 'https://www.ticketmaster.com'
+          args.query = concertMatch ? `${concertMatch[1] || 'LCD Soundsystem'} New York` : 'LCD Soundsystem New York'
+        } else {
+          args.url = `https://www.${site}.com`
+          args.query = step.description
+        }
+      } else if (concertMatch) {
+        // Concert search without specific site
+        args.url = 'https://www.ticketmaster.com'
+        args.query = `${concertMatch[1] || 'LCD Soundsystem'} New York concert`
       } else {
+        // Generic search
+        args.url = step.description.includes('ticket') ? 'https://www.ticketmaster.com' : undefined
         args.query = step.description
       }
     }

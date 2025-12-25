@@ -48,7 +48,11 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     lowerContent.includes('phone') ||
     lowerContent.includes('email') ||
     lowerContent.includes('terms') ||
-    lowerContent.includes('rules')
+    lowerContent.includes('rules') ||
+    lowerContent.includes('check') && (lowerContent.includes('website') || lowerContent.includes('site') || lowerContent.includes('ticket') || lowerContent.includes('concert')) ||
+    lowerContent.includes('playwright') ||
+    lowerContent.includes('browser') ||
+    lowerContent.includes('navigate')
   ) {
     needs.push('Live Prices, Hidden Rules, Contact Details')
     if (!preferredTool) preferredTool = 'playwright'
