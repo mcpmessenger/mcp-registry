@@ -61,9 +61,11 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
         args: formData.args,
         credentials: formData.credentials,
         endpoint: undefined, // Clear endpoint for STDIO
+        httpHeaders: undefined, // Clear httpHeaders for STDIO
       } : {
         endpoint: formData.endpoint,
         credentials: formData.credentials,
+        httpHeaders: formData.httpHeaders, // Include httpHeaders for HTTP servers
         command: undefined, // Clear command/args for HTTP
         args: undefined,
       }),
