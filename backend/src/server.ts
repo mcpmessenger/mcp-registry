@@ -34,16 +34,60 @@ app.get('/health', (req: Request, res: Response) => {
 
 // API routes
 // More specific routes must come before less specific ones
+
+// Add debug route directly to main app first (before v0.1 router)
+app.get('/v0.1/debug/server/:serverId', async (req, res) => {
+  console.log('[Server] Direct debug route hit! Params:', req.params)
+  try {
+    const { serverId } = req.params
+    const { registryService } = await import('./services/registry.service')
+    const server = await registryService.getServerById(serverId)
+    
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        error: `Server ${serverId} not found`,
+      })
+    }
+
+    const metadata = server.metadata as Record<string, unknown> | undefined
+    const httpHeaders = metadata?.httpHeaders as Record<string, unknown> | undefined
+
+    res.json({
+      success: true,
+      server: {
+        serverId: server.serverId,
+        name: server.name,
+        endpoint: metadata?.endpoint,
+        hasMetadata: !!metadata,
+        hasHttpHeaders: !!httpHeaders,
+        httpHeaders: httpHeaders ? Object.keys(httpHeaders) : [],
+        httpHeadersPreview: httpHeaders 
+          ? Object.fromEntries(
+              Object.entries(httpHeaders).map(([key, value]) => [
+                key,
+                typeof value === 'string' && key.toLowerCase().includes('key')
+                  ? `${String(value).substring(0, 10)}...` 
+                  : value
+              ])
+            )
+          : null,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      },
+    })
+  } catch (error) {
+    console.error('[Debug] Error:', error)
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
+})
+
 console.log('[Server] Registering debug router at /v0.1/debug')
-app.use('/v0.1/debug', (req, res, next) => {
-  console.log('[Server] Debug router middleware - Path:', req.path, 'Original URL:', req.originalUrl)
-  debugRouter(req, res, next)
-})
+app.use('/v0.1/debug', debugRouter)
 console.log('[Server] Registering v0 servers router at /v0.1')
-app.use('/v0.1', (req, res, next) => {
-  console.log('[Server] V0 router middleware - Path:', req.path, 'Original URL:', req.originalUrl)
-  v0ServersRouter(req, res, next)
-})
+app.use('/v0.1', v0ServersRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/documents', documentsRouter)
 
