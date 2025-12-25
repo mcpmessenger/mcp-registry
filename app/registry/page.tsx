@@ -125,7 +125,11 @@ export default function RegistryPage() {
   const handleSaveAgent = async (data: Partial<MCPAgent> & { command?: string; args?: string; credentials?: string }) => {
     try {
       // Determine if this is HTTP or STDIO server
-      const isStdioServer = ((data as any).command && (data as any).args) || (!data.endpoint || data.endpoint.trim() === '')
+      // Check if endpoint exists (HTTP) or if command/args exist (STDIO)
+      // If editing and endpoint exists in metadata but form doesn't have it, it's HTTP
+      const hasEndpoint = data.endpoint && data.endpoint.trim() !== '' && !data.endpoint.startsWith('stdio://')
+      const hasCommandArgs = (data as any).command && (data as any).args
+      const isStdioServer = hasCommandArgs && !hasEndpoint
       
       // Validate based on server type
       if (!isStdioServer && (!data.endpoint || data.endpoint.trim() === '')) {
@@ -250,8 +254,9 @@ export default function RegistryPage() {
         name,
         description: manifestData.description || (isStdioServer ? `${(data as any).command} ${(data as any).args}` : data.endpoint) || undefined,
         version: manifestData.version || "v0.1",
-        command: isStdioServer ? (data as any).command : undefined,
-        args: isStdioServer ? args : undefined,
+        // For HTTP servers, explicitly set command/args to null to clear STDIO mode
+        command: isStdioServer ? (data as any).command : null,
+        args: isStdioServer ? args : null,
         tools: manifestData.tools || [],
         capabilities: manifestData.capabilities || [],
         env: env,
@@ -266,6 +271,10 @@ export default function RegistryPage() {
           httpHeaders: httpHeaders,
         },
       }
+      
+      console.log('[Save Agent] Server type:', isStdioServer ? 'STDIO' : 'HTTP')
+      console.log('[Save Agent] Command:', publishData.command)
+      console.log('[Save Agent] Args:', publishData.args)
       
       console.log('[Save Agent] Publishing data:', {
         serverId,
