@@ -59,6 +59,7 @@ router.post('/generate', async (req, res) => {
         
         // If server has no tools but is a STDIO server, try to discover tools
         if (server && (!server.tools || server.tools.length === 0) && server.command && server.args) {
+          const serverIdForError = server.serverId // Store for error handling
           try {
             console.log(`[Design Generate] Server ${server.serverId} has no tools, attempting discovery`)
             await registryService.discoverToolsForServer(server.serverId)
@@ -68,7 +69,7 @@ router.post('/generate', async (req, res) => {
               server = refreshedServer
             }
           } catch (discoverError: any) {
-            console.warn(`[Design Generate] Failed to discover tools for ${server.serverId}:`, discoverError?.message)
+            console.warn(`[Design Generate] Failed to discover tools for ${serverIdForError}:`, discoverError?.message)
           }
         }
         
