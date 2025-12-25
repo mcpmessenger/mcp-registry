@@ -68,8 +68,24 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
   }
 
   // Check for orchestration needs (multiple tools or complex synthesis)
+  // Multi-step queries (e.g., "find X, then find Y", "once you have X, use Y to find Z")
+  const multiStepIndicators = [
+    'once you',
+    'then',
+    'after',
+    'next',
+    'and then',
+    'followed by',
+    'use that to',
+    'use it to',
+    'with that',
+  ]
+  
+  const hasMultiStep = multiStepIndicators.some(indicator => lowerContent.includes(indicator))
+  
   if (
     needs.length > 1 ||
+    hasMultiStep ||
     lowerContent.includes('synthesize') ||
     lowerContent.includes('combine') ||
     lowerContent.includes('report') ||

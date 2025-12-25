@@ -283,11 +283,7 @@ export default function ChatPage() {
           const routing = routeRequest(content, availableServers)
           
           if (routing.primaryServer) {
-            targetServer = routing.primaryServer
-            const toolContext = getServerToolContext(routing.primaryServer)
-            agentName = toolContext?.tool || routing.primaryServer.name
-            
-            // If orchestration is needed, prefer LangChain
+            // If orchestration is needed, ALWAYS prefer LangChain (even if primaryServer is found)
             if (routing.orchestrationNeeded) {
               const langchainServer = availableServers.find(s => 
                 s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
@@ -295,7 +291,17 @@ export default function ChatPage() {
               if (langchainServer) {
                 targetServer = langchainServer
                 agentName = "LangChain Orchestrator"
+              } else {
+                // Fallback to primary server if LangChain not available
+                targetServer = routing.primaryServer
+                const toolContext = getServerToolContext(routing.primaryServer)
+                agentName = toolContext?.tool || routing.primaryServer.name
               }
+            } else {
+              // Simple single-step query, use the primary server
+              targetServer = routing.primaryServer
+              const toolContext = getServerToolContext(routing.primaryServer)
+              agentName = toolContext?.tool || routing.primaryServer.name
             }
           } else {
             // Fallback to LangChain agent for general queries
