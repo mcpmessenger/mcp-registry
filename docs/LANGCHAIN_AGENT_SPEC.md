@@ -133,6 +133,8 @@ The agent MUST have access to:
 1. **Google Maps MCP** (`com.google/maps-mcp`)
    - For location-based queries
    - Place IDs, coordinates, neighborhood information
+   - **Requires**: `X-Goog-Api-Key` header configured in registry metadata
+   - See [Google Maps API Key Setup](./GOOGLE_MAPS_API_KEY_SETUP.md) for configuration
 
 2. **Playwright MCP** (`com.mcpmessenger/playwright-mcp`)
    - For web scraping and real-time extraction
