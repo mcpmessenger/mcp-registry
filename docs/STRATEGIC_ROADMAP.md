@@ -5,11 +5,11 @@
 
 ## Executive Summary
 
-This document outlines the strategic vision for positioning the MCP Registry as the dominant **"Connectivity Layer"** for the Agentic Web. While Anthropic and Microsoft build infrastructure, we build the interoperability tools that make MCP accessible to the broader AI engineering community.
+This document outlines the strategic vision for positioning SlashMCP.com as the dominant **"Connectivity Layer"** for the Agentic Web. While Anthropic and Microsoft build infrastructure, we build the interoperability tools that make MCP accessible to the broader AI engineering community.
 
 ## 1. Ecosystem Deep Analysis
 
-### A. The Registry (mcp-registry)
+### A. The Registry (SlashMCP.com)
 
 **Current State:**
 - Clean, centralized hub for discovering MCP servers
@@ -475,6 +475,8 @@ safetyScore = (
 - WebSocket endpoint: `ws://gateway.sentilabs.com/debug/:sessionId`
 - Frontend: React component with canvas rendering
 - Storage: Temporary session storage (24h TTL)
+
+
 
 
 

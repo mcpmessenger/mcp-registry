@@ -683,6 +683,8 @@ export default function ChatPage() {
         onVoiceInput={handleVoiceInput}
         onFileUpload={handleFileUpload}
         onGlazyrCapture={handleGlazyrCapture}
+        onAgentSelect={setSelectedAgentId}
+        agentOptions={agentOptions}
         isLoading={isLoading}
       />
 

@@ -2,17 +2,21 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Send, Mic, Paperclip, Monitor, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SlashCommandMenu } from "@/components/slash-command-menu"
+import type { AgentOption } from "@/types/chat"
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void
   onVoiceInput: () => void
   onFileUpload: () => void
   onGlazyrCapture: () => void
+  onAgentSelect?: (agentId: string) => void
+  agentOptions?: AgentOption[]
   isLoading?: boolean
 }
 
@@ -21,12 +25,49 @@ export function ChatInput({
   onVoiceInput,
   onFileUpload,
   onGlazyrCapture,
+  onAgentSelect,
+  agentOptions = [],
   isLoading = false,
 }: ChatInputProps) {
   const [message, setMessage] = useState("")
+  const [showSlashMenu, setShowSlashMenu] = useState(false)
+  const [slashQuery, setSlashQuery] = useState("")
+  const [selectedMenuIndex, setSelectedMenuIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const menuContainerRef = useRef<HTMLDivElement>(null)
+
+  // Detect slash command
+  useEffect(() => {
+    const text = message
+    const cursorPos = textareaRef.current?.selectionStart ?? text.length
+    const textBeforeCursor = text.slice(0, cursorPos)
+    const lastSlashIndex = textBeforeCursor.lastIndexOf("/")
+
+    // Check if we're in a slash command (not inside a word)
+    if (lastSlashIndex >= 0) {
+      const textAfterSlash = textBeforeCursor.slice(lastSlashIndex + 1)
+      const isInWord = lastSlashIndex > 0 && /\w/.test(textBeforeCursor[lastSlashIndex - 1])
+      const hasSpaceAfterSlash = textAfterSlash.includes(" ")
+
+      if (!isInWord && !hasSpaceAfterSlash) {
+        setShowSlashMenu(true)
+        const newQuery = textAfterSlash
+        setSlashQuery(newQuery)
+        // Reset selection when query changes - use a small delay to ensure state updates
+        setSelectedMenuIndex(0)
+        return
+      }
+    }
+
+    setShowSlashMenu(false)
+    setSlashQuery("")
+    setSelectedMenuIndex(0)
+  }, [message])
 
   const handleSubmit = () => {
+    // Don't submit if slash menu is open
+    if (showSlashMenu) return
+
     if (message.trim() && !isLoading) {
       onSendMessage(message)
       setMessage("")
@@ -37,6 +78,57 @@ export function ChatInput({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // If slash menu is open, handle navigation
+    if (showSlashMenu && agentOptions.length > 0) {
+      // Get filtered agents based on current query
+      const query = slashQuery.toLowerCase()
+      const filtered = query
+        ? agentOptions.filter((agent) =>
+            agent.name.toLowerCase().includes(query)
+          )
+        : agentOptions
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedMenuIndex((prev) =>
+          prev < filtered.length - 1 ? prev + 1 : prev
+        )
+        return
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedMenuIndex((prev) => (prev > 0 ? prev - 1 : 0))
+        return
+      } else if (e.key === "Enter") {
+        e.preventDefault()
+        // Select agent at current index
+        if (filtered[selectedMenuIndex]) {
+          handleSlashSelect(filtered[selectedMenuIndex].id)
+        }
+        return
+      } else if (e.key === "Escape") {
+        e.preventDefault()
+        setShowSlashMenu(false)
+        // Remove the "/" from message
+        const text = message
+        const cursorPos = textareaRef.current?.selectionStart ?? text.length
+        const textBeforeCursor = text.slice(0, cursorPos)
+        const lastSlashIndex = textBeforeCursor.lastIndexOf("/")
+        if (lastSlashIndex >= 0) {
+          const newMessage =
+            text.slice(0, lastSlashIndex) + text.slice(cursorPos)
+          setMessage(newMessage)
+          setTimeout(() => {
+            textareaRef.current?.setSelectionRange(
+              lastSlashIndex,
+              lastSlashIndex
+            )
+            textareaRef.current?.focus()
+          }, 0)
+        }
+        return
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
@@ -50,9 +142,51 @@ export function ChatInput({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
   }
 
+  const handleSlashSelect = (agentId: string) => {
+    // Remove the slash command from message
+    const text = message
+    const cursorPos = textareaRef.current?.selectionStart ?? text.length
+    const textBeforeCursor = text.slice(0, cursorPos)
+    const lastSlashIndex = textBeforeCursor.lastIndexOf("/")
+
+    if (lastSlashIndex >= 0) {
+      const newMessage =
+        text.slice(0, lastSlashIndex) + text.slice(cursorPos)
+      setMessage(newMessage)
+    }
+
+    setShowSlashMenu(false)
+    setSlashQuery("")
+
+    // Call the agent select callback
+    if (onAgentSelect) {
+      onAgentSelect(agentId)
+    }
+
+    // Focus back on textarea
+    setTimeout(() => {
+      textareaRef.current?.focus()
+    }, 0)
+  }
+
+  // Calculate menu position
+  const getMenuPosition = () => {
+    if (!textareaRef.current) return {}
+
+    const rect = textareaRef.current.getBoundingClientRect()
+    
+    // Position above the textarea
+    return {
+      position: "fixed" as const,
+      bottom: `${window.innerHeight - rect.top + 8}px`,
+      left: `${rect.left}px`,
+      maxWidth: "320px",
+    }
+  }
+
   return (
     <div className="border-t border-border bg-card/50 p-4 sticky bottom-0 z-40 backdrop-blur-sm w-full gradient-chat-bg">
-      <div className="flex items-end gap-2 max-w-full w-full">
+      <div className="flex items-end gap-2 max-w-full w-full relative">
         {/* Left side buttons - microphone first, shifted right to avoid logo */}
         <div className="flex gap-2 shrink-0 relative z-50 ml-12">
           <Button
@@ -87,15 +221,32 @@ export function ChatInput({
           </Button>
         </div>
 
-        <Textarea
-          ref={textareaRef}
-          value={message}
-          onChange={handleTextareaChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Type your message... (Shift+Enter for new line)"
-          className="min-h-[44px] max-h-[200px] resize-none"
-          disabled={isLoading}
-        />
+        <div className="flex-1 relative">
+          <Textarea
+            ref={textareaRef}
+            value={message}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your message... (Shift+Enter for new line, / for commands)"
+            className="min-h-[44px] max-h-[200px] resize-none"
+            disabled={isLoading}
+          />
+
+          {/* Slash command menu */}
+          {showSlashMenu && agentOptions.length > 0 && (
+            <div ref={menuContainerRef} style={getMenuPosition()}>
+              <SlashCommandMenu
+                agents={agentOptions}
+                open={showSlashMenu}
+                onSelect={handleSlashSelect}
+                onClose={() => setShowSlashMenu(false)}
+                searchQuery={slashQuery}
+                selectedIndex={selectedMenuIndex}
+                onSelectedIndexChange={setSelectedMenuIndex}
+              />
+            </div>
+          )}
+        </div>
 
         <Button onClick={handleSubmit} disabled={!message.trim() || isLoading} className="shrink-0 h-[44px]">
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

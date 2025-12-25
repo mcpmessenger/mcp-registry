@@ -9,7 +9,7 @@ This key has been tested and is **valid** ✅
 
 ## Option 1: Update via UI (Easiest)
 
-1. **Go to your MCP Registry**
+1. **Go to SlashMCP.com**
    - Open your deployed frontend (Vercel URL)
    - Navigate to the **Registry** page
 

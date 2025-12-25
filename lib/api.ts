@@ -1,5 +1,5 @@
 /**
- * API Client for MCP Registry Backend
+ * API Client for SlashMCP.com Backend
  * Handles all communication with the backend API
  */
 
@@ -9,8 +9,8 @@ const DEV_BACKEND_URL = 'http://localhost:3001'
 // Use environment variable or default based on environment
 // NEXT_PUBLIC_API_URL takes precedence if set, otherwise use production URL for production builds
 const getApiBaseUrl = () => {
-  // Explicitly check for production environment (Vercel sets VERCEL=1)
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+  // Explicitly check for production environment (Vercel sets VERCEL=1, Amplify sets AWS_APP_ID)
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || !!process.env.AWS_APP_ID
   
   // Get the env var value if set
   const envUrl = process.env.NEXT_PUBLIC_API_URL

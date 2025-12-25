@@ -1,4 +1,4 @@
-# 🌐 MCP Registry: The Agentic Hub
+# 🌐 SlashMCP.com: The Agentic Hub
 
 **The fastest way to discover and connect Model Context Protocol (MCP) servers.**
 
@@ -18,7 +18,7 @@ A comprehensive registry and management platform for Model Context Protocol (MCP
 
 ## 🎯 Overview
 
-The MCP Registry is a platform designed to help developers discover, register, and manage Model Context Protocol services. It provides a user-friendly interface for browsing available MCP agents, viewing their details, and managing service registrations.
+SlashMCP.com is a platform designed to help developers discover, register, and manage Model Context Protocol services. It provides a user-friendly interface for browsing available MCP agents, viewing their details, and managing service registrations.
 
 ## ✨ Features
 

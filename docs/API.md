@@ -1,6 +1,6 @@
 # API Documentation
 
-Complete API reference for the MCP Registry backend.
+Complete API reference for the SlashMCP.com backend.
 
 ## Base URL
 
@@ -365,6 +365,8 @@ curl -X POST http://localhost:3001/v0.1/publish \
 - [MCP v0.1 Specification](https://modelcontextprotocol.io)
 - [Development Guide](./DEVELOPMENT.md)
 - [Architecture Documentation](./ARCHITECTURE.md)
+
+
 
 
 

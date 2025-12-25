@@ -229,7 +229,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
             <AlertDialogDescription>
               {isEditing
                 ? `Are you sure you want to update the configuration for "${formData.name}"?`
-                : `Are you sure you want to register "${formData.name}" to the MCP Registry?`}
+                : `Are you sure you want to register "${formData.name}" to SlashMCP.com?`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,6 +1,6 @@
-# Contributing to MCP Registry
+# Contributing to SlashMCP.com
 
-Thank you for your interest in contributing to MCP Registry! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to SlashMCP.com! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -126,7 +126,7 @@ Thank you for your interest in contributing to MCP Registry! This document provi
 
 By contributing, you agree that your contributions will be licensed under the ISC License.
 
-Thank you for contributing to MCP Registry! 🎉
+Thank you for contributing to SlashMCP.com! 🎉
 
 
 

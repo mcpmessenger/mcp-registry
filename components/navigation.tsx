@@ -9,14 +9,14 @@ import Image from "next/image"
 
 const navItems = [
   {
-    title: "Registry",
-    href: "/",
-    icon: LayoutDashboard,
-  },
-  {
     title: "Chat",
     href: "/chat",
     icon: MessageSquare,
+  },
+  {
+    title: "Registry",
+    href: "/registry",
+    icon: LayoutDashboard,
   },
   {
     title: "Settings",
@@ -32,19 +32,21 @@ export function Navigation() {
     <nav className="border-b border-border bg-card">
       <div className="flex h-16 items-center px-6">
         <div className="flex items-center gap-3">
-          <Image src="/logo.png" alt="MCP Registry" width={32} height={32} />
-          <h1 className="text-lg font-semibold">MCP Registry</h1>
+          <Image src="/logo.png" alt="SlashMCP.com" width={32} height={32} />
+          <h1 className="text-lg font-semibold">SlashMCP.com</h1>
         </div>
         <div className="ml-12 flex items-center gap-1">
           {navItems.map((item) => {
             const Icon = item.icon
+            // Handle root path matching for chat (since / redirects to /chat)
+            const isActive = pathname === item.href || (item.href === "/chat" && pathname === "/")
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-muted",
-                  pathname === item.href ? "bg-muted text-foreground" : "text-muted-foreground",
+                  isActive ? "bg-muted text-foreground" : "text-muted-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
