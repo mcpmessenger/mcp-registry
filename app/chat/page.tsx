@@ -305,11 +305,21 @@ export default function ChatPage() {
               const planningMessage: ChatMessage = {
                 id: `planning-${Date.now()}`,
                 role: "assistant",
-                content: `🔀 **Planning workflow** (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''}):\n\n${plan.steps.map((s, i) => `${i + 1}. ${s.description} → ${s.toolContext?.tool || s.selectedServer?.name || 'Tool TBD'}`).join('\n')}`,
+                content: `🔀 **Planning workflow** (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''}):\n\n${plan.steps.map((s, i) => {
+                  const toolName = s.selectedServer?.name || s.toolContext?.tool || 'Tool TBD'
+                  const status = s.selectedServer ? '✓' : '⚠️'
+                  return `${i + 1}. ${s.description} → ${status} ${toolName}`
+                }).join('\n')}`,
                 timestamp: new Date(),
                 agentName: agentName,
               }
               setMessages((prev) => [...prev, planningMessage])
+              
+              // Check if all steps have tools selected
+              const allStepsHaveTools = plan.steps.every(s => s.selectedServer && s.selectedTool)
+              if (!allStepsHaveTools) {
+                console.warn('[Native Orchestrator] Some steps missing tools:', plan.steps.filter(s => !s.selectedServer))
+              }
               
               // Execute workflow
               const workflowResult = await executeWorkflow(content, plan)
@@ -327,8 +337,11 @@ export default function ChatPage() {
               
               // Skip normal tool invocation, workflow result is ready
               targetServer = null
-            } catch (workflowError) {
+              } catch (workflowError) {
               console.error('Native orchestration failed, falling back to LangChain:', workflowError)
+              // Set error message but don't throw - let it fall through to LangChain
+              responseContent = `⚠️ Native orchestrator encountered an error: ${workflowError instanceof Error ? workflowError.message : 'Unknown error'}. Falling back to LangChain.`
+              
               // Fall through to LangChain fallback
               if (routing.orchestrationNeeded) {
                 const langchainServer = availableServers.find(s => 
@@ -337,6 +350,8 @@ export default function ChatPage() {
                 if (langchainServer) {
                   targetServer = langchainServer
                   agentName = "LangChain Orchestrator (Fallback)"
+                  // Clear responseContent so LangChain can respond
+                  responseContent = ""
                 }
               }
             }

@@ -124,25 +124,63 @@ export class NativeOrchestrator {
 
     if (hasMultiStep || intent.needs.length > 1) {
       // Parse multi-step query
-      // Simple heuristic: split by multi-step keywords
-      const parts = query.split(/(?:once you|then|after|followed by|and then)/i)
+      // Improved regex to handle "once you have" patterns
+      const splitRegex = /(?:once you (?:have|find|get)|then|after (?:finding|getting|having)|followed by|and then)/i
+      const parts = query.split(splitRegex)
       
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i].trim()
-        if (!part) continue
+      // Also handle the "once you have X, use Y" pattern more explicitly
+      const onceYouMatch = query.match(/once you (?:have|find|get) (.+?), use (.+?)(?:\.|$)/i)
+      if (onceYouMatch) {
+        // Extract the two parts more explicitly
+        const firstPart = query.substring(0, query.indexOf('Once you') || query.indexOf('once you'))
+        const secondPart = query.substring((query.indexOf('use ') + 4) || 0)
+        
+        if (firstPart && secondPart) {
+          // Route first part
+          const routing1 = routeRequest(firstPart.trim() || query.split(/once you/i)[0], this.availableServers)
+          const toolContext1 = routing1.toolContext || (routing1.primaryServer ? getToolContext(routing1.primaryServer.serverId) : null)
+          
+          steps.push({
+            step: 1,
+            description: firstPart.trim() || query.split(/once you/i)[0].trim(),
+            requiredOutput: toolContext1?.outputContext || 'result',
+            toolContext: toolContext1 || null,
+            selectedServer: routing1.primaryServer || null,
+            selectedTool: routing1.primaryServer?.tools?.[0]?.name || null,
+          })
+          
+          // Route second part (should use Google Maps based on description)
+          const routing2 = routeRequest(secondPart.trim(), this.availableServers)
+          const toolContext2 = routing2.toolContext || (routing2.primaryServer ? getToolContext(routing2.primaryServer.serverId) : null)
+          
+          steps.push({
+            step: 2,
+            description: secondPart.trim(),
+            requiredOutput: toolContext2?.outputContext || 'result',
+            toolContext: toolContext2 || null,
+            selectedServer: routing2.primaryServer || null,
+            selectedTool: routing2.primaryServer?.tools?.[0]?.name || null,
+          })
+        }
+      } else {
+        // Fallback to split method
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i].trim()
+          if (!part) continue
 
-        // Route each part to find appropriate tool
-        const routing = routeRequest(part, this.availableServers)
-        const toolContext = routing.toolContext || (routing.primaryServer ? getToolContext(routing.primaryServer.serverId) : null)
+          // Route each part to find appropriate tool
+          const routing = routeRequest(part, this.availableServers)
+          const toolContext = routing.toolContext || (routing.primaryServer ? getToolContext(routing.primaryServer.serverId) : null)
 
-        steps.push({
-          step: i + 1,
-          description: part,
-          requiredOutput: toolContext?.outputContext || 'result',
-          toolContext: toolContext || null,
-          selectedServer: routing.primaryServer || null,
-          selectedTool: routing.primaryServer?.tools?.[0]?.name || null,
-        })
+          steps.push({
+            step: i + 1,
+            description: part,
+            requiredOutput: toolContext?.outputContext || 'result',
+            toolContext: toolContext || null,
+            selectedServer: routing.primaryServer || null,
+            selectedTool: routing.primaryServer?.tools?.[0]?.name || null,
+          })
+        }
       }
     } else {
       // Single-step query
