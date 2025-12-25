@@ -406,8 +406,6 @@ router.post('/generate', async (req, res) => {
             serverName: serverName,
           })
         }
-        
-      }
       
       // Fallback: Log what we got and return the raw result
       const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`

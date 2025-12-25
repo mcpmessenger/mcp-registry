@@ -20,6 +20,7 @@ export interface InvokeToolResponse {
       type: 'text' | 'image' | 'resource'
       text?: string
       data?: string
+      url?: string
       mimeType?: string
     }>
     isError?: boolean
