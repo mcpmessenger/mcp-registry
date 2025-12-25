@@ -359,8 +359,10 @@ export default function ChatPage() {
                 }
               }
               
-              // Skip to tool invocation
+              // Skip orchestration and go directly to tool invocation
               responseContent = "" // Will be set by tool result
+              // toolArgs is already set above, toolName is already set
+              // targetServer is already set
             }
           }
           
