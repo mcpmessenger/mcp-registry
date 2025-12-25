@@ -197,33 +197,46 @@ function buildToolArguments(
     if (urlMatch) {
       args.url = urlMatch[1]
     } else {
+      // Check for "using [domain]" pattern (e.g., "using ticketmaster.com")
+      const usingMatch = step.description.match(/using\s+([\w-]+(?:\.com)?)/i)
+      
       // Check if user explicitly mentioned a site (e.g., "check ticketmaster")
       const siteMatch = step.description.match(/check\s+(\w+)/i) || 
-                       step.description.match(/(?:on|at)\s+(\w+\.com|\w+)/i)
+                       step.description.match(/(?:on|at)\s+(\w+\.com|\w+)/i) ||
+                       usingMatch
       
       // For concert/ticketing searches, construct a search query
       const concertMatch = step.description.match(/['"](.+?)['"]/i) ||
+                          step.description.match(/find.*['"](.+?)['"]/i) ||
                           step.description.match(/for (.+?)'s/i) ||
                           step.description.match(/LCD Soundsystem/i) ||
                           step.description.match(/concert schedule/i)
       
-      if (siteMatch) {
-        // User specified a site (e.g., "ticketmaster")
-        const site = siteMatch[1].toLowerCase()
-        if (site === 'ticketmaster' || site.includes('ticket')) {
+      if (siteMatch || usingMatch) {
+        // User specified a site (e.g., "ticketmaster" or "using ticketmaster.com")
+        const site = (siteMatch?.[1] || usingMatch?.[1] || '').toLowerCase().replace('.com', '')
+        if (site === 'ticketmaster' || site.includes('ticket') || step.description.toLowerCase().includes('ticketmaster')) {
           args.url = 'https://www.ticketmaster.com'
-          args.query = concertMatch ? `${concertMatch[1] || 'LCD Soundsystem'} New York` : 'LCD Soundsystem New York'
+          // Extract artist/band name
+          const artistMatch = step.description.match(/['"](.+?)['"]/i) || step.description.match(/find.*?['"](.+?)['"]/i)
+          if (artistMatch) {
+            args.query = `${artistMatch[1]} New York`
+          } else {
+            args.query = 'LCD Soundsystem New York'
+          }
         } else {
           args.url = `https://www.${site}.com`
           args.query = step.description
         }
       } else if (concertMatch) {
-        // Concert search without specific site
+        // Concert search without specific site - default to Ticketmaster
         args.url = 'https://www.ticketmaster.com'
         args.query = `${concertMatch[1] || 'LCD Soundsystem'} New York concert`
       } else {
-        // Generic search
-        args.url = step.description.includes('ticket') ? 'https://www.ticketmaster.com' : undefined
+        // Generic search - check if description mentions ticketmaster
+        if (step.description.toLowerCase().includes('ticketmaster')) {
+          args.url = 'https://www.ticketmaster.com'
+        }
         args.query = step.description
       }
     }

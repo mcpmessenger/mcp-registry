@@ -38,6 +38,10 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
   }
 
   // Check for real-time extraction needs
+  const hasWebsiteCheck = lowerContent.includes('check') && (lowerContent.includes('website') || lowerContent.includes('site') || lowerContent.includes('ticket') || lowerContent.includes('concert'))
+  const hasUsingDomain = lowerContent.includes('using') && (lowerContent.includes('.com') || lowerContent.includes('ticketmaster') || lowerContent.includes('website'))
+  const hasFindUsing = /find.*using/i.test(lowerContent) && (lowerContent.includes('.com') || lowerContent.includes('ticketmaster'))
+  
   if (
     lowerContent.includes('price') ||
     lowerContent.includes('live') ||
@@ -49,7 +53,9 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     lowerContent.includes('email') ||
     lowerContent.includes('terms') ||
     lowerContent.includes('rules') ||
-    lowerContent.includes('check') && (lowerContent.includes('website') || lowerContent.includes('site') || lowerContent.includes('ticket') || lowerContent.includes('concert')) ||
+    hasWebsiteCheck ||
+    hasUsingDomain ||
+    hasFindUsing ||
     lowerContent.includes('playwright') ||
     lowerContent.includes('browser') ||
     lowerContent.includes('navigate')
@@ -97,9 +103,11 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     return lowerContent.includes(indicator)
   })
   
+  // Don't require orchestration for simple website checks - those should use Playwright directly
+  const isSimpleWebsiteCheck = (hasWebsiteCheck || hasUsingDomain || hasFindUsing) && !hasMultiStep && needs.length === 1
+  
   if (
-    needs.length > 1 ||
-    hasMultiStep ||
+    (needs.length > 1 || hasMultiStep) && !isSimpleWebsiteCheck ||
     lowerContent.includes('synthesize') ||
     lowerContent.includes('combine') ||
     lowerContent.includes('report') ||
@@ -108,7 +116,10 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     lowerContent.includes('compare')
   ) {
     requiresOrchestration = true
-    preferredTool = 'langchain'
+    // Only prefer LangChain if it's truly a multi-step query, not a simple website check
+    if (!isSimpleWebsiteCheck) {
+      preferredTool = 'langchain'
+    }
   }
 
   return { needs, preferredTool, requiresOrchestration }
