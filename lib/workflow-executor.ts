@@ -6,6 +6,7 @@
 
 import { getNativeOrchestrator, type WorkflowPlan, type WorkflowStep, type WorkflowResult } from './native-orchestrator'
 import type { MCPServer } from './api'
+import { formatToolResponse, type ToolContext } from './response-formatter'
 
 export interface ToolInvocation {
   serverId: string
@@ -336,14 +337,32 @@ export async function executeWorkflow(
     }
 
     // Synthesize final result from all steps
-    if (executedSteps.length > 1 && executedSteps.every(s => s.result)) {
-      finalResult = {
-        steps: executedSteps.map(s => ({
-          step: s.step,
-          description: s.description,
-          result: s.result,
-        })),
-        summary: executedSteps.map(s => s.description).join(' → '),
+    if (executedSteps.length > 1) {
+      const hasFormattedResults = executedSteps.some(
+        s => s.result && typeof s.result === 'object' && 'formatted' in s.result
+      )
+      
+      if (hasFormattedResults) {
+        // Combine formatted results from all steps
+        const formattedParts = executedSteps
+          .filter(s => s.result && typeof s.result === 'object' && 'formatted' in s.result)
+          .map((s) => {
+            const formatted = (s.result as { formatted: string }).formatted
+            return `**Step ${s.step}**: ${formatted}`
+          })
+          .join('\n\n')
+        
+        finalResult = `I've completed ${executedSteps.length} steps:\n\n${formattedParts}`
+      } else {
+        // Fallback: create summary if no formatted results
+        finalResult = {
+          steps: executedSteps.map(s => ({
+            step: s.step,
+            description: s.description,
+            result: s.result,
+          })),
+          summary: executedSteps.map(s => s.description).join(' → '),
+        }
       }
     }
 
