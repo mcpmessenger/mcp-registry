@@ -306,19 +306,35 @@ function buildToolArguments(
         } else if (concertMatch) {
           // Concert search without specific site - default to StubHub
           args.url = 'https://www.stubhub.com'
-          args.search_query = `${concertMatch[1] || 'LCD Soundsystem'} New York concert`
+          // Extract artist and location from description
+          const artistMatch = step.description.match(/['"](.+?)['"]/i) || step.description.match(/(?:when|find|is)\s+(.+?)\s+(?:playing|concert|next)/i)
+          const locationMatch = step.description.match(/(?:in|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+          const location = locationMatch ? locationMatch[1] : ''
+          const artist = artistMatch ? artistMatch[1].replace(/\s+(?:playing|concert|next).*$/i, '').trim() : (concertMatch[1] || '')
+          args.search_query = `${artist}${location ? ` ${location}` : ''} concert`
         } else {
           // Generic search - check if description mentions ticketmaster
           if (step.description.toLowerCase().includes('ticketmaster')) {
             args.url = 'https://www.stubhub.com'
           }
+          // For "when is X playing/concert" queries, ensure we have a URL
+          if (!args.url && (step.description.toLowerCase().includes('playing') || 
+                           step.description.toLowerCase().includes('concert'))) {
+            args.url = 'https://www.stubhub.com'
+          }
           args.search_query = step.description
+        }
+        
+        // Ensure URL is always set for Playwright browser_navigate
+        if (!args.url) {
+          args.url = 'https://www.stubhub.com' // Default to StubHub for concert searches
         }
         
         // Enable auto-search for concert queries
         if (args.search_query && (step.description.toLowerCase().includes('find') || 
                                   step.description.toLowerCase().includes('when') ||
-                                  step.description.toLowerCase().includes('playing'))) {
+                                  step.description.toLowerCase().includes('playing') ||
+                                  step.description.toLowerCase().includes('concert'))) {
           args.auto_search = true
           args.wait_timeout = 15000
         }
