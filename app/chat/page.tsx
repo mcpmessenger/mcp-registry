@@ -605,21 +605,31 @@ export default function ChatPage() {
               .map(item => item.text)
               .join('\n\n')
             
-            // If we have a search query and got a homepage/navigation result,
-            // enhance the response to guide the user or suggest next steps
-            if (toolArgs?.searchQuery && toolName?.includes('browser_navigate')) {
-              const searchQueryLower = toolArgs.searchQuery.toLowerCase()
+            // Check if auto-search was attempted and verify results
+            const searchQuery = toolArgs?.search_query || toolArgs?.searchQuery
+            if (searchQuery && toolName?.includes('browser_navigate')) {
+              const searchQueryLower = searchQuery.toLowerCase()
               const responseLower = responseContent.toLowerCase()
+              
+              // Check if search results are present (not just homepage)
               const hasSearchResults = responseLower.includes(searchQueryLower.split(' ')[0]) && 
                                        !responseLower.includes('trending events') &&
-                                       !responseLower.includes('popular categories')
+                                       !responseLower.includes('popular categories') &&
+                                       !responseLower.includes('buy sports, concert and theater tickets') // StubHub homepage indicator
               
-              if (!hasSearchResults && (responseLower.includes('search') || responseLower.includes('textbox') || responseLower.includes('search events'))) {
-                // Page was navigated but search wasn't performed - provide helpful context
-                responseContent += `\n\n⚠️ **Search Not Performed**: I navigated to the website, but couldn't automatically perform the search for "${toolArgs.searchQuery}". Performing searches requires multiple sequential browser operations (navigate → find search box → type query → click search).\n\n**Current Status**: The homepage is loaded. The search box is visible in the page snapshot above.\n\n💡 **Tip**: For better results, try using the LangChain orchestrator which can chain multiple Playwright tool calls together.`
-              } else if (hasSearchResults) {
-                // Search results might be present
-                responseContent += `\n\n✅ **Search performed** for "${toolArgs.searchQuery}"`
+              // If auto_search was enabled, check if it succeeded
+              if (toolArgs?.auto_search) {
+                if (hasSearchResults) {
+                  responseContent += `\n\n✅ **Auto-search completed** for "${searchQuery}". Results are shown above.`
+                } else if (responseLower.includes('search') || responseLower.includes('textbox')) {
+                  // Auto-search was attempted but may not have found results yet
+                  responseContent += `\n\nℹ️ **Auto-search attempted** for "${searchQuery}". If no results are shown, the search may still be loading or the search box wasn't detected.`
+                }
+              } else {
+                // Legacy: search query provided but auto_search not enabled
+                if (!hasSearchResults && (responseLower.includes('search') || responseLower.includes('textbox'))) {
+                  responseContent += `\n\n⚠️ **Search Not Performed**: I navigated to the website. To automatically perform the search for "${searchQuery}", the auto-search feature needs to be enabled.`
+                }
               }
             }
             
