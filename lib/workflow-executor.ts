@@ -296,7 +296,8 @@ export async function executeWorkflow(
         step.selectedServer = server
         step.selectedTool = tool
 
-        // Extract text content for next step
+        // Extract raw result for formatting
+        let rawResult: unknown = toolResult.result
         if (toolResult.content && toolResult.content.length > 0) {
           const textContent = toolResult.content
             .filter(c => c.type === 'text' && c.text)
@@ -306,23 +307,41 @@ export async function executeWorkflow(
           // Try to parse structured data from text
           try {
             const parsed = JSON.parse(textContent)
-            step.result = parsed
+            rawResult = parsed
           } catch {
-            // If not JSON, try to extract structured info from text
-            step.result = { 
-              content: textContent, 
-              raw: toolResult.result,
-              // Try to extract venue if it's a concert/event result
-              ...(step.description.toLowerCase().includes('concert') || step.description.toLowerCase().includes('event') ? 
-                extractVenueFromText(textContent) : {})
+            // If not JSON, store as text content (will be parsed by formatter)
+            rawResult = { 
+              content: textContent,
             }
           }
-        } else {
-          step.result = toolResult.result
         }
 
-        finalResult = step.result
-        console.log(`[Workflow] Step ${step.step} completed:`, step.result)
+        // Format the result as natural language for better user experience
+        try {
+          const toolContext: ToolContext = {
+            tool: step.toolContext?.tool || 'unknown',
+            serverId: server.serverId,
+            toolName: tool,
+          }
+          const formattedResult = await formatToolResponse(
+            step.description,
+            rawResult,
+            toolContext
+          )
+          // Store both raw and formatted results
+          step.result = {
+            raw: rawResult,
+            formatted: formattedResult,
+          }
+          finalResult = formattedResult // Use formatted result as final output
+          console.log(`[Workflow] Step ${step.step} completed and formatted.`)
+        } catch (formatError) {
+          console.warn(`[Workflow] Failed to format step ${step.step} result:`, formatError)
+          // Fallback to raw result if formatting fails
+          step.result = rawResult
+          finalResult = rawResult
+          console.log(`[Workflow] Step ${step.step} completed (raw result).`)
+        }
       } else {
         step.error = toolResult.error || 'Tool invocation failed'
         console.error(`[Workflow] Step ${step.step} failed:`, step.error)
