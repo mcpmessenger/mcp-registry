@@ -305,8 +305,7 @@ function extractQueryEntities(query: string): { artist?: string; location?: stri
   // Improved pattern to capture full artist names, stopping at location keywords
   let artist: string | undefined = undefined
   
-  // First, extract location if present (to know where to stop)
-  const locationMatch = query.match(/(?:in|near|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+  // Extract location keyword (e.g., "in iowa") from the already-matched locationMatch
   const locationKeyword = locationMatch ? query.substring(locationMatch.index || 0) : null
   
   // Extract everything between "look for" and location/tickets
