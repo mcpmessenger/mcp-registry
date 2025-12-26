@@ -650,7 +650,8 @@ export async function formatResponseWithLLM(
         
         // Format the events we just found
         if (structured.events?.length > 0) {
-          return formatAsNaturalLanguage(query, structured, toolContext)
+          const formatted = formatAsNaturalLanguage(query, structured, toolContext)
+          return finalGuardrail(formatted)
         }
       }
     }
