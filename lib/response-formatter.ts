@@ -300,40 +300,71 @@ function extractQueryEntities(query: string): { artist?: string; location?: stri
   }
   const synonyms = location ? locationSynonyms[location.toLowerCase()] || [] : []
   
-  // Extract artist/event name (usually before "in", "near", "tickets")
-  // Pattern: "look for [artist] [optional: tickets/concert/show] [optional: in location]"
-  // Improved pattern to capture full artist names, stopping at location keywords
+  // Extract artist/event name
+  // Handle multiple patterns:
+  // - "look for [artist] tickets in [location]"
+  // - "when '[artist]' is playing in [location]"
+  // - "find [artist] concerts in [location]"
   let artist: string | undefined = undefined
   
   // Extract location keyword (e.g., "in iowa") from the already-matched locationMatch
   const locationKeyword = locationMatch ? query.substring(locationMatch.index || 0) : null
   
-  // Extract everything between "look for" and location/tickets
-  // Use a pattern that captures until "concert tickets" or location keywords
-  const lookForMatch = query.match(/(?:look for|search for|find|get)\s+(.+?)(?:\s+(?:concert\s+)?tickets?|\s+in\s+|\s+near\s+|\s+at\s+|$)/i)
-  if (lookForMatch) {
-    artist = lookForMatch[1].trim()
-    // Remove ticket/concert/show keywords from the end if they were captured
-    artist = artist.replace(/\s+(?:concert\s+)?tickets?$/i, '').trim()
-    artist = artist.replace(/\s+(?:concert|show|event)$/i, '').trim()
-    // Remove location if it was captured
-    if (locationKeyword && artist.includes(locationKeyword)) {
-      artist = artist.replace(new RegExp(`\\s*${locationKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*$`, 'i'), '').trim()
+  // Pattern 1: Quoted artist names (e.g., "when 'Iration' is playing")
+  const quotedArtistMatch = query.match(/'([^']+)'|"([^"]+)"/)
+  if (quotedArtistMatch) {
+    artist = (quotedArtistMatch[1] || quotedArtistMatch[2] || '').trim()
+  }
+  
+  // Pattern 2: "look for [artist]" or "find [artist]"
+  if (!artist || artist.length < 2) {
+    const lookForMatch = query.match(/(?:look for|search for|find|get)\s+(.+?)(?:\s+(?:concert\s+)?tickets?|\s+in\s+|\s+near\s+|\s+at\s+|$)/i)
+    if (lookForMatch) {
+      artist = lookForMatch[1].trim()
+      // Remove ticket/concert/show keywords from the end if they were captured
+      artist = artist.replace(/\s+(?:concert\s+)?tickets?$/i, '').trim()
+      artist = artist.replace(/\s+(?:concert|show|event)$/i, '').trim()
+      // Remove location if it was captured
+      if (locationKeyword && artist.includes(locationKeyword)) {
+        artist = artist.replace(new RegExp(`\\s*${locationKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*$`, 'i'), '').trim()
+      }
     }
   }
   
-  // If still no good artist, try word-by-word extraction
-  // For "look for iration concert tickets in iowa"
-  // Extract: words after "for" until "concert", "tickets", or location
+  // Pattern 3: "when [artist] is playing" (without quotes)
+  if (!artist || artist.length < 2) {
+    const whenMatch = query.match(/when\s+(.+?)\s+(?:is playing|plays|performs)/i)
+    if (whenMatch) {
+      artist = whenMatch[1].trim()
+      // Remove quotes if present
+      artist = artist.replace(/^['"]|['"]$/g, '').trim()
+      // Remove location if captured
+      if (locationKeyword && artist.includes(locationKeyword)) {
+        artist = artist.replace(new RegExp(`\\s+${locationKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*$`, 'i'), '').trim()
+      }
+    }
+  }
+  
+  // Pattern 4: Word-by-word extraction as fallback
   if (!artist || artist.length < 2) {
     const words = query.split(/\s+/)
-    const startIdx = words.findIndex(w => /^(for|find|get)$/i.test(w))
+    // Try to find start word (for, find, get, when)
+    const startWords = ['for', 'find', 'get', 'when']
+    let startIdx = -1
+    for (const startWord of startWords) {
+      startIdx = words.findIndex(w => new RegExp(`^${startWord}$`, 'i').test(w))
+      if (startIdx >= 0) break
+    }
+    
     if (startIdx >= 0) {
-      const stopWords = ['concert', 'tickets', 'ticket', 'show', 'event', 'in', 'near', 'at']
+      const stopWords = ['concert', 'tickets', 'ticket', 'show', 'event', 'is', 'playing', 'plays', 'in', 'near', 'at', 'next']
       const artistWords: string[] = []
       for (let i = startIdx + 1; i < words.length; i++) {
-        if (stopWords.includes(words[i].toLowerCase())) break
-        artistWords.push(words[i])
+        const word = words[i].toLowerCase()
+        // Remove quotes from word
+        const cleanWord = word.replace(/^['"]|['"]$/g, '')
+        if (stopWords.includes(cleanWord)) break
+        artistWords.push(words[i].replace(/^['"]|['"]$/g, ''))
       }
       if (artistWords.length > 0) {
         artist = artistWords.join(' ').trim()
