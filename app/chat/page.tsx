@@ -662,23 +662,36 @@ export default function ChatPage() {
                 agentName = "Playwright MCP Server (Fallback)"
                 
                 // Rebuild tool arguments for Playwright
-                toolArgs = {}
-                if (!toolArgs.url) {
-                  toolArgs.url = 'https://www.stubhub.com'
+                // Always set URL first (required for browser_navigate)
+                toolArgs = {
+                  url: 'https://www.stubhub.com' // Default to StubHub for concert searches
                 }
                 
                 // Extract search query from content
+                // Pattern: "when is [artist] next concert in [location]"
                 const searchMatch = content.match(/(?:when is|find|look for|search for)\s+(.+?)(?:\.|$|next|in )/i)
-                if (searchMatch) {
-                  const artistMatch = content.match(/['"](.+?)['"]/i)
-                  const locationMatch = content.match(/(?:in|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+                const artistMatch = content.match(/['"](.+?)['"]/i)
+                const locationMatch = content.match(/(?:in|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+                
+                let searchQuery = ''
+                if (artistMatch) {
+                  // Extract artist from quotes
+                  const artist = artistMatch[1]
                   const location = locationMatch ? locationMatch[1] : ''
-                  const artist = artistMatch ? artistMatch[1] : searchMatch[1].trim()
-                  toolArgs.search_query = `${artist}${location ? ` ${location}` : ''} concert`
+                  searchQuery = `${artist}${location ? ` ${location}` : ''} concert`
+                } else if (searchMatch) {
+                  // Extract from "when is X next concert in Y"
+                  let artist = searchMatch[1].trim()
+                  // Remove "next concert" or similar phrases
+                  artist = artist.replace(/\s+(?:next|upcoming|future)\s+(?:concert|show|event).*$/i, '').trim()
+                  const location = locationMatch ? locationMatch[1] : ''
+                  searchQuery = `${artist}${location ? ` ${location}` : ''} concert`
                 } else {
-                  toolArgs.search_query = content
+                  // Fallback: use entire content as search query
+                  searchQuery = content.replace(/when is|find|look for|search for/gi, '').trim()
                 }
                 
+                toolArgs.search_query = searchQuery
                 toolArgs.auto_search = true
                 toolArgs.wait_timeout = 15000
                 
