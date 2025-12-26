@@ -712,10 +712,15 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
           finalUrl = `https://www.stubhub.com/find/?q=${encodeURIComponent(searchQuery)}`
         }
         
-        // Use artist name if eventName is "Favorite" or empty
-        const finalEventName = (eventName && eventName.toLowerCase().trim() !== 'favorite' && eventName.trim() !== '') 
-          ? eventName 
-          : artist
+        // CRITICAL: Always use artist name if eventName is "Favorite", empty, or suspicious
+        const eventNameClean = (eventName || '').trim()
+        const finalEventName = (eventNameClean && 
+                                eventNameClean.toLowerCase() !== 'favorite' && 
+                                eventNameClean !== '' &&
+                                !eventNameClean.includes('Favorite') &&
+                                !eventNameClean.match(/^(see tickets|get tickets|buy|button|link|favorite|get notified)$/i))
+          ? eventNameClean
+          : artist // Always use artist name as fallback
         
         results.push({
           event: finalEventName,
