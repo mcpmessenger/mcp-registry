@@ -407,12 +407,14 @@ export class NativeOrchestrator {
     // Single-step concert queries should NOT require orchestration
     // Check for simple concert/event searches (these should go directly to Playwright)
     const isSimpleConcertQuery = (
-      (lowerQuery.includes('playing') || lowerQuery.includes('concert') || lowerQuery.includes('ticket')) &&
+      (lowerQuery.includes('playing') || lowerQuery.includes('concert') || lowerQuery.includes('ticket') || lowerQuery.includes('when is')) &&
       !lowerQuery.includes('once you') &&
       !lowerQuery.includes('then use') &&
       !lowerQuery.includes('finally') &&
       !lowerQuery.includes('followed by') &&
-      !lowerQuery.match(/\.\s+(?:Once|Then|Finally|Use)/) // Not followed by multi-step phrases
+      !lowerQuery.includes('and then') &&
+      !lowerQuery.match(/\.\s+(?:Once|Then|Finally|Use)/) && // Not followed by multi-step phrases
+      (lowerQuery.match(/\b(when|where|find|search|look)\s+.*(?:concert|playing|ticket)/i) !== null) // Has concert-related query words
     )
     
     // If it's a simple concert query, don't orchestrate
