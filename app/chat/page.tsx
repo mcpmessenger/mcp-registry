@@ -623,8 +623,8 @@ export default function ChatPage() {
               }
             }
             // Extract search query if present - now supports auto-search via Playwright MCP
-            // Handle patterns: "look for X", "when is X", "find X", etc.
-            const searchMatch = content.match(/(?:look for|search for|find|get|check for|when is)\s+(.+?)(?:\.|$|in |near |next)/i)
+            // Handle patterns: "look for X", "look up X", "when is X", "find X", etc.
+            const searchMatch = content.match(/(?:look for|look up|search for|find|get|check for|when is)\s+(.+?)(?:\.|$|in |near |next)/i)
             if (searchMatch) {
               let searchQuery = searchMatch[1].trim()
               // Remove "next concert" or similar trailing phrases
