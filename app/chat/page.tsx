@@ -638,49 +638,47 @@ export default function ChatPage() {
               console.warn('[Chat] Failed to format response, using raw:', formatError)
               responseContent = rawResponseContent
             }
-          } else {
-            responseContent = rawResponseContent
-            
-            // Check if auto-search was attempted and verify results
-            const searchQuery = toolArgs?.search_query || toolArgs?.searchQuery
-            if (searchQuery && toolName?.includes('browser_navigate')) {
-              const searchQueryLower = searchQuery.toLowerCase()
-              const responseLower = responseContent.toLowerCase()
-              
-              // Check if search results are present (not just homepage)
-              const hasSearchResults = responseLower.includes(searchQueryLower.split(' ')[0]) && 
-                                       !responseLower.includes('trending events') &&
-                                       !responseLower.includes('popular categories') &&
-                                       !responseLower.includes('buy sports, concert and theater tickets') // StubHub homepage indicator
-              
-              // If auto_search was enabled, check if it succeeded
-              if (toolArgs?.auto_search) {
-                if (hasSearchResults) {
-                  responseContent += `\n\n✅ **Auto-search completed** for "${searchQuery}". Results are shown above.`
-                } else if (responseLower.includes('search') || responseLower.includes('textbox')) {
-                  // Auto-search was attempted but may not have found results yet
-                  responseContent += `\n\nℹ️ **Auto-search attempted** for "${searchQuery}". If no results are shown, the search may still be loading or the search box wasn't detected.`
-                }
-              } else {
-                // Legacy: search query provided but auto_search not enabled
-                if (!hasSearchResults && (responseLower.includes('search') || responseLower.includes('textbox'))) {
-                  responseContent += `\n\n⚠️ **Search Not Performed**: I navigated to the website. To automatically perform the search for "${searchQuery}", the auto-search feature needs to be enabled.`
-                }
-              }
-            }
-            
-            // Check for bot detection / 403 errors in Playwright responses
-            if (targetServer.serverId.includes('playwright') && 
-                (responseContent.includes('403') || 
-                 responseContent.includes('unusual behavior') ||
-                 responseContent.includes('Browsing Activity Has Been Paused') ||
-                 responseContent.includes('bot detection'))) {
-              responseContent = `⚠️ **Website Bot Detection**: ${responseContent}\n\n**Note**: Some websites like Ticketmaster have strong bot protection that blocks automated browsers. The page was accessed but may require:\n- Human verification\n- Different browser headers\n- Stealth techniques\n\nConsider using a different approach or trying again later.`
-            }
           } else if (typeof result === 'string') {
             responseContent = result
           } else {
             responseContent = JSON.stringify(result, null, 2)
+          }
+          
+          // Check if auto-search was attempted and verify results (applies to all response types)
+          const searchQuery = toolArgs?.search_query || toolArgs?.searchQuery
+          if (searchQuery && toolName?.includes('browser_navigate')) {
+            const searchQueryLower = searchQuery.toLowerCase()
+            const responseLower = responseContent.toLowerCase()
+            
+            // Check if search results are present (not just homepage)
+            const hasSearchResults = responseLower.includes(searchQueryLower.split(' ')[0]) && 
+                                     !responseLower.includes('trending events') &&
+                                     !responseLower.includes('popular categories') &&
+                                     !responseLower.includes('buy sports, concert and theater tickets') // StubHub homepage indicator
+            
+            // If auto_search was enabled, check if it succeeded
+            if (toolArgs?.auto_search) {
+              if (hasSearchResults) {
+                responseContent += `\n\n✅ **Auto-search completed** for "${searchQuery}". Results are shown above.`
+              } else if (responseLower.includes('search') || responseLower.includes('textbox')) {
+                // Auto-search was attempted but may not have found results yet
+                responseContent += `\n\nℹ️ **Auto-search attempted** for "${searchQuery}". If no results are shown, the search may still be loading or the search box wasn't detected.`
+              }
+            } else {
+              // Legacy: search query provided but auto_search not enabled
+              if (!hasSearchResults && (responseLower.includes('search') || responseLower.includes('textbox'))) {
+                responseContent += `\n\n⚠️ **Search Not Performed**: I navigated to the website. To automatically perform the search for "${searchQuery}", the auto-search feature needs to be enabled.`
+              }
+            }
+          }
+          
+          // Check for bot detection / 403 errors in Playwright responses (applies to all response types)
+          if (targetServer.serverId.includes('playwright') && 
+              (responseContent.includes('403') || 
+               responseContent.includes('unusual behavior') ||
+               responseContent.includes('Browsing Activity Has Been Paused') ||
+               responseContent.includes('bot detection'))) {
+            responseContent = `⚠️ **Website Bot Detection**: ${responseContent}\n\n**Note**: Some websites like Ticketmaster have strong bot protection that blocks automated browsers. The page was accessed but may require:\n- Human verification\n- Different browser headers\n- Stealth techniques\n\nConsider using a different approach or trying again later.`
           }
 
           // Check for iteration/time limit messages and add helpful context
