@@ -763,11 +763,41 @@ export async function formatResponseWithLLM(
       }
     }
     
-    // Step 3b: Fallback - try parsing without artist anchor (just look for dates in general)
-    // This handles cases where artist name might be formatted differently in YAML
-    if (!windowedResults || windowedResults.length === 0) {
-        // Artist found but no dates in windows - likely no results
-        return finalGuardrail(`I can see **${entities.artist}** is listed on the site, but I don't see any specific concert dates${entities.location ? ` for ${entities.location}` : ''}. This typically means there are no upcoming shows scheduled at the moment.`)
+    // Step 3b: Fallback - try broader date extraction even if windowed parsing found nothing
+    // Look for ANY date patterns in the YAML, regardless of artist matching
+    const monthPattern = /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i
+    if (monthPattern.test(snapshot) && entities.artist && windowedResults.length === 0) {
+      // Dates exist in snapshot - try to extract them with a broader pattern
+      const allDateMatches = Array.from(snapshot.matchAll(/(?:-\\s+)?h4[^\\n]*"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"[^\\n]*\\n[^\\n]*(?:-\\s+)?h4[^\\n]*"(\\d{1,2})"[^\\n]*\\n[^\\n]*(?:-\\s+)?p[^\\n]*"(\\d{4})"/gi))
+      const foundDates: Array<{date: string}> = []
+      const monthNames: Record<string, string> = {
+        'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+        'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+        'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+      }
+      
+      let matchCount = 0
+      for (const match of allDateMatches) {
+        if (matchCount++ < 10) { // Limit to first 10 dates
+          const month = match[1]
+          const day = match[2]
+          const year = match[3]
+          foundDates.push({
+            date: `${monthNames[month] || month} ${day}, ${year}`
+          })
+        }
+      }
+      
+      if (foundDates.length > 0) {
+        // We found dates - create a response even without perfect venue matching
+        let response = `I found ${foundDates.length} ${foundDates.length === 1 ? 'upcoming event' : 'upcoming events'} for **${entities.artist}**${entities.location ? ` in ${entities.location}` : ''}:\n\n`
+        foundDates.forEach((event, index) => {
+          response += `${index + 1}. **${entities.artist}**\n`
+          response += `   - Date: ${event.date}\n`
+          response += `\n`
+        })
+        response += `💡 Visit [StubHub](https://www.stubhub.com) to see venue details and purchase tickets.`
+        return finalGuardrail(response.trim())
       }
     }
 
