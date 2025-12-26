@@ -617,9 +617,9 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       
       // Final fallback: construct a search URL for the artist and location
       if (!url && artist) {
-        // Create a StubHub search URL
-        const searchQuery = `${artist}${context.location ? ` ${context.location}` : ''}`.replace(/\s+/g, '+')
-        url = `https://www.stubhub.com/find/?q=${searchQuery}`
+        // Create a StubHub search URL - properly encode the query
+        const searchQuery = `${artist}${context.location ? ` ${context.location}` : ''}`
+        url = `https://www.stubhub.com/find/?q=${encodeURIComponent(searchQuery)}`
       }
       
       // Check for "See Tickets" button as confidence indicator
@@ -648,13 +648,17 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
           finalUrl = `https://www.stubhub.com/find/?q=${searchQuery}`
         }
         
+        // Build city/state info for display
+        const cityState = city ? (city + (state ? `, ${state}` : '')) : undefined
+        
         results.push({
           event: eventName && eventName.toLowerCase() !== 'favorite' ? eventName : artist, // Use extracted event name or default to artist
           date: fullDate,
           venue,
           time,
           url: finalUrl || `https://www.stubhub.com/find/?q=${encodeURIComponent(artist)}`, // Always provide a URL
-          confidence
+          confidence,
+          city: cityState || undefined // Add city info if available
         })
       }
     }
