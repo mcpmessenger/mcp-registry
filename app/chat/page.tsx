@@ -551,12 +551,12 @@ export default function ChatPage() {
                   const domain = domainMatch[1].toLowerCase()
                   // Map ticket sites to correct URLs
                   const ticketSites: Record<string, string> = {
-                    'ticketmaster': 'https://www.ticketmaster.com',
+                    'ticketmaster': 'https://www.stubhub.com', // Ticketmaster has cookie dialogs, use StubHub instead
                     'stubhub': 'https://www.stubhub.com',
                     'seatgeek': 'https://www.seatgeek.com',
                     'ticketfly': 'https://www.ticketfly.com',
                     'axs': 'https://www.axs.com',
-                    'tickets': 'https://www.ticketmaster.com', // Generic fallback
+                    'tickets': 'https://www.stubhub.com', // Generic fallback - use StubHub (more automation-friendly)
                     'eventbrite': 'https://www.eventbrite.com',
                     'ticketweb': 'https://www.ticketweb.com',
                   }
