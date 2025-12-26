@@ -724,11 +724,12 @@ export async function formatResponseWithLLM(
     const artistFound = entities.artist && (
       lowerSnapshot.includes(lowerArtist) ||
       lowerSnapshot.includes(lowerArtist.replace(/\s+/g, '')) || // Try without spaces
-      lowerSnapshot.includes(lowerArtist.substring(0, 4)) // Try first 4 chars as fallback
+      lowerSnapshot.includes(lowerArtist.substring(0, Math.max(4, lowerArtist.length - 2))) // Try partial match
     )
     
+    let windowedResults: ExtractedEvent[] = []
     if (artistFound && entities.artist) {
-      const windowedResults = extractWithAnchorWindow({
+      windowedResults = extractWithAnchorWindow({
         artist: entities.artist,
         location: entities.location,
         rawYaml: snapshot
