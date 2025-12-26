@@ -628,7 +628,11 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       const confidence = hasTicketsButton ? 0.9 : 0.7
       
       // Filter out "Favorite" entries - these are button labels, not event names
-      if (eventName.toLowerCase() === 'favorite' || (eventName.toLowerCase() === artist.toLowerCase() && eventName.toLowerCase() === 'favorite')) {
+      // Also check if eventName is empty or just whitespace
+      if (!eventName || 
+          eventName.toLowerCase().trim() === 'favorite' || 
+          eventName.toLowerCase().trim() === '' ||
+          (eventName.toLowerCase() === artist.toLowerCase() && artist.toLowerCase() === 'favorite')) {
         // Skip this result - it's not a real event
         continue // Skip to next iteration
       }
@@ -641,23 +645,60 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       )
       
       if (!isDuplicate) {
-        // Ensure we have a URL for ticket purchase
-        let finalUrl = url
-        if (!finalUrl) {
-          // Create a StubHub search URL for this specific event
-          const searchQuery = `${artist} ${fullDate}${entities.location ? ` ${entities.location}` : ''}`.replace(/\s+/g, '+')
-          finalUrl = `https://www.stubhub.com/find/?q=${searchQuery}`
+        // Extract city and state separately for better display (if not already extracted)
+        let extractedCity: string | undefined = undefined
+        let extractedState: string | undefined = undefined
+        
+        // Try to extract city/state from venue if it contains location info
+        if (venue) {
+          const locationMatch = venue.match(/^(.+?),\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:,\s*([A-Z]{2}))?$/)
+          if (locationMatch && locationMatch.length > 2) {
+            // Venue name is separate from city
+            if (locationMatch[2]) {
+              extractedCity = locationMatch[2].trim()
+              extractedState = locationMatch[3]?.trim()
+            }
+          }
+        }
+        
+        // If no city found yet, try to extract from text after date
+        if (!extractedCity) {
+          const cityStatePattern = /(?:-\\s+)?p\s+"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:,\s*([A-Z]{2}))?"/
+          const cityMatch = textAfterDate.match(cityStatePattern)
+          if (cityMatch) {
+            extractedCity = cityMatch[1]?.trim()
+            extractedState = cityMatch[2]?.trim()
+          }
         }
         
         // Build city/state info for display
-        const cityState = city ? (city + (state ? `, ${state}` : '')) : undefined
+        const cityState = extractedCity ? (extractedCity + (extractedState ? `, ${extractedState}` : '')) : undefined
+        
+        // Ensure we have a URL for ticket purchase - use proper encoding
+        let finalUrl = url
+        if (!finalUrl) {
+          // Create a StubHub search URL for this specific event - properly encoded
+          const searchParts = [artist, fullDate]
+          if (cityState) {
+            searchParts.push(cityState)
+          } else if (context.location) {
+            searchParts.push(context.location)
+          }
+          const searchQuery = searchParts.join(' ')
+          finalUrl = `https://www.stubhub.com/find/?q=${encodeURIComponent(searchQuery)}`
+        }
+        
+        // Use artist name if eventName is "Favorite" or empty
+        const finalEventName = (eventName && eventName.toLowerCase().trim() !== 'favorite' && eventName.trim() !== '') 
+          ? eventName 
+          : artist
         
         results.push({
-          event: eventName && eventName.toLowerCase() !== 'favorite' ? eventName : artist, // Use extracted event name or default to artist
+          event: finalEventName,
           date: fullDate,
           venue,
           time,
-          url: finalUrl || `https://www.stubhub.com/find/?q=${encodeURIComponent(artist)}`, // Always provide a URL
+          url: finalUrl || `https://www.stubhub.com/find/?q=${encodeURIComponent(artist + (cityState ? ` ${cityState}` : ''))}`, // Always provide a URL
           confidence,
           city: cityState || undefined // Add city info if available
         })
