@@ -626,14 +626,37 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       const hasTicketsButton = window.includes('See Tickets') || window.includes('Get Tickets')
       const confidence = hasTicketsButton ? 0.9 : 0.7
       
-      results.push({
-        event: artist,
-        date: fullDate,
-        venue,
-        time,
-        url,
-        confidence
-      })
+      // Filter out "Favorite" entries - these are button labels, not event names
+      if (eventName.toLowerCase() === 'favorite' || (eventName.toLowerCase() === artist.toLowerCase() && eventName.toLowerCase() === 'favorite')) {
+        // Skip this result - it's not a real event
+        continue // Skip to next iteration
+      }
+      
+      // Don't add duplicates - check if we already have this date with same artist
+      const isDuplicate = results.some(r => 
+        r.date === fullDate && 
+        (r.venue === venue || (!r.venue && !venue)) &&
+        (r.event.toLowerCase() === (eventName || artist).toLowerCase() || r.event.toLowerCase() === artist.toLowerCase())
+      )
+      
+      if (!isDuplicate) {
+        // Ensure we have a URL for ticket purchase
+        let finalUrl = url
+        if (!finalUrl) {
+          // Create a StubHub search URL for this specific event
+          const searchQuery = `${artist} ${fullDate}${entities.location ? ` ${entities.location}` : ''}`.replace(/\s+/g, '+')
+          finalUrl = `https://www.stubhub.com/find/?q=${searchQuery}`
+        }
+        
+        results.push({
+          event: eventName && eventName.toLowerCase() !== 'favorite' ? eventName : artist, // Use extracted event name or default to artist
+          date: fullDate,
+          venue,
+          time,
+          url: finalUrl || `https://www.stubhub.com/find/?q=${encodeURIComponent(artist)}`, // Always provide a URL
+          confidence
+        })
+      }
     }
   }
   
