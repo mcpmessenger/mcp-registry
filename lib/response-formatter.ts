@@ -301,9 +301,21 @@ function extractQueryEntities(query: string): { artist?: string; location?: stri
   const synonyms = location ? locationSynonyms[location.toLowerCase()] || [] : []
   
   // Extract artist/event name (usually before "in", "near", "tickets")
-  const artistPattern = /(?:look for|search for|find|get)\s+([^in]{1,50}?)(?:\s+(?:tickets?|concert|show|event))?\s*(?:in|near|at|$)/i
+  // Pattern: "look for [artist] [optional: tickets/concert/show] [optional: in location]"
+  // Use negative lookahead to stop at "in" when it's followed by a location
+  const artistPattern = /(?:look for|search for|find|get)\s+([^"']+?)(?:\s+(?:tickets?|concert|show|event))?\s*(?:in|near|at|$)/i
   const artistMatch = query.match(artistPattern)
-  const artist = artistMatch ? artistMatch[1].trim() : undefined
+  let artist = artistMatch ? artistMatch[1].trim() : undefined
+  
+  // Clean up artist name (remove common prefixes/suffixes)
+  if (artist) {
+    artist = artist.replace(/\s+(?:tickets?|concert|show|event|in|near|at).*$/i, '').trim()
+    // If artist contains " in " it might have captured location, split it
+    const inMatch = artist.match(/^(.+?)\s+in\s+/i)
+    if (inMatch) {
+      artist = inMatch[1].trim()
+    }
+  }
   
   return { artist, location, synonyms }
 }
@@ -643,26 +655,14 @@ export async function formatResponseWithLLM(
       }
     }
     
-    // If snapshot exists but is minimal (just a few basic elements), provide helpful context
+    // Step 6: Handle cases where we have a snapshot but couldn't extract meaningful data
     if (snapshot !== rawContent) {
-      const lineCount = snapshot.split('\n').filter(l => l.trim()).length
-      const hasMinimalContent = lineCount < 30 && (
-        snapshot.includes('- input') || 
-        snapshot.includes('- a') || 
-        snapshot.includes('graphics-symbol') ||
-        snapshot.includes('stubhub logo')
-      )
+      // Apply final guardrail to ensure no raw YAML leaks
+      const entities = extractQueryEntities(query)
+      const artist = entities.artist || 'events'
+      const location = entities.location ? ` in ${entities.location}` : ''
       
-      if (hasMinimalContent) {
-        // Extract query context
-        const searchTerms = query.match(/(?:look for|search for|find)\s+(.+?)(?:\.|$|in |near )/i)?.[1] || query
-        return `I've completed the search for **"${searchTerms}"** on StubHub.\n\n**Status**: The page has been loaded and the search executed. However, the current page snapshot shows minimal content, which could mean:\n\n1. 🔄 **Results are still loading** - The search may need a moment to complete\n2. 📋 **No results found** - There may not be events matching your search\n3. ⏳ **Page structure changed** - The site may have updated its layout\n\n💡 **Next Steps**:\n- Try refining your search terms\n- Check back in a few moments if results are loading\n- The search was successfully executed on StubHub's website`
-      }
-    }
-    
-    // If snapshot exists but no structured data found, provide a summary
-    if (snapshot !== rawContent && snapshot.length > 100) {
-      return `I've completed the search. The page has been loaded and analyzed. ${structured.events?.length ? `Found ${structured.events.length} events.` : structured.links?.length ? `Found ${structured.links.length} links.` : 'Review the page snapshot above for details.'}`
+      return finalGuardrail(`I completed the search for **${artist}**${location} on StubHub. The page loaded successfully, but I'm having trouble extracting the specific event details from the current page structure. You may want to:\n\n- Visit [StubHub](https://www.stubhub.com) directly to see the full results\n- Try refining your search terms\n- Check if the page is still loading`)
     }
   }
 
