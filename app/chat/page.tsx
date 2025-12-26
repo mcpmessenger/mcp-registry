@@ -408,13 +408,25 @@ export default function ChatPage() {
                 // Execute workflow (use original content for execution, enhanced for planning)
                 const workflowResult = await executeWorkflow(enhancedContent || content, plan)
                 
-                if (workflowResult.success) {
-                  // Format result from workflow
-                  const resultText = typeof workflowResult.finalResult === 'object' 
-                    ? JSON.stringify(workflowResult.finalResult, null, 2)
-                    : String(workflowResult.finalResult || 'Workflow completed successfully')
-                  
-                  responseContent = `✅ **Workflow completed**\n\n${resultText}\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
+                         if (workflowResult.success) {
+                           // Use formatted result if available, otherwise format it
+                           let resultText: string
+                           if (typeof workflowResult.finalResult === 'string') {
+                             resultText = workflowResult.finalResult
+                           } else if (workflowResult.finalResult && typeof workflowResult.finalResult === 'object' && 'formatted' in workflowResult.finalResult) {
+                             resultText = (workflowResult.finalResult as { formatted: string }).formatted
+                           } else {
+                             resultText = typeof workflowResult.finalResult === 'object' 
+                               ? JSON.stringify(workflowResult.finalResult, null, 2)
+                               : String(workflowResult.finalResult || 'Workflow completed successfully')
+                           }
+                           
+                           responseContent = `✅ **Workflow completed**\n\n${resultText}`
+                           
+                           // Add step summary (optional, only if not already included in formatted result)
+                           if (!resultText.includes('Step')) {
+                             responseContent += `\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
+                           }
                   
                   // Store workflow result in context
                   contextManager.addMessage({
