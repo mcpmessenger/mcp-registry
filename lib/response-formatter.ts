@@ -900,11 +900,22 @@ export async function formatResponseWithLLM(
         
         let formattedResponse = `I found ${windowedResults.length} ${windowedResults.length === 1 ? 'event' : 'events'} for **${entities.artist}**${entities.location ? ` in ${entities.location}` : ''}:\n\n`
         
-        // Filter out "Favorite" entries before displaying
-        const filteredResults = windowedResults.filter(event => 
-          event.event.toLowerCase() !== 'favorite' && 
-          event.event.trim() !== ''
-        )
+        // Filter out "Favorite" entries and duplicates before displaying
+        const seen = new Set<string>()
+        const filteredResults = windowedResults.filter(event => {
+          const eventLower = (event.event || '').toLowerCase().trim()
+          // Skip "Favorite" entries and empty event names
+          if (!eventLower || eventLower === 'favorite' || eventLower === '') {
+            return false
+          }
+          // Create a unique key for duplicate detection (date + event name)
+          const key = `${event.date || ''}-${eventLower}`
+          if (seen.has(key)) {
+            return false // Skip duplicates
+          }
+          seen.add(key)
+          return true
+        })
         
         filteredResults.forEach((event, index) => {
           formattedResponse += `${index + 1}. **${event.event}**\n`
