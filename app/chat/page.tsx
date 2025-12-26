@@ -670,6 +670,27 @@ export default function ChatPage() {
             }
           }
 
+          // FINAL VALIDATION: Ensure URL is set for browser_navigate before invoking
+          if (toolName?.includes('browser_navigate') || toolName?.includes('browser') || toolName?.includes('navigate')) {
+            if (!toolArgs?.url) {
+              const isConcertQuery = content.toLowerCase().includes('playing') || 
+                                   content.toLowerCase().includes('concert') ||
+                                   content.toLowerCase().includes('ticket') ||
+                                   content.toLowerCase().includes('when is') ||
+                                   content.toLowerCase().includes('event') ||
+                                   content.toLowerCase().includes('show')
+              if (isConcertQuery) {
+                toolArgs = toolArgs || {}
+                toolArgs.url = 'https://www.stubhub.com'
+                console.log('[Chat] Final validation: Set default URL for concert query:', toolArgs.url)
+              } else {
+                console.error('[Chat] browser_navigate called without URL and not a concert query:', { toolName, toolArgs, content })
+                throw new Error(`browser_navigate requires a URL. Please specify a website (e.g., "go to stubhub.com")`)
+              }
+            }
+            console.log('[Chat] Invoking browser_navigate with:', { url: toolArgs.url, search_query: toolArgs.search_query, auto_search: toolArgs.auto_search })
+          }
+
           let result
           try {
             result = await invokeMCPTool({
