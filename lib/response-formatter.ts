@@ -688,13 +688,13 @@ export async function formatToolResponse(
         : { result: toolResponse }
 
     // Format using appropriate method
-    return await formatResponseWithLLM(query, response, toolContext)
+    const formatted = await formatResponseWithLLM(query, response, toolContext)
+    // ALWAYS apply guardrail as final safety check
+    return finalGuardrail(formatted)
   } catch (error) {
     console.error('[ResponseFormatter] Error formatting response:', error)
-    // Fallback to raw response if formatting fails
-    return typeof toolResponse === 'string'
-      ? toolResponse
-      : JSON.stringify(toolResponse, null, 2)
+    // Even errors should go through guardrail to prevent raw YAML leaks
+    return finalGuardrail(`I encountered an error processing the response. The search may have completed—try checking the website directly or refining your search terms.`)
   }
 }
 
