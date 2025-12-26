@@ -373,7 +373,7 @@ export async function executeWorkflow(
         arguments: arguments_,
       }
 
-      const toolResult = await invokeTool(invocation)
+      let toolResult = await invokeTool(invocation)
 
       if (toolResult.success) {
         step.selectedServer = server
