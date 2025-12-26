@@ -228,15 +228,40 @@ export class NativeOrchestrator {
 
           // Route each part to find appropriate tool
           const routing = routeRequest(part, this.availableServers)
-          const toolContext = routing.toolContext || (routing.primaryServer ? getToolContext(routing.primaryServer.serverId) : null)
+          
+          // For step 1, if it's a concert/event search, prefer Playwright even if routing suggests LangChain
+          let selectedServer = routing.primaryServer
+          let selectedTool = routing.primaryServer?.tools?.[0]?.name || null
+          
+          if (i === 0) {
+            const lowerPart = part.toLowerCase()
+            const isConcertSearch = lowerPart.includes('playing') ||
+                                   lowerPart.includes('concert') ||
+                                   lowerPart.includes('event') ||
+                                   lowerPart.includes('ticket') ||
+                                   (lowerPart.includes('when') && lowerPart.includes('playing'))
+            
+            if (isConcertSearch) {
+              // Override to use Playwright for concert searches
+              const playwrightServer = this.availableServers.find(s => 
+                s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+              )
+              if (playwrightServer && playwrightServer.tools && playwrightServer.tools.length > 0) {
+                selectedServer = playwrightServer
+                selectedTool = playwrightServer.tools[0].name
+              }
+            }
+          }
+          
+          const toolContext = routing.toolContext || (selectedServer ? getToolContext(selectedServer.serverId) : null)
 
           steps.push({
             step: i + 1,
             description: part,
             requiredOutput: toolContext?.outputContext || 'result',
             toolContext: toolContext || null,
-            selectedServer: routing.primaryServer || null,
-            selectedTool: routing.primaryServer?.tools?.[0]?.name || null,
+            selectedServer: selectedServer || null,
+            selectedTool: selectedTool,
           })
         }
       }
