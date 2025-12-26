@@ -485,11 +485,18 @@ export default function ChatPage() {
         // Only invoke tool if we didn't handle it as a design request
         // (Design requests are handled above and responseContent is already set)
         if (!isDesignRequest(content) && targetServer && targetServer.tools && targetServer.tools.length > 0) {
-          // Use agent_executor if available, otherwise use first tool
+          // Use agent_executor ONLY if this is the LangChain server, otherwise use first tool
           // BUT: If we already have toolName set from explicit detection, use that
           if (!toolName) {
-            const executorTool = targetServer.tools.find(t => t.name === 'agent_executor')
-            toolName = executorTool ? 'agent_executor' : targetServer.tools[0].name
+            // Only look for agent_executor on LangChain server
+            const isLangChain = targetServer.serverId.includes('langchain') || targetServer.name.toLowerCase().includes('langchain')
+            if (isLangChain) {
+              const executorTool = targetServer.tools.find(t => t.name === 'agent_executor')
+              toolName = executorTool ? 'agent_executor' : targetServer.tools[0].name
+            } else {
+              // For non-LangChain servers, use the first available tool
+              toolName = targetServer.tools[0].name
+            }
           }
           
           console.log(`Routing to ${targetServer.name} using tool: ${toolName}`)
