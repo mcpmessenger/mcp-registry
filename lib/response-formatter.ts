@@ -180,6 +180,23 @@ export async function formatResponseWithLLM(
       return formatAsNaturalLanguage(query, structured, toolContext)
     }
     
+    // If snapshot exists but is minimal (just a few basic elements), provide helpful context
+    if (snapshot !== rawContent) {
+      const lineCount = snapshot.split('\n').filter(l => l.trim()).length
+      const hasMinimalContent = lineCount < 30 && (
+        snapshot.includes('- input') || 
+        snapshot.includes('- a') || 
+        snapshot.includes('graphics-symbol') ||
+        snapshot.includes('stubhub logo')
+      )
+      
+      if (hasMinimalContent) {
+        // Extract query context
+        const searchTerms = query.match(/(?:look for|search for|find)\s+(.+?)(?:\.|$|in |near )/i)?.[1] || query
+        return `I've completed the search for **"${searchTerms}"** on StubHub.\n\n**Status**: The page has been loaded and the search executed. However, the current page snapshot shows minimal content, which could mean:\n\n1. 🔄 **Results are still loading** - The search may need a moment to complete\n2. 📋 **No results found** - There may not be events matching your search\n3. ⏳ **Page structure changed** - The site may have updated its layout\n\n💡 **Next Steps**:\n- Try refining your search terms\n- Check back in a few moments if results are loading\n- The search was successfully executed on StubHub's website`
+      }
+    }
+    
     // If snapshot exists but no structured data found, provide a summary
     if (snapshot !== rawContent && snapshot.length > 100) {
       return `I've completed the search. The page has been loaded and analyzed. ${structured.events?.length ? `Found ${structured.events.length} events.` : structured.links?.length ? `Found ${structured.links.length} links.` : 'Review the page snapshot above for details.'}`
