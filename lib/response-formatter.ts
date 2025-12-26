@@ -328,26 +328,51 @@ export async function formatResponseWithLLM(
     
     // If snapshot exists but no events found, do aggressive extraction for "Iration"
     if (snapshot !== rawContent && structured.events?.length === 0 && (snapshot.includes('Iration') || snapshot.includes('iration'))) {
-      // Try to find ALL dates in the snapshot with very flexible patterns
+      // Robust parser: Find all h4 elements with month names, then find associated day and year
       const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-      const monthPattern = `(${monthAbbr.join('|')})`
+      const monthNames: Record<string, string> = {
+        'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+        'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+        'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+      }
       
-      // Pattern: Find h4 with month, then h4 with day, then p with year (in sequence)
-      const allDates = [...snapshot.matchAll(new RegExp(`h4[^\\n]*"${monthPattern}"[^\\n]*\\n[^\\n]*h4[^\\n]*"(\\d{1,2})"[^\\n]*\\n[^\\n]*p[^\\n]*"(\\d{4})"`, 'gi'))]
+      // Find all month headings
+      const monthPattern = new RegExp(`(?:-\\s+)?h4\\s+"(${monthAbbr.join('|')})"`, 'gi')
+      const monthMatches = [...snapshot.matchAll(monthPattern)]
       
-      if (allDates.length > 0) {
-        const monthNames: Record<string, string> = {
-          'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
-          'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
-          'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
-        }
+      const foundDates: Array<{month: string, day: string, year: string}> = []
+      
+      for (const monthMatch of monthMatches) {
+        const month = monthMatch[1]
+        const monthIndex = monthMatch.index || 0
         
-        for (const dateMatch of allDates.slice(0, 10)) {
-          const month = dateMatch[1]
-          const day = dateMatch[2]
-          const year = dateMatch[3]
-          const fullDate = `${monthNames[month] || month} ${day}, ${year}`
+        // Look ahead for day (within next 200 chars)
+        const afterMonth = snapshot.substring(monthIndex, Math.min(snapshot.length, monthIndex + 200))
+        const dayMatch = afterMonth.match(/(?:-\s+)?h4\s+"(\d{1,2})"/)
+        
+        if (dayMatch) {
+          const day = dayMatch[1]
+          const dayIndex = monthIndex + (dayMatch.index || 0)
           
+          // Look ahead for year (within next 200 chars from day)
+          const afterDay = snapshot.substring(dayIndex, Math.min(snapshot.length, dayIndex + 200))
+          const yearMatch = afterDay.match(/(?:-\s+)?p\s+"(\d{4})"/)
+          
+          if (yearMatch) {
+            const year = yearMatch[1]
+            foundDates.push({ month, day, year })
+          }
+        }
+      }
+      
+      // Remove duplicates
+      const uniqueDates = foundDates.filter((date, index, self) => 
+        index === self.findIndex(d => d.month === date.month && d.day === date.day && d.year === date.year)
+      )
+      
+      if (uniqueDates.length > 0) {
+        for (const date of uniqueDates.slice(0, 10)) {
+          const fullDate = `${monthNames[date.month] || date.month} ${date.day}, ${date.year}`
           structured.events?.push({
             name: 'Iration',
             date: fullDate,
