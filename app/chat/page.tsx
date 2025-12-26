@@ -636,8 +636,16 @@ export default function ChatPage() {
               
               // Only format if we have significant content (not just short messages)
               if (rawResponseContent.length > 200 || rawResponseContent.includes('```yaml') || rawResponseContent.includes('Page Snapshot')) {
-                const formatted = await formatToolResponse(content, { content: result.content }, toolContext)
-                responseContent = formatted
+                console.log('[Chat] Calling formatToolResponse for Playwright response')
+                try {
+                  const formatted = await formatToolResponse(content, { content: result.content }, toolContext)
+                  console.log('[Chat] Formatter returned:', formatted.substring(0, 200))
+                  responseContent = formatted
+                } catch (formatErr) {
+                  console.error('[Chat] Format error:', formatErr)
+                  // If formatting fails, use guardrail fallback
+                  responseContent = finalGuardrail(rawResponseContent)
+                }
               } else {
                 responseContent = rawResponseContent
               }

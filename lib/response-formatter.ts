@@ -455,7 +455,7 @@ function generateNegativeResult(
 /**
  * Final Guardrail: Prevent raw YAML/JSON from leaking to user
  */
-function finalGuardrail(output: string): string {
+export function finalGuardrail(output: string): string {
   // Detect YAML-like content
   if (output.trim().startsWith('- ') || 
       output.includes('```yaml') ||
