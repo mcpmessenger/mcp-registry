@@ -302,19 +302,25 @@ function extractQueryEntities(query: string): { artist?: string; location?: stri
   
   // Extract artist/event name (usually before "in", "near", "tickets")
   // Pattern: "look for [artist] [optional: tickets/concert/show] [optional: in location]"
-  // Use negative lookahead to stop at "in" when it's followed by a location
-  const artistPattern = /(?:look for|search for|find|get)\s+([^"']+?)(?:\s+(?:tickets?|concert|show|event))?\s*(?:in|near|at|$)/i
+  // More specific pattern to capture full artist names
+  const artistPattern = /(?:look for|search for|find|get)\s+([^"']+?)(?:\s+(?:concert\s+)?tickets?|\s+concert|\s+show|\s+event)?(?:\s+in|\s+near|\s+at|$)/i
   const artistMatch = query.match(artistPattern)
   let artist = artistMatch ? artistMatch[1].trim() : undefined
   
-  // Clean up artist name (remove common prefixes/suffixes)
+  // Clean up artist name (remove common prefixes/suffixes but preserve full name)
   if (artist) {
-    artist = artist.replace(/\s+(?:tickets?|concert|show|event|in|near|at).*$/i, '').trim()
+    // Remove trailing words like "tickets", "concert", etc. but keep the artist name
+    artist = artist.replace(/\s+(?:concert\s+)?tickets?.*$/i, '').trim()
+    artist = artist.replace(/\s+(?:concert|show|event).*$/i, '').trim()
+    
     // If artist contains " in " it might have captured location, split it
     const inMatch = artist.match(/^(.+?)\s+in\s+/i)
     if (inMatch) {
       artist = inMatch[1].trim()
     }
+    
+    // Remove trailing location indicators
+    artist = artist.replace(/\s+(?:in|near|at)\s+.*$/i, '').trim()
   }
   
   return { artist, location, synonyms }
