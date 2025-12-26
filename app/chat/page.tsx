@@ -543,6 +543,26 @@ export default function ChatPage() {
             toolArgs = {}
           }
           
+          // CRITICAL: For Playwright browser_navigate, ensure URL is always set
+          if (toolName?.includes('browser_navigate') || toolName?.includes('browser')) {
+            // Check if this is a concert/event query that needs a default URL
+            const isConcertQuery = content.toLowerCase().includes('playing') || 
+                                 content.toLowerCase().includes('concert') ||
+                                 content.toLowerCase().includes('ticket') ||
+                                 content.toLowerCase().includes('when is') ||
+                                 content.toLowerCase().includes('event') ||
+                                 content.toLowerCase().includes('show')
+            
+            if (!toolArgs.url && isConcertQuery) {
+              // Default to StubHub for concert searches
+              toolArgs.url = 'https://www.stubhub.com'
+              console.log('[Chat] Set default URL for concert query:', toolArgs.url)
+            } else if (!toolArgs.url) {
+              // For other queries without URL, throw a helpful error
+              throw new Error(`browser_navigate requires a URL. Please specify a website (e.g., "go to stubhub.com") or ask about concerts/events which will default to StubHub.`)
+            }
+          }
+          
           if (toolName === 'agent_executor') {
             // For LangChain orchestrator, enhance the query to explicitly request tool usage
             let enhancedQuery = content
