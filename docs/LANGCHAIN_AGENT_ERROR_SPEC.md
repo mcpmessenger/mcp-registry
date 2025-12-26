@@ -1,8 +1,19 @@
 # LangChain Agent MCP Server Error Specification
 
-## Issue
+## ✅ Status: RESOLVED
 
-When invoking the `agent_executor` tool on the LangChain Agent MCP Server, we receive the following error:
+**Last Updated**: 2025-01-XX  
+**Status**: Issue has been fixed and service redeployed  
+**New Revision**: `langchain-agent-mcp-server-00023-pgq`  
+**Service URL**: `https://langchain-agent-mcp-server-554655392699.us-central1.run.app`
+
+The `system_instruction` parameter issue has been resolved in the latest deployment. The service is now live and serving 100% of traffic.
+
+---
+
+## Issue (Historical)
+
+When invoking the `agent_executor` tool on the LangChain Agent MCP Server, we received the following error:
 
 ```
 HTTP 500: {
