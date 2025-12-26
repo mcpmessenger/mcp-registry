@@ -161,16 +161,28 @@ export async function formatResponseWithLLM(
 
   // For Playwright responses, try structured parsing first
   if (toolContext.tool === 'playwright' || toolContext.serverId.includes('playwright')) {
-    if (rawContent.includes('```yaml') || rawContent.includes('Page Snapshot')) {
-      // Extract YAML snapshot
+    // Extract YAML snapshot if present
+    let snapshot = rawContent
+    if (rawContent.includes('```yaml')) {
       const yamlMatch = rawContent.match(/```yaml\n([\s\S]*?)\n```/)
-      const snapshot = yamlMatch ? yamlMatch[1] : rawContent
+      snapshot = yamlMatch ? yamlMatch[1] : rawContent
+    } else if (rawContent.includes('Page Snapshot')) {
+      // Extract content after "Page Snapshot:"
+      const snapshotMatch = rawContent.match(/Page Snapshot:\s*```yaml\n([\s\S]*?)\n```/i)
+      snapshot = snapshotMatch ? snapshotMatch[1] : rawContent
+    }
 
-      // Parse and format
-      const structured = parsePlaywrightSnapshot(snapshot)
-      if (structured.events?.length || structured.searchResults?.length || structured.links?.length) {
-        return formatAsNaturalLanguage(query, structured, toolContext)
-      }
+    // Parse and format the snapshot
+    const structured = parsePlaywrightSnapshot(snapshot)
+    
+    // If we found structured data, format it
+    if (structured.events?.length || structured.searchResults?.length || structured.links?.length) {
+      return formatAsNaturalLanguage(query, structured, toolContext)
+    }
+    
+    // If snapshot exists but no structured data found, provide a summary
+    if (snapshot !== rawContent && snapshot.length > 100) {
+      return `I've completed the search. The page has been loaded and analyzed. ${structured.events?.length ? `Found ${structured.events.length} events.` : structured.links?.length ? `Found ${structured.links.length} links.` : 'Review the page snapshot above for details.'}`
     }
   }
 
