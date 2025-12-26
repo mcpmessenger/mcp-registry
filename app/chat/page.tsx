@@ -623,11 +623,15 @@ export default function ChatPage() {
               }
             }
             // Extract search query if present - now supports auto-search via Playwright MCP
-            const searchMatch = content.match(/(?:look for|search for|find|get|check for)\s+(.+?)(?:\.|$|in |near )/i)
+            // Handle patterns: "look for X", "when is X", "find X", etc.
+            const searchMatch = content.match(/(?:look for|search for|find|get|check for|when is)\s+(.+?)(?:\.|$|in |near |next)/i)
             if (searchMatch) {
-              const searchQuery = searchMatch[1].trim()
-              // Also extract location if present (e.g., "in iowa", "near New York")
-              const locationMatch = content.match(/(?:in|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+              let searchQuery = searchMatch[1].trim()
+              // Remove "next concert" or similar trailing phrases
+              searchQuery = searchQuery.replace(/\s+(?:next|upcoming|future)\s+(?:concert|show|event).*$/i, '').trim()
+              
+              // Also extract location if present (e.g., "in iowa", "near New York", "in texas")
+              const locationMatch = content.match(/(?:in|near|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
               const location = locationMatch ? locationMatch[1] : ''
               const fullQuery = location ? `${searchQuery} ${location}` : searchQuery
               
@@ -639,6 +643,21 @@ export default function ChatPage() {
               
               // Keep query for backward compatibility and other tools
               toolArgs.query = fullQuery
+            }
+            
+            // CRITICAL: Ensure URL is set for browser_navigate (must happen after search query extraction)
+            // For concert queries, default to StubHub if URL wasn't already set
+            if (!toolArgs.url && (toolName?.includes('browser') || toolName?.includes('navigate'))) {
+              const isConcertQuery = content.toLowerCase().includes('playing') || 
+                                   content.toLowerCase().includes('concert') ||
+                                   content.toLowerCase().includes('ticket') ||
+                                   content.toLowerCase().includes('when is') ||
+                                   content.toLowerCase().includes('event') ||
+                                   content.toLowerCase().includes('show')
+              if (isConcertQuery) {
+                toolArgs.url = 'https://www.stubhub.com'
+                console.log('[Chat] Set default URL for concert query:', toolArgs.url)
+              }
             }
           } else {
             // For other tools, pass content as appropriate argument
