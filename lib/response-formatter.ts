@@ -456,13 +456,46 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       const monthFullName = monthNames[month] || month
       const fullDate = `${monthFullName} ${day}, ${year}`
       
-      // Extract venue (common patterns in StubHub YAML)
+      // Extract venue and event name (common patterns in StubHub YAML)
       // Look for venue patterns: "p" or "span" with venue names, often after date
       let venue: string | undefined = undefined
+      let eventName: string = artist // Default to artist name
       
       // Find text after the date match for better venue detection
       const dateMatchIndex = window.indexOf(dateMatch[0])
       const textAfterDate = window.substring(dateMatchIndex + dateMatch[0].length, Math.min(window.length, dateMatchIndex + dateMatch[0].length + 800))
+      
+      // Also check text before the date for event/artist name
+      const textBeforeDate = window.substring(Math.max(0, dateMatchIndex - 300), dateMatchIndex)
+      
+      // Extract event/artist name from text before date (look for headings, links, or bold text)
+      const eventNamePatterns = [
+        // Heading with artist name
+        /(?:-\\s+)?h[1-3]\s+"([^"]+)"[^\\n]*(?:\\n[^\\n]*)*(?:-\\s+)?(?:link|a|p)\s+"([^"]+)"[^\\n]*${artist}/i,
+        // Link with artist name
+        /link\s+"([^"]+)"[^\\n]*${artist}/i,
+        // Paragraph or span with artist name (but not "Favorite" button)
+        /(?:-\\s+)?(?:p|span)\s+"([^"]+)"[^\\n]*${artist}(?!.*Favorite)/i,
+      ]
+      
+      for (const pattern of eventNamePatterns) {
+        const eventMatch = textBeforeDate.match(pattern)
+        if (eventMatch && eventMatch[1] && eventMatch[1].toLowerCase() !== 'favorite') {
+          eventName = eventMatch[1].trim()
+          if (eventName.length > 2 && eventName.length < 100) {
+            break
+          }
+        }
+      }
+      
+      // If we found artist name in a link or heading before date, use that as event name
+      if (eventName === artist) {
+        // Try to find a more descriptive name - look for headings or links that contain the artist
+        const artistLinkMatch = textBeforeDate.match(/(?:-\\s+)?(?:link|a|h[1-4])\s+"([^"]+)"[^\\n]*(?:\\n[^\\n]*)*${artist}/i)
+        if (artistLinkMatch && artistLinkMatch[1] && !artistLinkMatch[1].match(/favorite|button|see tickets/i)) {
+          eventName = artistLinkMatch[1].trim()
+        }
+      }
       
       const venuePatterns = [
         // Pattern 1: paragraph with venue keywords (Theater, Arena, Stadium, etc.)
