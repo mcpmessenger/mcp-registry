@@ -157,9 +157,22 @@ export function parsePlaywrightSnapshot(snapshot: string): {
     
     // Fallback: Extract ALL dates if "Iration" is mentioned (they're likely for Iration)
     if (result.events?.length === 0) {
-      // Try a more permissive pattern to find ALL dates in the entire snapshot
-      const allDatesPattern = /(?:-\s+)?h4\s+"([A-Za-z]{3})"[^\n]*\n(?:-\s+)?h4\s+"(\d+)"[^\n]*\n(?:-\s+)?p\s+"(\d{4})"/g
-      const allDates = [...snapshot.matchAll(allDatesPattern)]
+      // Try multiple patterns to find ALL dates in the entire snapshot
+      // Pattern 1: With YAML list markers
+      let allDates = [...snapshot.matchAll(/(?:-\s+)?h4\s+"([A-Za-z]{3})"[^\n]*\n(?:-\s+)?h4\s+"(\d+)"[^\n]*\n(?:-\s+)?p\s+"(\d{4})"/g)]
+      
+      // Pattern 2: More flexible - allow any whitespace/attributes between elements
+      if (allDates.length === 0) {
+        allDates = [...snapshot.matchAll(/h4[^\n]*"([A-Za-z]{3})"[^\n]*\n[^\n]*h4[^\n]*"(\d+)"[^\n]*\n[^\n]*p[^\n]*"(\d{4})"/g)]
+      }
+      
+      // Pattern 3: Even more flexible - find month, day, year in sequence
+      if (allDates.length === 0) {
+        const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const monthPattern = `(${monthAbbr.join('|')})`
+        const flexiblePattern = new RegExp(`h4[^\\n]*"${monthPattern}"[^\\n]*\\n[^\\n]*h4[^\\n]*"(\\d{1,2})"[^\\n]*\\n[^\\n]*p[^\\n]*"(\\d{4})"`, 'g')
+        allDates = [...snapshot.matchAll(flexiblePattern)]
+      }
       
       if (allDates.length > 0) {
         const monthNames: Record<string, string> = {
