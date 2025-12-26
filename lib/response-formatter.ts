@@ -282,6 +282,217 @@ export function formatAsNaturalLanguage(
 }
 
 /**
+ * Extract entities (artist, location) from user query
+ */
+function extractQueryEntities(query: string): { artist?: string; location?: string; synonyms?: string[] } {
+  const lowerQuery = query.toLowerCase()
+  
+  // Extract location (states, cities)
+  const locationPattern = /(?:in|near|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i
+  const locationMatch = query.match(locationPattern)
+  const location = locationMatch ? locationMatch[1] : undefined
+  
+  // Location synonyms for expansion
+  const locationSynonyms: Record<string, string[]> = {
+    'iowa': ['IA', 'Des Moines', 'Cedar Rapids', 'Iowa City', 'Davenport'],
+    'new york': ['NY', 'NYC', 'New York City', 'Manhattan', 'Brooklyn'],
+    'california': ['CA', 'Los Angeles', 'LA', 'San Francisco', 'SF'],
+  }
+  const synonyms = location ? locationSynonyms[location.toLowerCase()] || [] : []
+  
+  // Extract artist/event name (usually before "in", "near", "tickets")
+  const artistPattern = /(?:look for|search for|find|get)\s+([^in]{1,50}?)(?:\s+(?:tickets?|concert|show|event))?\s*(?:in|near|at|$)/i
+  const artistMatch = query.match(artistPattern)
+  const artist = artistMatch ? artistMatch[1].trim() : undefined
+  
+  return { artist, location, synonyms }
+}
+
+/**
+ * Windowed Parser: Extract dates around anchor terms (artist names)
+ */
+interface EventContext {
+  artist: string
+  location?: string
+  rawYaml: string
+}
+
+interface ExtractedEvent {
+  event: string
+  date?: string
+  venue?: string
+  confidence: number
+}
+
+function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
+  const { artist, rawYaml } = context
+  const lines = rawYaml.split('\n')
+  const results: ExtractedEvent[] = []
+  
+  // 1. Find every line index where the Artist name appears (anchors)
+  const anchorIndices: number[] = []
+  lines.forEach((line, i) => {
+    if (line.toLowerCase().includes(artist.toLowerCase())) {
+      anchorIndices.push(i)
+    }
+  })
+  
+  // 2. Scan a "Window" (25 lines) around each anchor for Date patterns
+  const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const monthPattern = `(${monthAbbr.join('|')})`
+  const monthNames: Record<string, string> = {
+    'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+    'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+    'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+  }
+  
+  for (const anchorIndex of anchorIndices) {
+    // Create window: 10 lines before anchor, 25 lines after
+    const windowStart = Math.max(0, anchorIndex - 10)
+    const windowEnd = Math.min(lines.length, anchorIndex + 25)
+    const window = lines.slice(windowStart, windowEnd).join('\n')
+    
+    // Try to find date pattern in window
+    const datePattern = new RegExp(`(?:-\\s+)?h4[^\\n]*"(${monthPattern})"[^\\n]*\\n[^\\n]*(?:-\\s+)?h4[^\\n]*"(\\d{1,2})"[^\\n]*\\n[^\\n]*(?:-\\s+)?p[^\\n]*"(\\d{4})"`, 'i')
+    const dateMatch = window.match(datePattern)
+    
+    if (dateMatch) {
+      const month = dateMatch[1]
+      const day = dateMatch[2]
+      const year = dateMatch[3]
+      const fullDate = `${monthNames[month] || month} ${day}, ${year}`
+      
+      // Check for "See Tickets" button as confidence indicator
+      const hasTicketsButton = window.includes('See Tickets') || window.includes('Get Tickets')
+      const confidence = hasTicketsButton ? 0.9 : 0.7
+      
+      results.push({
+        event: artist,
+        date: fullDate,
+        confidence
+      })
+    }
+  }
+  
+  return results
+}
+
+/**
+ * Negative Result Generator: Handle "No Results" cases intelligently
+ */
+function generateNegativeResult(
+  query: string,
+  snapshot: string,
+  entities: { artist?: string; location?: string; synonyms?: string[] }
+): string | null {
+  const lowerSnapshot = snapshot.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  
+  // Check for explicit "no results" text
+  const noResultsPatterns = [
+    /no\s+.*result/i,
+    /no\s+.*found/i,
+    /no\s+.*match/i,
+    /no\s+.*available/i,
+    /no\s+.*event/i,
+    /no\s+.*concert/i,
+    /didn't\s+find/i,
+    /couldn't\s+find/i
+  ]
+  
+  const hasExplicitNoResults = noResultsPatterns.some(pattern => pattern.test(snapshot))
+  if (hasExplicitNoResults) {
+    const artist = entities.artist || 'events'
+    const location = entities.location ? ` in ${entities.location}` : ''
+    return `I searched for **${artist}** concert tickets${location}, but StubHub shows no upcoming events matching your search.`
+  }
+  
+  // Check for artist mentioned but no dates nearby (No Results scenario)
+  if (entities.artist) {
+    const artistFound = lowerSnapshot.includes(entities.artist.toLowerCase())
+    const datePattern = /h4[^\n]*"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)"/i
+    const hasDates = datePattern.test(snapshot)
+    
+    if (artistFound && !hasDates) {
+      // Artist is listed but no dates - likely a category/result placeholder
+      const location = entities.location ? ` in ${entities.location}` : ''
+      return `I can see **${entities.artist}** is listed on StubHub${location}, but there don't appear to be any specific dates available at the moment. This could mean:\n\n- No upcoming concerts are scheduled\n- Events may be added later\n- Try checking nearby areas or other dates`
+    }
+    
+    // Artist found with dates but none match location
+    if (artistFound && hasDates && entities.location) {
+      // This is trickier - would need to check if dates are filtered by location
+      // For now, if artist found, we'll let the date extraction handle it
+    }
+  }
+  
+  // Check for search completion but minimal content (loading/empty state)
+  const hasSearchControls = lowerSnapshot.includes('sort by') || 
+                            lowerSnapshot.includes('filter') ||
+                            lowerSnapshot.includes('all locations')
+  const hasMinimalContent = (snapshot.match(/- (input|a|graphics)/g) || []).length < 10
+  
+  if (hasSearchControls && hasMinimalContent) {
+    const artist = entities.artist || 'events'
+    return `I completed the search for **${artist}**${entities.location ? ` in ${entities.location}` : ''}, but the results page appears to be loading or empty. The search was successful, but no events are currently displayed.`
+  }
+  
+  return null
+}
+
+/**
+ * Final Guardrail: Prevent raw YAML/JSON from leaking to user
+ */
+function finalGuardrail(output: string): string {
+  // Detect YAML-like content
+  if (output.trim().startsWith('- ') || 
+      output.includes('```yaml') ||
+      /h4\s+"/.test(output) ||
+      output.includes('graphics-symbol') ||
+      output.includes('.cls-1')) {
+    return `I found the search results, but I'm having trouble reading the page layout. The search completed successfully—would you like me to try extracting the information again, or would you prefer to check StubHub directly?`
+  }
+  
+  // Detect JSON-like content
+  if (output.trim().startsWith('{') && output.includes('"')) {
+    return `I received technical data from the search. Let me reformat that into a readable response.`
+  }
+  
+  return output
+}
+
+/**
+ * Clean YAML: Strip accessibility noise before LLM processing
+ */
+function cleanYamlForLLM(rawYaml: string): string {
+  let cleaned = rawYaml
+  
+  // Remove CSS class references
+  cleaned = cleaned.replace(/\.cls-\d+\s*\{[^}]*\}/g, '')
+  
+  // Remove graphics-symbol references (unless they have meaningful text)
+  cleaned = cleaned.replace(/graphics-symbol\s+"[^"]*"/g, '')
+  
+  // Remove empty/placeholder elements
+  cleaned = cleaned.replace(/-\s+(input|img|graphics-symbol)(\s*$|\n)/g, '')
+  
+  // Remove button elements without meaningful text
+  cleaned = cleaned.replace(/button\s+"Favorite"/g, '')
+  cleaned = cleaned.replace(/button\s+"Get Notified"/g, '')
+  
+  // Keep only elements with substantial content
+  const lines = cleaned.split('\n')
+  const meaningfulLines = lines.filter(line => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed === '-' || trimmed.startsWith('- ')) return false
+    // Keep headings, paragraphs with text, links, dates
+    return /(h[1-6]|p|a|button|combobox).*"[^"]{3,}"/.test(trimmed)
+  })
+  
+  return meaningfulLines.join('\n')
+}
+
+/**
  * Format tool response using LLM (when available)
  * Falls back to structured parsing if LLM is not available
  */
@@ -305,7 +516,7 @@ export async function formatResponseWithLLM(
     rawContent = JSON.stringify(response.result, null, 2)
   }
 
-  // For Playwright responses, try structured parsing first
+  // For Playwright responses, use Semantic Orchestrator approach
   if (toolContext.tool === 'playwright' || toolContext.serverId.includes('playwright')) {
     // Extract YAML snapshot if present
     let snapshot = rawContent
@@ -318,7 +529,52 @@ export async function formatResponseWithLLM(
       snapshot = snapshotMatch ? snapshotMatch[1] : rawContent
     }
 
-    // Parse and format the snapshot
+    // Step 1: Extract Intent Anchors (entities from query)
+    const entities = extractQueryEntities(query)
+    
+    // Step 2: Check for Negative Results FIRST (before parsing)
+    if (entities.artist || entities.location) {
+      const negativeResult = generateNegativeResult(query, snapshot, entities)
+      if (negativeResult) {
+        return finalGuardrail(negativeResult)
+      }
+    }
+
+    // Step 3: Use Windowed Parser if we have an artist anchor
+    if (entities.artist && snapshot.toLowerCase().includes(entities.artist.toLowerCase())) {
+      const windowedResults = extractWithAnchorWindow({
+        artist: entities.artist,
+        location: entities.location,
+        rawYaml: snapshot
+      })
+      
+      if (windowedResults.length > 0) {
+        // Format windowed results
+        const monthNames: Record<string, string> = {
+          'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+          'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+          'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+        }
+        
+        let formattedResponse = `I found ${windowedResults.length} ${windowedResults.length === 1 ? 'event' : 'events'} for **${entities.artist}**${entities.location ? ` in ${entities.location}` : ''}:\n\n`
+        
+        windowedResults.forEach((event, index) => {
+          formattedResponse += `${index + 1}. **${event.event}**\n`
+          if (event.date) formattedResponse += `   - Date: ${event.date}\n`
+          if (event.venue) formattedResponse += `   - Venue: ${event.venue}\n`
+          formattedResponse += `\n`
+        })
+        
+        formattedResponse += `💡 **Tip**: Visit [StubHub](${snapshot.includes('stubhub') ? 'https://www.stubhub.com' : 'https://www.ticketmaster.com'}) to purchase tickets.`
+        
+        return finalGuardrail(formattedResponse.trim())
+      } else {
+        // Artist found but no dates in windows - likely no results
+        return finalGuardrail(`I can see **${entities.artist}** is listed on the site, but I don't see any specific concert dates${entities.location ? ` for ${entities.location}` : ''}. This typically means there are no upcoming shows scheduled at the moment.`)
+      }
+    }
+
+    // Step 4: Fall back to standard parsing
     const structured = parsePlaywrightSnapshot(snapshot)
     
     // If we found structured data, format it
