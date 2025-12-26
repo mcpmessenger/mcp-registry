@@ -854,19 +854,35 @@ export async function formatResponseWithLLM(
         
         let formattedResponse = `I found ${windowedResults.length} ${windowedResults.length === 1 ? 'event' : 'events'} for **${entities.artist}**${entities.location ? ` in ${entities.location}` : ''}:\n\n`
         
-        windowedResults.forEach((event, index) => {
+        // Filter out "Favorite" entries before displaying
+        const filteredResults = windowedResults.filter(event => 
+          event.event.toLowerCase() !== 'favorite' && 
+          event.event.trim() !== ''
+        )
+        
+        filteredResults.forEach((event, index) => {
           formattedResponse += `${index + 1}. **${event.event}**\n`
           if (event.date) {
             formattedResponse += `   - Date: ${event.date}`
             if (event.time) formattedResponse += ` at ${event.time}`
             formattedResponse += `\n`
           }
-          if (event.venue) formattedResponse += `   - Venue: ${event.venue}\n`
-          if (event.url) formattedResponse += `   - [Get tickets](${event.url})\n`
+          if (event.venue && !event.venue.toLowerCase().includes('see stubhub')) {
+            formattedResponse += `   - Venue: ${event.venue}\n`
+          }
+          // Always show ticket link - use event URL or create search URL
+          const ticketUrl = event.url || `https://www.stubhub.com/find/?q=${encodeURIComponent(entities.artist || event.event)}`
+          formattedResponse += `   - [🎫 Get tickets](${ticketUrl})\n`
           formattedResponse += `\n`
         })
         
-        formattedResponse += `💡 **Tip**: Visit [StubHub](${snapshot.includes('stubhub') ? 'https://www.stubhub.com' : 'https://www.ticketmaster.com'}) to purchase tickets.`
+        // Update count based on filtered results
+        if (filteredResults.length !== windowedResults.length) {
+          formattedResponse = formattedResponse.replace(
+            `I found ${windowedResults.length} ${windowedResults.length === 1 ? 'event' : 'events'}`,
+            `I found ${filteredResults.length} ${filteredResults.length === 1 ? 'event' : 'events'}`
+          )
+        }
         
         return finalGuardrail(formattedResponse.trim())
       }
