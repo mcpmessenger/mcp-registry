@@ -832,6 +832,7 @@ export default function ChatPage() {
           // Only show this error if it wasn't a design request (design requests are handled above)
           responseContent = "I couldn't find an available MCP server to handle your request. Please try selecting a specific agent."
         }
+        }
       } else {
         // Use selected agent
         const selectedAgent = agentOptions.find((a) => a.id === selectedAgentId)
