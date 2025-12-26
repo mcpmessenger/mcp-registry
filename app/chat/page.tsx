@@ -611,11 +611,35 @@ export default function ChatPage() {
           }
 
           // Extract text content from response
+          let rawResponseContent = ''
           if (result.content && Array.isArray(result.content)) {
-            responseContent = result.content
+            rawResponseContent = result.content
               .filter(item => item.type === 'text' && item.text)
               .map(item => item.text)
               .join('\n\n')
+            
+            // Format response as natural language for better UX (especially for Playwright snapshots)
+            try {
+              const toolContext: ToolContext = {
+                tool: targetServer.serverId.includes('playwright') ? 'playwright' : 
+                      targetServer.serverId.includes('maps') ? 'google-maps' : 'unknown',
+                serverId: targetServer.serverId,
+                toolName: toolName || 'unknown',
+              }
+              
+              // Only format if we have significant content (not just short messages)
+              if (rawResponseContent.length > 200 || rawResponseContent.includes('```yaml') || rawResponseContent.includes('Page Snapshot')) {
+                const formatted = await formatToolResponse(content, { content: result.content }, toolContext)
+                responseContent = formatted
+              } else {
+                responseContent = rawResponseContent
+              }
+            } catch (formatError) {
+              console.warn('[Chat] Failed to format response, using raw:', formatError)
+              responseContent = rawResponseContent
+            }
+          } else {
+            responseContent = rawResponseContent
             
             // Check if auto-search was attempted and verify results
             const searchQuery = toolArgs?.search_query || toolArgs?.searchQuery
