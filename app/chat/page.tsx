@@ -143,7 +143,7 @@ export default function ChatPage() {
       if (isRouter) {
         // Auto-route based on content and attachment type
         let targetServer: MCPServer | null = null
-        let toolName = "agent_executor"
+        let toolName: string | undefined = undefined // Don't default to agent_executor
         let toolArgs: Record<string, unknown> = {}
         
         // Check for design/generation requests first
