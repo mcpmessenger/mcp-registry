@@ -457,3 +457,73 @@ Format as natural language response.`
 **Last Updated**: December 25, 2024  
 **Next Review**: After Phase 1 implementation
 
+---
+
+## Implementation Update: Semantic Orchestrator (Latest)
+
+**Status**: ✅ Implemented
+
+Following architectural guidance, we've implemented a Semantic Orchestrator approach with:
+
+### New Components Added
+
+1. **Intent Anchor Extraction** (`extractQueryEntities`)
+   - Extracts artist and location from user queries
+   - Provides location synonyms for matching (e.g., "Iowa" → ["IA", "Des Moines", "Cedar Rapids"])
+
+2. **Windowed Parser** (`extractWithAnchorWindow`)
+   - Finds artist mentions as "anchors" in YAML
+   - Scans 25-line windows around each anchor for date patterns
+   - Provides confidence scoring based on context (e.g., "See Tickets" button presence)
+
+3. **Negative Result Generator** (`generateNegativeResult`)
+   - Detects "no results" scenarios BEFORE attempting extraction
+   - Handles multiple cases:
+     - Explicit "no results" text
+     - Artist found but no dates nearby
+     - Search completed but minimal content
+   - Returns contextually appropriate messages
+
+4. **Final Guardrail** (`finalGuardrail`)
+   - Intercepts any raw YAML/JSON before it reaches the user
+   - Provides helpful fallback message
+   - Prevents "Lost in Translation" leaks
+
+5. **YAML Cleaner** (`cleanYamlForLLM`)
+   - Strips accessibility noise (CSS classes, graphics-symbols)
+   - Prepares clean data for future LLM processing
+   - Reduces token usage
+
+### New Processing Flow
+
+```
+User Query → Extract Entities (Artist, Location)
+    ↓
+Check Negative Results FIRST
+    ↓ (if no negative result)
+Find Artist Anchors in YAML
+    ↓
+Windowed Parsing (25 lines around each anchor)
+    ↓
+Extract Dates with Confidence Scoring
+    ↓
+Format Natural Language Response
+    ↓
+Final Guardrail Check
+    ↓
+Return to User
+```
+
+### Expected Improvements
+
+- ✅ No more raw YAML leaks (guardrail catches everything)
+- ✅ Intelligent "no results" detection with helpful messages
+- ✅ Context-aware date extraction (only near relevant artists)
+- ✅ Better handling of edge cases
+
+### Next Steps
+
+- Test with various queries (with results, no results, multiple artists)
+- Refine confidence scoring thresholds
+- Consider LLM integration for complex cases (when available)
+
