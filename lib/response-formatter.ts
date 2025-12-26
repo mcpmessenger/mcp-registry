@@ -400,12 +400,34 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
   const results: ExtractedEvent[] = []
   
   // 1. Find every line index where the Artist name appears (anchors)
+  // Use flexible matching for artist names
+  const lowerArtist = artist.toLowerCase()
+  const artistVariants = [
+    lowerArtist, // Exact match
+    lowerArtist.replace(/\s+/g, ''), // No spaces
+    lowerArtist.replace(/['"]/g, ''), // No quotes
+    lowerArtist.substring(0, Math.max(4, lowerArtist.length - 2)), // Partial match
+  ]
+  
   const anchorIndices: number[] = []
   lines.forEach((line, i) => {
-    if (line.toLowerCase().includes(artist.toLowerCase())) {
+    const lowerLine = line.toLowerCase()
+    // Check if any variant matches
+    if (artistVariants.some(variant => variant.length >= 3 && lowerLine.includes(variant))) {
       anchorIndices.push(i)
     }
   })
+  
+  // If no exact matches, try searching for dates directly (broader search)
+  if (anchorIndices.length === 0) {
+    // Look for any dates in the YAML as fallback anchors
+    const monthAbbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    lines.forEach((line, i) => {
+      if (monthAbbr.some(month => line.toLowerCase().includes(`"${month}"`))) {
+        anchorIndices.push(i)
+      }
+    })
+  }
   
   // 2. Scan a "Window" (25 lines) around each anchor for Date patterns
   const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -696,7 +718,16 @@ export async function formatResponseWithLLM(
     }
 
     // Step 3: Use Windowed Parser if we have an artist anchor
-    if (entities.artist && snapshot.toLowerCase().includes(entities.artist.toLowerCase())) {
+    // First check if artist appears in snapshot (with flexible matching)
+    const lowerSnapshot = snapshot.toLowerCase()
+    const lowerArtist = entities.artist?.toLowerCase() || ''
+    const artistFound = entities.artist && (
+      lowerSnapshot.includes(lowerArtist) ||
+      lowerSnapshot.includes(lowerArtist.replace(/\s+/g, '')) || // Try without spaces
+      lowerSnapshot.includes(lowerArtist.substring(0, 4)) // Try first 4 chars as fallback
+    )
+    
+    if (artistFound && entities.artist) {
       const windowedResults = extractWithAnchorWindow({
         artist: entities.artist,
         location: entities.location,
@@ -728,7 +759,12 @@ export async function formatResponseWithLLM(
         formattedResponse += `💡 **Tip**: Visit [StubHub](${snapshot.includes('stubhub') ? 'https://www.stubhub.com' : 'https://www.ticketmaster.com'}) to purchase tickets.`
         
         return finalGuardrail(formattedResponse.trim())
-      } else {
+      }
+    }
+    
+    // Step 3b: Fallback - try parsing without artist anchor (just look for dates in general)
+    // This handles cases where artist name might be formatted differently in YAML
+    if (!windowedResults || windowedResults.length === 0) {
         // Artist found but no dates in windows - likely no results
         return finalGuardrail(`I can see **${entities.artist}** is listed on the site, but I don't see any specific concert dates${entities.location ? ` for ${entities.location}` : ''}. This typically means there are no upcoming shows scheduled at the moment.`)
       }
