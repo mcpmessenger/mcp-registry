@@ -90,6 +90,76 @@ export class MCPInvokeService {
     endpoint: string
   ): Promise<InvokeToolResponse> {
     try {
+      // SPECIAL CASE: If this is a Playwright browser_navigate with search_query,
+      // route to LangChain server's auto-search endpoint
+      if (
+        toolName === 'browser_navigate' &&
+        (toolArgs.search_query || toolArgs.searchQuery) &&
+        server.serverId.includes('playwright')
+      ) {
+        const langchainEndpoint = process.env.LANGCHAIN_ENDPOINT || 'https://langchain-agent-mcp-server-554655392699.us-central1.run.app'
+        const autoSearchUrl = `${langchainEndpoint}/api/playwright/navigate`
+        
+        console.log(`[HTTP] Routing Playwright browser_navigate with search_query to LangChain auto-search endpoint: ${autoSearchUrl}`)
+        
+        // Map parameters to match the LangChain endpoint format
+        const searchQuery = toolArgs.search_query || toolArgs.searchQuery
+        const requestBody: Record<string, unknown> = {
+          url: toolArgs.url,
+          search_query: searchQuery,
+          auto_search: toolArgs.auto_search !== false, // Default to true
+        }
+        
+        // Include optional parameters if present
+        if (toolArgs.wait_timeout) requestBody.wait_timeout = toolArgs.wait_timeout
+        if (toolArgs.search_box_selector) requestBody.search_box_selector = toolArgs.search_box_selector
+        if (toolArgs.search_button_selector) requestBody.search_button_selector = toolArgs.search_button_selector
+        if (toolArgs.wait_for_results !== undefined) requestBody.wait_for_results = toolArgs.wait_for_results
+        
+        const response = await fetch(autoSearchUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        }
+        
+        const data = await response.json() as any
+        
+        // Convert LangChain response format to MCP format
+        let content: InvokeToolResponse['result']['content'] = []
+        
+        if (data.snapshot) {
+          // Response has a snapshot field
+          content = [{
+            type: 'text',
+            text: `Successfully navigated to ${data.url}${data.search_performed ? ` and performed search for '${data.search_query}'` : ''}.\n\nPage Snapshot:\n\`\`\`yaml\n${data.snapshot}\n\`\`\``
+          }]
+          
+          // Add warnings/errors if present
+          if (data.warnings && data.warnings.length > 0) {
+            content[0].text += `\n\n⚠️ Warnings: ${data.warnings.join(', ')}`
+          }
+          if (data.errors && data.errors.length > 0) {
+            content[0].text += `\n\n❌ Errors: ${data.errors.join(', ')}`
+          }
+        } else {
+          content = [{ type: 'text', text: JSON.stringify(data, null, 2) }]
+        }
+        
+        return {
+          result: {
+            content,
+            isError: false,
+          },
+        }
+      }
+
       // Determine the API format from metadata
       const metadata = server.metadata as Record<string, unknown> | undefined
       const apiFormat = metadata?.apiFormat as string | undefined
