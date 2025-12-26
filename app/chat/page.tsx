@@ -547,7 +547,7 @@ export default function ChatPage() {
                 }
               }
             }
-            // Extract search query if present and construct a search instruction
+            // Extract search query if present - now supports auto-search via Playwright MCP
             const searchMatch = content.match(/(?:look for|search for|find|get|check for)\s+(.+?)(?:\.|$|in |near )/i)
             if (searchMatch) {
               const searchQuery = searchMatch[1].trim()
@@ -556,11 +556,14 @@ export default function ChatPage() {
               const location = locationMatch ? locationMatch[1] : ''
               const fullQuery = location ? `${searchQuery} ${location}` : searchQuery
               
-              // Enhance the query with explicit search instructions
-              // For Playwright, we'll need to chain operations: navigate -> snapshot -> type in search box -> click search
-              // For now, include search query in the response to guide the agent
+              // NEW: Use auto-search feature - Playwright MCP will automatically perform the search
+              // Parameter name uses snake_case to match the deployed API
+              toolArgs.search_query = fullQuery  // Changed from searchQuery to match API
+              toolArgs.auto_search = true        // Explicitly enable auto-search
+              toolArgs.wait_timeout = 15000      // Set reasonable timeout for search operations
+              
+              // Keep query for backward compatibility and other tools
               toolArgs.query = fullQuery
-              toolArgs.searchQuery = fullQuery // Store separately for potential multi-step workflow
             }
           } else {
             // For other tools, pass content as appropriate argument
