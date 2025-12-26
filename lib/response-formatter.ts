@@ -155,27 +155,30 @@ export function parsePlaywrightSnapshot(snapshot: string): {
       }
     }
     
-    // Fallback: if no dates found but "Iration" exists, still create an event entry
-    if (dates.length === 0 && result.events?.length === 0) {
-      // Extract any dates in the context around "Iration"
-      const artistIndex = snapshot.indexOf('Iration') >= 0 ? snapshot.indexOf('Iration') : snapshot.toLowerCase().indexOf('iration')
-      if (artistIndex >= 0) {
-        const context = snapshot.substring(Math.max(0, artistIndex - 1000), Math.min(snapshot.length, artistIndex + 1000))
-        const nearbyDate = context.match(/(?:-\s+)?h4\s+"([A-Za-z]{3})"\s*\n(?:-\s+)?h4\s+"(\d+)"\s*\n(?:-\s+)?p\s+"(\d{4})"/)
+    // Fallback: Extract ALL dates if "Iration" is mentioned (they're likely for Iration)
+    if (result.events?.length === 0) {
+      // Try a more permissive pattern to find ALL dates in the entire snapshot
+      const allDatesPattern = /(?:-\s+)?h4\s+"([A-Za-z]{3})"[^\n]*\n(?:-\s+)?h4\s+"(\d+)"[^\n]*\n(?:-\s+)?p\s+"(\d{4})"/g
+      const allDates = [...snapshot.matchAll(allDatesPattern)]
+      
+      if (allDates.length > 0) {
+        const monthNames: Record<string, string> = {
+          'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+          'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+          'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+        }
         
-        if (nearbyDate) {
-          const monthNames: Record<string, string> = {
-            'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
-            'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
-            'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+        // Create events for all found dates (they're likely for Iration)
+        for (const dateMatch of allDates.slice(0, 10)) { // Limit to 10 dates
+          const fullDate = `${monthNames[dateMatch[1]] || dateMatch[1]} ${dateMatch[2]}, ${dateMatch[3]}`
+          const existing = result.events?.find(e => e.name === 'Iration' && e.date === fullDate)
+          if (!existing) {
+            result.events?.push({
+              name: 'Iration',
+              date: fullDate,
+              venue: 'See StubHub for venue details',
+            })
           }
-          const fullDate = `${monthNames[nearbyDate[1]] || nearbyDate[1]} ${nearbyDate[2]}, ${nearbyDate[3]}`
-          
-          result.events?.push({
-            name: 'Iration',
-            date: fullDate,
-            venue: 'See StubHub for venue details',
-          })
         }
       }
     }
