@@ -245,8 +245,12 @@ export function formatAsNaturalLanguage(
       response += `${index + 1}. **${event.name}**\n`
       if (event.date) response += `   - Date: ${event.date}`
       if (event.time) response += ` at ${event.time}`
-      if (event.venue) response += `\n   - Venue: ${event.venue}`
-      if (event.url) response += `\n   - [Get tickets](${event.url})`
+      if (event.venue && !event.venue.toLowerCase().includes('see stubhub')) {
+        response += `\n   - Venue: ${event.venue}`
+      }
+      // Always show ticket link
+      const ticketUrl = event.url || `https://www.stubhub.com/find/?q=${encodeURIComponent(event.name)}`
+      response += `\n   - [🎫 Get tickets](${ticketUrl})`
       response += `\n\n`
     })
 
@@ -563,10 +567,59 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       
       // Extract URL if available (look for links near the event)
       let url: string | undefined = undefined
-      const urlPattern = /link\s+"[^"]*"\s*\[.*?\]:\s*\/url:\s*([^\s\n]+)/i
-      const urlMatch = window.match(urlPattern)
-      if (urlMatch) {
-        url = urlMatch[1].startsWith('http') ? urlMatch[1] : `https://www.stubhub.com${urlMatch[1]}`
+      
+      // Multiple URL patterns - StubHub uses various link formats
+      const urlPatterns = [
+        // Pattern 1: Standard link format with ref
+        /link\s+"([^"]*)"\s*\[.*?ref=([^\]]+).*?\]:\s*\/url:\s*([^\s\n]+)/i,
+        // Pattern 2: Link without ref
+        /link\s+"([^"]*)"\s*\[.*?\]:\s*\/url:\s*([^\s\n]+)/i,
+        // Pattern 3: Just URL pattern
+        /\/url:\s*([^\s\n]+)/i,
+        // Pattern 4: Direct href or URL in text
+        /href[=:]\s*([^\s\n\)]+)/i,
+      ]
+      
+      // Search in the window, especially after the date
+      for (const pattern of urlPatterns) {
+        const urlMatch = window.match(pattern)
+        if (urlMatch) {
+          // Get the URL (usually the last capture group)
+          const urlValue = urlMatch[urlMatch.length - 1] || urlMatch[1]
+          if (urlValue && urlValue.length > 5) {
+            url = urlValue
+            // Ensure URL is complete
+            if (!url.startsWith('http')) {
+              url = url.startsWith('/') ? `https://www.stubhub.com${url}` : `https://www.stubhub.com/${url}`
+            }
+            break
+          }
+        }
+      }
+      
+      // If still no URL, try searching in text after date (where ticket links usually are)
+      if (!url) {
+        const ticketLinkPatterns = [
+          /(?:see tickets|get tickets|buy tickets|tickets|link).*?\/url:\s*([^\s\n]+)/i,
+          /\/url:\s*([^\s\n]+)/i,
+        ]
+        for (const pattern of ticketLinkPatterns) {
+          const linkMatch = textAfterDate.match(pattern)
+          if (linkMatch && linkMatch[1]) {
+            url = linkMatch[1]
+            if (!url.startsWith('http')) {
+              url = url.startsWith('/') ? `https://www.stubhub.com${url}` : `https://www.stubhub.com/${url}`
+            }
+            break
+          }
+        }
+      }
+      
+      // Final fallback: construct a search URL for the artist and location
+      if (!url && artist) {
+        // Create a StubHub search URL
+        const searchQuery = `${artist}${context.location ? ` ${context.location}` : ''}`.replace(/\s+/g, '+')
+        url = `https://www.stubhub.com/find/?q=${searchQuery}`
       }
       
       // Check for "See Tickets" button as confidence indicator
