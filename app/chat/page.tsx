@@ -470,13 +470,48 @@ export default function ChatPage() {
             // Continue with normal routing if native orchestrator didn't handle it
             if (!targetServer && routing.primaryServer) {
               // Simple single-step query, use the primary server
-              targetServer = routing.primaryServer
-              const toolContext = getServerToolContext(routing.primaryServer)
-              agentName = toolContext?.tool || routing.primaryServer.name
+              // BUT: If it's a concert query and LangChain was selected, prefer Playwright
+              const isConcertQuery = (content.toLowerCase().includes('playing') || 
+                                     content.toLowerCase().includes('concert') ||
+                                     content.toLowerCase().includes('ticket') ||
+                                     content.toLowerCase().includes('when is'))
+              const isLangChain = routing.primaryServer.serverId.includes('langchain') || 
+                                 routing.primaryServer.serverId.includes('agent')
+              
+              if (isConcertQuery && isLangChain) {
+                // Override: Use Playwright for concert queries instead of LangChain
+                const playwrightServer = availableServers.find(s => 
+                  s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+                )
+                if (playwrightServer) {
+                  targetServer = playwrightServer
+                  agentName = "Playwright MCP Server"
+                } else {
+                  targetServer = routing.primaryServer
+                  agentName = toolContext?.tool || routing.primaryServer.name
+                }
+              } else {
+                targetServer = routing.primaryServer
+                const toolContext = getServerToolContext(routing.primaryServer)
+                agentName = toolContext?.tool || routing.primaryServer.name
+              }
             } else if (!targetServer) {
-              // Fallback to LangChain agent for general queries
-              targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
-                            availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
+              // Fallback to LangChain agent for general queries (but not concert queries)
+              const isConcertQuery = (content.toLowerCase().includes('playing') || 
+                                     content.toLowerCase().includes('concert') ||
+                                     content.toLowerCase().includes('ticket'))
+              if (isConcertQuery) {
+                // For concert queries, try Playwright first
+                targetServer = availableServers.find(s => 
+                  s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+                )
+                agentName = targetServer ? "Playwright MCP Server" : undefined
+              }
+              
+              // Only fallback to LangChain if we don't have Playwright
+              if (!targetServer) {
+                targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
+                              availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
                             availableServers[0]
               agentName = "AI Assistant"
             }
@@ -596,11 +631,73 @@ export default function ChatPage() {
             }
           }
 
-          const result = await invokeMCPTool({
-            serverId: targetServer.serverId,
-            tool: toolName,
-            arguments: toolArgs,
-          })
+          let result
+          try {
+            result = await invokeMCPTool({
+              serverId: targetServer.serverId,
+              tool: toolName,
+              arguments: toolArgs,
+            })
+          } catch (toolError) {
+            // Error handling: If LangChain fails with 500 error, try Playwright as fallback for concert queries
+            const errorMessage = toolError instanceof Error ? toolError.message : String(toolError)
+            const isLangChain500 = targetServer.serverId.includes('langchain') && 
+                                  (errorMessage.includes('500') || errorMessage.includes('system_instruction'))
+            const isConcertQuery = content.toLowerCase().includes('playing') || 
+                                 content.toLowerCase().includes('concert') ||
+                                 content.toLowerCase().includes('ticket') ||
+                                 content.toLowerCase().includes('when is')
+            
+            if (isLangChain500 && isConcertQuery) {
+              console.log('[Chat] LangChain failed for concert query, trying Playwright fallback...')
+              // Try Playwright as fallback
+              const playwrightServer = availableServers.find(s => 
+                s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+              )
+              
+              if (playwrightServer && playwrightServer.tools && playwrightServer.tools.length > 0) {
+                // Update target server and tool
+                targetServer = playwrightServer
+                toolName = playwrightServer.tools[0].name
+                agentName = "Playwright MCP Server (Fallback)"
+                
+                // Rebuild tool arguments for Playwright
+                toolArgs = {}
+                if (!toolArgs.url) {
+                  toolArgs.url = 'https://www.stubhub.com'
+                }
+                
+                // Extract search query from content
+                const searchMatch = content.match(/(?:when is|find|look for|search for)\s+(.+?)(?:\.|$|next|in )/i)
+                if (searchMatch) {
+                  const artistMatch = content.match(/['"](.+?)['"]/i)
+                  const locationMatch = content.match(/(?:in|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+                  const location = locationMatch ? locationMatch[1] : ''
+                  const artist = artistMatch ? artistMatch[1] : searchMatch[1].trim()
+                  toolArgs.search_query = `${artist}${location ? ` ${location}` : ''} concert`
+                } else {
+                  toolArgs.search_query = content
+                }
+                
+                toolArgs.auto_search = true
+                toolArgs.wait_timeout = 15000
+                
+                console.log('[Chat] Retrying with Playwright:', toolArgs)
+                // Retry with Playwright
+                result = await invokeMCPTool({
+                  serverId: playwrightServer.serverId,
+                  tool: toolName,
+                  arguments: toolArgs,
+                })
+              } else {
+                // No Playwright available, throw original error
+                throw toolError
+              }
+            } else {
+              // Not a concert query or not a LangChain 500, throw original error
+              throw toolError
+            }
+          }
 
           // Log raw result for debugging
           console.log('[Chat] Raw agent result:', {
