@@ -402,6 +402,23 @@ export class NativeOrchestrator {
    */
   requiresOrchestration(query: string): boolean {
     const intent = analyzeRoutingIntent(query)
+    const lowerQuery = query.toLowerCase()
+    
+    // Single-step concert queries should NOT require orchestration
+    // Check for simple concert/event searches (these should go directly to Playwright)
+    const isSimpleConcertQuery = (
+      (lowerQuery.includes('playing') || lowerQuery.includes('concert') || lowerQuery.includes('ticket')) &&
+      !lowerQuery.includes('once you') &&
+      !lowerQuery.includes('then use') &&
+      !lowerQuery.includes('finally') &&
+      !lowerQuery.includes('followed by') &&
+      !lowerQuery.match(/\.\s+(?:Once|Then|Finally|Use)/) // Not followed by multi-step phrases
+    )
+    
+    // If it's a simple concert query, don't orchestrate
+    if (isSimpleConcertQuery) {
+      return false
+    }
     
     // Also check for explicit multi-step indicators
     const multiStepPatterns = [

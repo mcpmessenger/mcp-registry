@@ -428,12 +428,94 @@ export async function executeWorkflow(
       } else {
         step.error = toolResult.error || 'Tool invocation failed'
         console.error(`[Workflow] Step ${step.step} failed:`, step.error)
+        
+        // Error handling: If LangChain fails (500 error), try Playwright as fallback for concert searches
+        if (step.step === 1 && 
+            (step.selectedServer?.serverId.includes('langchain') || step.selectedServer?.serverId.includes('agent')) &&
+            toolResult.error?.includes('500') &&
+            (step.description.toLowerCase().includes('playing') || 
+             step.description.toLowerCase().includes('concert') ||
+             step.description.toLowerCase().includes('ticket'))) {
+          
+          console.log(`[Workflow] LangChain failed for concert query, trying Playwright as fallback...`)
+          
+          // Try Playwright as fallback
+          // Get servers from orchestrator (they should be registered)
+          const orchestratorServers = getOrchestratorServers()
+          const playwrightServer = orchestratorServers.find(s => 
+            s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+          )
+          
+          if (playwrightServer && playwrightServer.tools && playwrightServer.tools.length > 0) {
+            // Update step to use Playwright
+            step.selectedServer = playwrightServer
+            step.selectedTool = playwrightServer.tools[0].name
+            
+            // Rebuild arguments for Playwright
+            const playwrightArgs = buildToolArguments(step, query, [])
+            const playwrightInvocation: ToolInvocation = {
+              serverId: playwrightServer.serverId,
+              toolName: playwrightServer.tools[0].name,
+              arguments: playwrightArgs,
+            }
+            
+            console.log(`[Workflow] Retrying step ${step.step} with Playwright...`)
+            const playwrightResult = await invokeTool(playwrightInvocation)
+            
+            if (playwrightResult.success) {
+              // Use Playwright result instead
+              toolResult = playwrightResult
+              step.error = undefined
+              step.selectedServer = playwrightServer
+              step.selectedTool = playwrightServer.tools[0].name
+              
+              // Process the successful Playwright result
+              let rawResult: unknown = playwrightResult.result
+              if (playwrightResult.content && playwrightResult.content.length > 0) {
+                const textContent = playwrightResult.content
+                  .filter(c => c.type === 'text' && c.text)
+                  .map(c => c.text)
+                  .join('\n')
+                
+                try {
+                  const parsed = JSON.parse(textContent)
+                  rawResult = parsed
+                } catch {
+                  rawResult = { content: textContent }
+                }
+              }
+              
+              // Format the result
+              try {
+                const toolContext: ToolContext = {
+                  tool: 'playwright',
+                  serverId: playwrightServer.serverId,
+                  toolName: playwrightServer.tools[0].name,
+                }
+                const formattedResult = await formatToolResponse(
+                  step.description,
+                  rawResult,
+                  toolContext
+                )
+                step.result = { raw: rawResult, formatted: formattedResult }
+                finalResult = formattedResult
+                console.log(`[Workflow] Step ${step.step} completed with Playwright fallback.`)
+              } catch (formatError) {
+                console.warn(`[Workflow] Failed to format Playwright result:`, formatError)
+                step.result = rawResult
+                finalResult = rawResult
+              }
+            } else {
+              console.error(`[Workflow] Playwright fallback also failed:`, playwrightResult.error)
+            }
+          }
+        }
       }
 
       executedSteps.push(step)
 
       // Stop if step failed (unless we want to continue on error)
-      if (!toolResult.success && step.step === 1) {
+      if (!toolResult.success && step.step === 1 && !step.selectedServer?.serverId.includes('playwright')) {
         break
       }
     }
