@@ -452,7 +452,8 @@ export class RegistryService {
         }
       }
 
-      return transformedServer
+      // Return the created server (transformed to MCP format)
+      return this.transformToMCPFormat(server)
     }
   }
 
