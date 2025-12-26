@@ -302,25 +302,32 @@ function extractQueryEntities(query: string): { artist?: string; location?: stri
   
   // Extract artist/event name (usually before "in", "near", "tickets")
   // Pattern: "look for [artist] [optional: tickets/concert/show] [optional: in location]"
-  // More specific pattern to capture full artist names
-  const artistPattern = /(?:look for|search for|find|get)\s+([^"']+?)(?:\s+(?:concert\s+)?tickets?|\s+concert|\s+show|\s+event)?(?:\s+in|\s+near|\s+at|$)/i
-  const artistMatch = query.match(artistPattern)
-  let artist = artistMatch ? artistMatch[1].trim() : undefined
+  // Improved pattern to capture full artist names, stopping at location keywords
+  let artist: string | undefined = undefined
   
-  // Clean up artist name (remove common prefixes/suffixes but preserve full name)
-  if (artist) {
-    // Remove trailing words like "tickets", "concert", etc. but keep the artist name
+  // First, extract location if present (to know where to stop)
+  const locationMatch = query.match(/(?:in|near|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i)
+  const locationKeyword = locationMatch ? query.substring(locationMatch.index || 0) : null
+  
+  // Extract everything between "look for" and location/tickets
+  const lookForMatch = query.match(/(?:look for|search for|find|get)\s+(.+?)(?:\s+in\s+|$)/i)
+  if (lookForMatch) {
+    artist = lookForMatch[1].trim()
+    // Remove ticket/concert/show keywords from the end
     artist = artist.replace(/\s+(?:concert\s+)?tickets?.*$/i, '').trim()
     artist = artist.replace(/\s+(?:concert|show|event).*$/i, '').trim()
-    
-    // If artist contains " in " it might have captured location, split it
-    const inMatch = artist.match(/^(.+?)\s+in\s+/i)
-    if (inMatch) {
-      artist = inMatch[1].trim()
+    // Remove location if it was captured
+    if (locationKeyword) {
+      artist = artist.replace(new RegExp(`\\s+${locationKeyword}.*$`, 'i'), '').trim()
     }
-    
-    // Remove trailing location indicators
-    artist = artist.replace(/\s+(?:in|near|at)\s+.*$/i, '').trim()
+  }
+  
+  // Fallback: try simpler pattern
+  if (!artist || artist.length < 2) {
+    const simpleMatch = query.match(/(?:look for|search for|find|get)\s+(\w+(?:\s+\w+)?)/i)
+    if (simpleMatch) {
+      artist = simpleMatch[1].trim()
+    }
   }
   
   return { artist, location, synonyms }
