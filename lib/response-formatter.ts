@@ -395,6 +395,7 @@ interface ExtractedEvent {
   time?: string
   url?: string
   location?: string
+  city?: string // City, State format for display
   confidence: number
 }
 
@@ -871,11 +872,19 @@ export async function formatResponseWithLLM(
             if (event.time) formattedResponse += ` at ${event.time}`
             formattedResponse += `\n`
           }
+          // Show city/location if available (separate from venue)
+          if (event.city) {
+            formattedResponse += `   - Location: ${event.city}\n`
+          }
           if (event.venue && !event.venue.toLowerCase().includes('see stubhub')) {
             formattedResponse += `   - Venue: ${event.venue}\n`
           }
-          // Always show ticket link - use event URL or create search URL
-          const ticketUrl = event.url || `https://www.stubhub.com/find/?q=${encodeURIComponent(entities.artist || event.event)}`
+          // Always show ticket link - use event URL or create search URL (properly encoded)
+          let ticketUrl = event.url
+          if (!ticketUrl) {
+            const searchQuery = `${entities.artist || event.event}${event.city ? ` ${event.city}` : entities.location ? ` ${entities.location}` : ''}`
+            ticketUrl = `https://www.stubhub.com/find/?q=${encodeURIComponent(searchQuery)}`
+          }
           formattedResponse += `   - [🎫 Get tickets](${ticketUrl})\n`
           formattedResponse += `\n`
         })
