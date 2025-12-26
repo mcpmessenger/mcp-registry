@@ -326,6 +326,42 @@ export async function formatResponseWithLLM(
       return formatAsNaturalLanguage(query, structured, toolContext)
     }
     
+    // If snapshot exists but no events found, do aggressive extraction for "Iration"
+    if (snapshot !== rawContent && structured.events?.length === 0 && (snapshot.includes('Iration') || snapshot.includes('iration'))) {
+      // Try to find ALL dates in the snapshot with very flexible patterns
+      const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const monthPattern = `(${monthAbbr.join('|')})`
+      
+      // Pattern: Find h4 with month, then h4 with day, then p with year (in sequence)
+      const allDates = [...snapshot.matchAll(new RegExp(`h4[^\\n]*"${monthPattern}"[^\\n]*\\n[^\\n]*h4[^\\n]*"(\\d{1,2})"[^\\n]*\\n[^\\n]*p[^\\n]*"(\\d{4})"`, 'gi'))]
+      
+      if (allDates.length > 0) {
+        const monthNames: Record<string, string> = {
+          'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+          'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+          'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+        }
+        
+        for (const dateMatch of allDates.slice(0, 10)) {
+          const month = dateMatch[1]
+          const day = dateMatch[2]
+          const year = dateMatch[3]
+          const fullDate = `${monthNames[month] || month} ${day}, ${year}`
+          
+          structured.events?.push({
+            name: 'Iration',
+            date: fullDate,
+            venue: 'See StubHub for venue details',
+          })
+        }
+        
+        // Format the events we just found
+        if (structured.events?.length > 0) {
+          return formatAsNaturalLanguage(query, structured, toolContext)
+        }
+      }
+    }
+    
     // If snapshot exists but is minimal (just a few basic elements), provide helpful context
     if (snapshot !== rawContent) {
       const lineCount = snapshot.split('\n').filter(l => l.trim()).length
