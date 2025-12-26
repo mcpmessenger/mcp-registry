@@ -46,6 +46,14 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
                          (lowerContent.includes('go to') && (lowerContent.includes('.com') || lowerContent.includes('ticketmaster'))) ||
                          (lowerContent.includes('navigate') && (lowerContent.includes('.com') || lowerContent.includes('website')))
   
+  // Check for concert/ticket/event searches (should use Playwright)
+  const isConcertSearch = lowerContent.includes('playing') ||
+                         lowerContent.includes('concert') ||
+                         lowerContent.includes('event') ||
+                         lowerContent.includes('ticket') ||
+                         (lowerContent.includes('when') && (lowerContent.includes('playing') || lowerContent.includes('performs'))) ||
+                         (lowerContent.includes('find') && (lowerContent.includes('concert') || lowerContent.includes('playing')))
+  
   if (
     lowerContent.includes('price') ||
     lowerContent.includes('live') ||
@@ -61,13 +69,15 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     hasUsingDomain ||
     hasFindUsing ||
     hasGoToWebsite ||
+    isConcertSearch ||
     lowerContent.includes('playwright') ||
     lowerContent.includes('browser') ||
     lowerContent.includes('navigate') ||
     lowerContent.includes('look for')
   ) {
     needs.push('Live Prices, Hidden Rules, Contact Details')
-    if (!preferredTool) preferredTool = 'playwright'
+    // Prefer Playwright for concert searches, even if it's part of a multi-step query
+    if (!preferredTool || isConcertSearch) preferredTool = 'playwright'
   }
 
   // Check for news/search needs
