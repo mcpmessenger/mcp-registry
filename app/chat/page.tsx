@@ -17,6 +17,7 @@ import { routeRequest, getServerToolContext } from "@/lib/tool-router"
 import { getNativeOrchestrator } from "@/lib/native-orchestrator"
 import { executeWorkflow } from "@/lib/workflow-executor"
 import { getChatContextManager } from "@/lib/chat-context"
+import { formatToolResponse, finalGuardrail, type ToolContext } from "@/lib/response-formatter"
 
 const initialMessages: ChatMessage[] = [
   {
