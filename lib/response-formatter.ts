@@ -474,32 +474,54 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       const textBeforeDate = window.substring(Math.max(0, dateMatchIndex - 300), dateMatchIndex)
       
       // Extract event/artist name from text before date (look for headings, links, or bold text)
+      // Priority: Find actual artist name, NEVER use "Favorite" button text
       const eventNamePatterns = [
+        // Link with artist name (most reliable - links are usually event names)
+        new RegExp(`link\\s+"([^"]+)"[^\\n]*${artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
         // Heading with artist name
-        /(?:-\\s+)?h[1-3]\s+"([^"]+)"[^\\n]*(?:\\n[^\\n]*)*(?:-\\s+)?(?:link|a|p)\s+"([^"]+)"[^\\n]*${artist}/i,
-        // Link with artist name
-        /link\s+"([^"]+)"[^\\n]*${artist}/i,
-        // Paragraph or span with artist name (but not "Favorite" button)
-        /(?:-\\s+)?(?:p|span)\s+"([^"]+)"[^\\n]*${artist}(?!.*Favorite)/i,
+        new RegExp(`(?:-\\\\s+)?h[1-3]\\s+"([^"]+)"[^\\n]*(?:\\\\n[^\\n]*)*${artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
+        // Paragraph with artist name (but exclude "Favorite")
+        new RegExp(`(?:-\\\\s+)?(?:p|span)\\s+"([^"]+)"[^\\n]*${artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!.*Favorite)`, 'i'),
       ]
       
       for (const pattern of eventNamePatterns) {
         const eventMatch = textBeforeDate.match(pattern)
-        if (eventMatch && eventMatch[1] && eventMatch[1].toLowerCase() !== 'favorite') {
-          eventName = eventMatch[1].trim()
-          if (eventName.length > 2 && eventName.length < 100) {
+        if (eventMatch && eventMatch[1]) {
+          const candidate = eventMatch[1].trim()
+          // STRICT filtering: Reject common button/label text
+          if (candidate.toLowerCase() !== 'favorite' && 
+              !candidate.match(/^(see tickets|get tickets|buy|button|link|favorite|get notified)$/i) &&
+              candidate.length > 2 && 
+              candidate.length < 100 &&
+              !candidate.includes('Favorite')) { // Extra check for "Favorite" anywhere in string
+            eventName = candidate
             break
           }
         }
       }
       
-      // If we found artist name in a link or heading before date, use that as event name
+      // If no good event name found, look in the entire window (not just before date)
       if (eventName === artist) {
-        // Try to find a more descriptive name - look for headings or links that contain the artist
-        const artistLinkMatch = textBeforeDate.match(/(?:-\\s+)?(?:link|a|h[1-4])\s+"([^"]+)"[^\\n]*(?:\\n[^\\n]*)*${artist}/i)
-        if (artistLinkMatch && artistLinkMatch[1] && !artistLinkMatch[1].match(/favorite|button|see tickets/i)) {
-          eventName = artistLinkMatch[1].trim()
+        // Try to find the artist name link anywhere in the window
+        const artistLinkPattern = new RegExp(`(?:-\\\\s+)?(?:link|a|h[1-4])\\s+"([^"]+)"[^\\n]*(?:\\\\n[^\\n]*)*${artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
+        const artistLinkMatch = window.match(artistLinkPattern)
+        if (artistLinkMatch && artistLinkMatch[1]) {
+          const candidate = artistLinkMatch[1].trim()
+          if (candidate.toLowerCase() !== 'favorite' && 
+              !candidate.match(/^(see tickets|get tickets|buy|button|link|favorite|get notified)$/i) &&
+              candidate.length > 2 && 
+              candidate.length < 100) {
+            eventName = candidate
+          }
         }
+      }
+      
+      // CRITICAL: If eventName is still "Favorite" or suspicious, force use artist name
+      if (!eventName || 
+          eventName.toLowerCase().trim() === 'favorite' || 
+          eventName.toLowerCase().trim() === '' ||
+          eventName.includes('Favorite')) {
+        eventName = artist // Always fallback to artist name
       }
       
       const venuePatterns = [
