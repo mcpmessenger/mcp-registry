@@ -385,7 +385,9 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       const month = dateMatch[1]
       const day = dateMatch[2]
       const year = dateMatch[3]
-      const fullDate = `${monthNames[month] || month} ${day}, ${year}`
+      // Convert month abbreviation to full name (avoid duplication)
+      const monthFullName = monthNames[month] || month
+      const fullDate = `${monthFullName} ${day}, ${year}`
       
       // Check for "See Tickets" button as confidence indicator
       const hasTicketsButton = window.includes('See Tickets') || window.includes('Get Tickets')
