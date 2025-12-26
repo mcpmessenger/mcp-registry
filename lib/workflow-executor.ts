@@ -114,12 +114,49 @@ function extractDataFromStep(step: WorkflowStep, previousResults: WorkflowStep[]
       extracted.location = resultObj.location || resultObj.address || resultObj.place_name
       extracted.coordinates = resultObj.coordinates || resultObj.location?.coordinates || resultObj.geometry?.coordinates
       
+      // Check formatted result for venue extraction (from Playwright responses)
+      if (resultObj.formatted && typeof resultObj.formatted === 'string') {
+        const formattedText = resultObj.formatted
+        
+        // Extract venue from formatted response (e.g., "Venue: Madison Square Garden")
+        const venueMatch = formattedText.match(/venue[:\s]+([^\n,]+)/i) ||
+                          formattedText.match(/(?:at|@)\s+([A-Z][^,\n\.]+?)(?:\n|$)/)
+        if (venueMatch && !extracted.venue) {
+          extracted.venue = venueMatch[1].trim()
+        }
+        
+        // Extract date for itinerary generation
+        const dateMatch = formattedText.match(/date[:\s]+([^\n,]+)/i) ||
+                         formattedText.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/i)
+        if (dateMatch) {
+          extracted.date = dateMatch[1].trim()
+        }
+        
+        // Extract time if available
+        const timeMatch = formattedText.match(/at\s+(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))/i)
+        if (timeMatch) {
+          extracted.time = timeMatch[1].trim()
+        }
+      }
+      
       // If we have a content field with text, try to parse venue from it
       if (resultObj.content && typeof resultObj.content === 'string') {
         const venueMatch = resultObj.content.match(/venue[:\s]+([^\n,]+)/i) ||
                           resultObj.content.match(/(?:at|@)\s+([A-Z][^,\.\n]+)/)
-        if (venueMatch) {
+        if (venueMatch && !extracted.venue) {
           extracted.venue = venueMatch[1].trim()
+        }
+      }
+      
+      // Extract from raw YAML if available (for Playwright snapshots)
+      if (resultObj.raw && typeof resultObj.raw === 'object') {
+        const rawObj = resultObj.raw as Record<string, unknown>
+        if (rawObj.content && typeof rawObj.content === 'string') {
+          // Look for venue patterns in YAML
+          const yamlVenueMatch = rawObj.content.match(/(?:p|span)\s+"([^"]*(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park)[^"]*)"/i)
+          if (yamlVenueMatch && !extracted.venue) {
+            extracted.venue = yamlVenueMatch[1].trim()
+          }
         }
       }
     }
@@ -193,52 +230,98 @@ function buildToolArguments(
     }
   } else if (isPlaywrightTool) {
     // Playwright tool
-    // Extract URL or search terms from description
-    const urlMatch = step.description.match(/(https?:\/\/[^\s]+)/)
-    if (urlMatch) {
-      args.url = urlMatch[1]
-    } else {
-      // Check for "using [domain]" pattern (e.g., "using ticketmaster.com")
-      const usingMatch = step.description.match(/using\s+([\w-]+(?:\.com)?)/i)
-      
-      // Check if user explicitly mentioned a site (e.g., "check ticketmaster")
-      const siteMatch = step.description.match(/check\s+(\w+)/i) || 
-                       step.description.match(/(?:on|at)\s+(\w+\.com|\w+)/i) ||
-                       usingMatch
-      
-      // For concert/ticketing searches, construct a search query
-      const concertMatch = step.description.match(/['"](.+?)['"]/i) ||
-                          step.description.match(/find.*['"](.+?)['"]/i) ||
-                          step.description.match(/for (.+?)'s/i) ||
-                          step.description.match(/LCD Soundsystem/i) ||
-                          step.description.match(/concert schedule/i)
-      
-      if (siteMatch || usingMatch) {
-        // User specified a site (e.g., "ticketmaster" or "using ticketmaster.com")
-        const site = (siteMatch?.[1] || usingMatch?.[1] || '').toLowerCase().replace('.com', '')
-        if (site === 'ticketmaster' || site.includes('ticket') || step.description.toLowerCase().includes('ticketmaster')) {
-          args.url = 'https://www.ticketmaster.com'
-          // Extract artist/band name
-          const artistMatch = step.description.match(/['"](.+?)['"]/i) || step.description.match(/find.*?['"](.+?)['"]/i)
-          if (artistMatch) {
-            args.query = `${artistMatch[1]} New York`
-          } else {
-            args.query = 'LCD Soundsystem New York'
+    // Check if this is a rental agency site visit (step 3+ in multi-step workflow)
+    const isRentalSite = step.description.toLowerCase().includes('rental agency') ||
+                        step.description.toLowerCase().includes('rental site') ||
+                        step.description.toLowerCase().includes('visit that rental')
+    
+    if (isRentalSite && previousResults.length > 0) {
+      // We have a rental agency from previous step (Google Maps)
+      // Extract URL from previous step result
+      const prevResult = previousResults[previousResults.length - 1]?.result
+      if (prevResult && typeof prevResult === 'object') {
+        const prevObj = prevResult as Record<string, unknown>
+        // Try to extract website URL from Google Maps result
+        const website = prevObj.website || prevObj.url
+        if (website && typeof website === 'string') {
+          args.url = website
+          // Extract car type and date from query
+          const carTypeMatch = step.description.match(/(?:for|get|find)\s+(?:a\s+)?['"]?([^'"]+)['"]?\s+(?:car|vehicle)/i) ||
+                              step.description.match(/(full size|compact|suv|sedan)/i)
+          if (carTypeMatch) {
+            args.search_query = `${carTypeMatch[1]} car rental`
+          }
+          // Add date from concert if available
+          if (extracted.date) {
+            args.search_query = `${args.search_query || 'rental'} for ${extracted.date}`
           }
         } else {
-          args.url = `https://www.${site}.com`
-          args.query = step.description
+          // Try to extract from formatted result
+          const formatted = prevObj.formatted
+          if (formatted && typeof formatted === 'string') {
+            const urlMatch = formatted.match(/\[website\]\(([^)]+)\)/) || formatted.match(/(https?:\/\/[^\s)]+)/)
+            if (urlMatch) {
+              args.url = urlMatch[1]
+            }
+          }
         }
-      } else if (concertMatch) {
-        // Concert search without specific site - default to Ticketmaster
-        args.url = 'https://www.ticketmaster.com'
-        args.query = `${concertMatch[1] || 'LCD Soundsystem'} New York concert`
+      }
+    } else {
+      // Extract URL or search terms from description
+      const urlMatch = step.description.match(/(https?:\/\/[^\s]+)/)
+      if (urlMatch) {
+        args.url = urlMatch[1]
       } else {
-        // Generic search - check if description mentions ticketmaster
-        if (step.description.toLowerCase().includes('ticketmaster')) {
-          args.url = 'https://www.ticketmaster.com'
+        // Check for "using [domain]" pattern (e.g., "using ticketmaster.com")
+        const usingMatch = step.description.match(/using\s+([\w-]+(?:\.com)?)/i)
+        
+        // Check if user explicitly mentioned a site (e.g., "check ticketmaster")
+        const siteMatch = step.description.match(/check\s+(\w+)/i) || 
+                         step.description.match(/(?:on|at)\s+(\w+\.com|\w+)/i) ||
+                         usingMatch
+        
+        // For concert/ticketing searches, construct a search query
+        const concertMatch = step.description.match(/['"](.+?)['"]/i) ||
+                            step.description.match(/find.*['"](.+?)['"]/i) ||
+                            step.description.match(/for (.+?)'s/i) ||
+                            step.description.match(/LCD Soundsystem/i) ||
+                            step.description.match(/concert schedule/i)
+        
+        if (siteMatch || usingMatch) {
+          // User specified a site (e.g., "ticketmaster" or "using ticketmaster.com")
+          const site = (siteMatch?.[1] || usingMatch?.[1] || '').toLowerCase().replace('.com', '')
+          if (site === 'ticketmaster' || site.includes('ticket') || step.description.toLowerCase().includes('ticketmaster')) {
+            args.url = 'https://www.stubhub.com' // Use StubHub instead of Ticketmaster
+            // Extract artist/band name
+            const artistMatch = step.description.match(/['"](.+?)['"]/i) || step.description.match(/find.*?['"](.+?)['"]/i)
+            if (artistMatch) {
+              args.search_query = `${artistMatch[1]} New York`
+            } else {
+              args.search_query = 'LCD Soundsystem New York'
+            }
+          } else {
+            args.url = `https://www.${site}.com`
+            args.search_query = step.description
+          }
+        } else if (concertMatch) {
+          // Concert search without specific site - default to StubHub
+          args.url = 'https://www.stubhub.com'
+          args.search_query = `${concertMatch[1] || 'LCD Soundsystem'} New York concert`
+        } else {
+          // Generic search - check if description mentions ticketmaster
+          if (step.description.toLowerCase().includes('ticketmaster')) {
+            args.url = 'https://www.stubhub.com'
+          }
+          args.search_query = step.description
         }
-        args.query = step.description
+        
+        // Enable auto-search for concert queries
+        if (args.search_query && (step.description.toLowerCase().includes('find') || 
+                                  step.description.toLowerCase().includes('when') ||
+                                  step.description.toLowerCase().includes('playing'))) {
+          args.auto_search = true
+          args.wait_timeout = 15000
+        }
       }
     }
   } else if (step.selectedTool === 'agent_executor') {

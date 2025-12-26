@@ -124,9 +124,67 @@ export class NativeOrchestrator {
 
     if (hasMultiStep || intent.needs.length > 1) {
       // Parse multi-step query
-      // Improved regex to handle "once you have" patterns
-      const splitRegex = /(?:once you (?:have|find|get)|then|after (?:finding|getting|having)|followed by|and then)/i
-      const parts = query.split(splitRegex)
+      // Handle complex queries with multiple sentences separated by periods
+      // Split on sentence boundaries and transition words
+      const sentenceBoundary = /([.!?])\s+(?=[A-Z])/g
+      const sentences = query.split(sentenceBoundary).filter(s => s.trim().length > 0)
+      
+      // Reconstruct sentences (periods were split out)
+      const reconstructedSentences: string[] = []
+      for (let i = 0; i < sentences.length; i += 2) {
+        if (i + 1 < sentences.length) {
+          reconstructedSentences.push(sentences[i] + sentences[i + 1])
+        } else {
+          reconstructedSentences.push(sentences[i])
+        }
+      }
+      
+      // Parse each sentence and extract steps
+      // Look for patterns like:
+      // - "Find when X is playing in Y" (Step 1: Playwright)
+      // - "Once you have the venue, use Google Maps to..." (Step 2: Maps)
+      // - "Use Playwright to visit..." (Step 3: Playwright)
+      // - "Finally, use LangChain to..." (Step 4: LangChain)
+      
+      const parts: string[] = []
+      
+      for (const sentence of reconstructedSentences) {
+        // Check for explicit step transitions
+        const onceYouMatch = sentence.match(/(?:once you (?:have|find|get)\s+the?\s+(\w+),?\s+use\s+(.+))/i)
+        const finallyMatch = sentence.match(/(?:finally,?\s+use\s+(.+))/i)
+        const thenMatch = sentence.match(/(?:then,?\s+use\s+(.+))/i)
+        const useMatch = sentence.match(/(?:use\s+(.+?)\s+(?:to|for))/i)
+        
+        if (onceYouMatch) {
+          // "Once you have the venue, use Google Maps to find..."
+          // Previous sentence is step 1, this is step 2
+          parts.push(sentence)
+        } else if (finallyMatch || thenMatch) {
+          // "Finally, use LangChain to..." or "Then use Playwright to..."
+          parts.push(sentence)
+        } else if (useMatch && (sentence.includes('Playwright') || sentence.includes('LangChain') || sentence.includes('Google Maps'))) {
+          // Explicit tool usage
+          parts.push(sentence)
+        } else if (sentence.match(/find when|check ticketing|look for/i)) {
+          // Concert/ticket search (Step 1)
+          parts.push(sentence)
+        } else if (sentence.trim().length > 10) {
+          // Other meaningful sentences
+          parts.push(sentence)
+        }
+      }
+      
+      // If we didn't get good splits, fall back to original approach
+      if (parts.length === 0) {
+        const splitRegex = /(?:once you (?:have|find|get)|then|after (?:finding|getting|having)|followed by|and then|finally|use (?:google maps|playwright|langchain))/i
+        const fallbackParts = reconstructedSentences.flatMap(sentence => {
+          if (splitRegex.test(sentence)) {
+            return sentence.split(splitRegex).filter(p => p.trim().length > 0)
+          }
+          return [sentence]
+        })
+        parts.push(...fallbackParts)
+      }
       
       // Also handle the "once you have X, use Y" pattern more explicitly
       const onceYouMatch = query.match(/once you (?:have|find|get) (.+?), use (.+?)(?:\.|$)/i)

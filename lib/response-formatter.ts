@@ -357,6 +357,9 @@ interface ExtractedEvent {
   event: string
   date?: string
   venue?: string
+  time?: string
+  url?: string
+  location?: string
   confidence: number
 }
 
@@ -400,6 +403,46 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       const monthFullName = monthNames[month] || month
       const fullDate = `${monthFullName} ${day}, ${year}`
       
+      // Extract venue (common patterns in StubHub YAML)
+      // Look for venue patterns: "p" or "span" with venue names, often after date
+      let venue: string | undefined = undefined
+      const venuePatterns = [
+        // Pattern: paragraph or span with venue-like text (often contains "Theater", "Arena", "Stadium", etc.)
+        /(?:p|span)\s+"([^"]*(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park|Pavilion|Auditorium|Ballroom|Club|Venue)[^"]*)"/i,
+        // Pattern: text near location indicators
+        /(?:at|@|venue[:\s]+)([A-Z][^,\n"]{5,}?(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park)[^,\n"]*)/i,
+        // Pattern: common venue location pattern (venue name, city)
+        /p\s+"([A-Z][^"]{10,})"/,
+      ]
+      
+      for (const pattern of venuePatterns) {
+        const venueMatch = window.match(pattern)
+        if (venueMatch) {
+          venue = venueMatch[1].trim()
+          // Clean up venue name
+          venue = venue.replace(/^at\s+/i, '').replace(/^venue[:\s]+/i, '').trim()
+          if (venue.length > 3 && venue.length < 100) {
+            break
+          }
+        }
+      }
+      
+      // Extract time if available (look for time patterns like "8:00 PM", "7:30 PM")
+      let time: string | undefined = undefined
+      const timePattern = /(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))/i
+      const timeMatch = window.match(timePattern)
+      if (timeMatch) {
+        time = timeMatch[1].trim()
+      }
+      
+      // Extract URL if available (look for links near the event)
+      let url: string | undefined = undefined
+      const urlPattern = /link\s+"[^"]*"\s*\[.*?\]:\s*\/url:\s*([^\s\n]+)/i
+      const urlMatch = window.match(urlPattern)
+      if (urlMatch) {
+        url = urlMatch[1].startsWith('http') ? urlMatch[1] : `https://www.stubhub.com${urlMatch[1]}`
+      }
+      
       // Check for "See Tickets" button as confidence indicator
       const hasTicketsButton = window.includes('See Tickets') || window.includes('Get Tickets')
       const confidence = hasTicketsButton ? 0.9 : 0.7
@@ -407,6 +450,9 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       results.push({
         event: artist,
         date: fullDate,
+        venue,
+        time,
+        url,
         confidence
       })
     }
@@ -598,8 +644,13 @@ export async function formatResponseWithLLM(
         
         windowedResults.forEach((event, index) => {
           formattedResponse += `${index + 1}. **${event.event}**\n`
-          if (event.date) formattedResponse += `   - Date: ${event.date}\n`
+          if (event.date) {
+            formattedResponse += `   - Date: ${event.date}`
+            if (event.time) formattedResponse += ` at ${event.time}`
+            formattedResponse += `\n`
+          }
           if (event.venue) formattedResponse += `   - Venue: ${event.venue}\n`
+          if (event.url) formattedResponse += `   - [Get tickets](${event.url})\n`
           formattedResponse += `\n`
         })
         
