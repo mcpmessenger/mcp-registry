@@ -50,6 +50,90 @@ export function parsePlaywrightSnapshot(snapshot: string): {
       venue: match[4].trim(),
     })
   }
+  
+  // Extract StubHub format: h4 "Jan", h4 "15", p "2026" with artist name nearby
+  // Pattern: Look for artist name (in link or p), then nearby date pattern
+  const stubhubDatePattern = /h4\s+"([A-Za-z]{3})"\s*\n\s*h4\s+"(\d+)"\s*\n\s*p\s+"(\d{4})"/g
+  const dates: Array<{month: string, day: string, year: string, index: number}> = []
+  let dateMatch
+  while ((dateMatch = stubhubDatePattern.exec(snapshot)) !== null) {
+    dates.push({
+      month: dateMatch[1],
+      day: dateMatch[2],
+      year: dateMatch[3],
+      index: dateMatch.index
+    })
+  }
+  
+  // For each date, look for nearby artist name
+  for (const date of dates) {
+    // Look backwards from date for artist name (usually appears before date in StubHub)
+    const contextStart = Math.max(0, date.index - 300)
+    const context = snapshot.substring(contextStart, Math.min(snapshot.length, date.index + 200))
+    
+    // Try to find artist name - look for "Iration" or other artist names in links/paragraphs
+    const artistMatch = context.match(/(?:link|p|heading)\s+"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)"[^\n]*\n[^\n]*(?:p\s+"\1"|graphics-symbol|img)/)
+    if (artistMatch) {
+      const artistName = artistMatch[1].trim()
+      // Check if "See Tickets" appears after the date
+      const afterDate = snapshot.substring(date.index, Math.min(snapshot.length, date.index + 300))
+      const hasTickets = afterDate.includes('See Tickets') || afterDate.includes('button')
+      
+      if (hasTickets && artistName && artistName.length > 1 && artistName.length < 50) {
+        // Format date
+        const monthNames: Record<string, string> = {
+          'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+          'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+          'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+        }
+        const fullDate = `${monthNames[date.month] || date.month} ${date.day}, ${date.year}`
+        
+        // Avoid duplicates
+        const existing = result.events?.find(e => e.name === artistName && e.date === fullDate)
+        if (!existing) {
+          result.events?.push({
+            name: artistName,
+            date: fullDate,
+            venue: 'See StubHub for venue details',
+          })
+        }
+      }
+    }
+  }
+  
+  // Also extract "Iration" directly if it appears in the snapshot
+  if (snapshot.includes('Iration') || snapshot.includes('iration')) {
+    // Find all occurrences of the artist name
+    const artistPattern = /(?:link|p|heading)\s+"(Iration)"[^\n]*/gi
+    const artistMatches = [...snapshot.matchAll(artistPattern)]
+    
+    for (const artistMatch of artistMatches) {
+      const artistName = artistMatch[1]
+      const artistIndex = artistMatch.index || 0
+      
+      // Look for nearby dates
+      const nearbyContext = snapshot.substring(artistIndex, Math.min(snapshot.length, artistIndex + 500))
+      const nearbyDate = nearbyContext.match(/h4\s+"([A-Za-z]{3})"\s*\n\s*h4\s+"(\d+)"\s*\n\s*p\s+"(\d{4})"/)
+      
+      if (nearbyDate) {
+        const monthNames: Record<string, string> = {
+          'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+          'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+          'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+        }
+        const fullDate = `${monthNames[nearbyDate[1]] || nearbyDate[1]} ${nearbyDate[2]}, ${nearbyDate[3]}`
+        
+        const existing = result.events?.find(e => e.name === artistName && e.date === fullDate)
+        if (!existing) {
+          result.events?.push({
+            name: artistName,
+            date: fullDate,
+            venue: 'See StubHub for venue details',
+          })
+        }
+      }
+    }
+  }
 
   // Extract links
   const linkPattern = /link\s+"([^"]+)"\s*\[.*?\]:\s*-?\s*\/url:\s*([^\s\n]+)/g
