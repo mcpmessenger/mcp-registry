@@ -629,11 +629,13 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       
       // Filter out "Favorite" entries - these are button labels, not event names
       // Also check if eventName is empty or just whitespace
+      const eventNameCheck = eventName?.toLowerCase().trim() || ''
       if (!eventName || 
-          eventName.toLowerCase().trim() === 'favorite' || 
-          eventName.toLowerCase().trim() === '' ||
+          eventNameCheck === 'favorite' || 
+          eventNameCheck === '' ||
           (eventName.toLowerCase() === artist.toLowerCase() && artist.toLowerCase() === 'favorite')) {
         // Skip this result - it's not a real event
+        console.log('[ResponseFormatter] Skipping Favorite entry:', { eventName, artist })
         continue // Skip to next iteration
       }
       
@@ -906,16 +908,19 @@ export async function formatResponseWithLLM(
           const eventLower = (event.event || '').toLowerCase().trim()
           // Skip "Favorite" entries and empty event names
           if (!eventLower || eventLower === 'favorite' || eventLower === '') {
+            console.log('[ResponseFormatter] Filtering out event in display:', event.event)
             return false
           }
           // Create a unique key for duplicate detection (date + event name)
           const key = `${event.date || ''}-${eventLower}`
           if (seen.has(key)) {
+            console.log('[ResponseFormatter] Filtering out duplicate:', key)
             return false // Skip duplicates
           }
           seen.add(key)
           return true
         })
+        console.log('[ResponseFormatter] Filtered results:', filteredResults.length, 'out of', windowedResults.length)
         
         filteredResults.forEach((event, index) => {
           formattedResponse += `${index + 1}. **${event.event}**\n`
