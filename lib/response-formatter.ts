@@ -437,23 +437,63 @@ function extractWithAnchorWindow(context: EventContext): ExtractedEvent[] {
       // Extract venue (common patterns in StubHub YAML)
       // Look for venue patterns: "p" or "span" with venue names, often after date
       let venue: string | undefined = undefined
+      
+      // Find text after the date match for better venue detection
+      const dateMatchIndex = window.indexOf(dateMatch[0])
+      const textAfterDate = window.substring(dateMatchIndex + dateMatch[0].length, Math.min(window.length, dateMatchIndex + dateMatch[0].length + 800))
+      
       const venuePatterns = [
-        // Pattern: paragraph or span with venue-like text (often contains "Theater", "Arena", "Stadium", etc.)
-        /(?:p|span)\s+"([^"]*(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park|Pavilion|Auditorium|Ballroom|Club|Venue)[^"]*)"/i,
-        // Pattern: text near location indicators
-        /(?:at|@|venue[:\s]+)([A-Z][^,\n"]{5,}?(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park)[^,\n"]*)/i,
-        // Pattern: common venue location pattern (venue name, city)
-        /p\s+"([A-Z][^"]{10,})"/,
+        // Pattern 1: paragraph with venue keywords (Theater, Arena, Stadium, etc.)
+        /(?:-\\s+)?p\s+"([^"]*(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park|Pavilion|Auditorium|Ballroom|Club|Venue|Amphitheater|Amphitheatre|Field|Coliseum)[^"]*)"/i,
+        // Pattern 2: span with venue keywords
+        /(?:-\\s+)?span\s+"([^"]*(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park)[^"]*)"/i,
+        // Pattern 3: paragraph with capitalized venue name + city pattern
+        /(?:-\\s+)?p\s+"([A-Z][A-Za-z\s&]+(?:Theater|Theatre|Arena|Stadium|Hall|Center|Centre|Park|Pavilion|Amphitheater)[^",]{0,40})"/,
+        // Pattern 4: common venue location pattern (venue name, city, state)
+        /(?:-\\s+)?p\s+"([A-Z][A-Za-z\s&]{8,50}(?:,\s*[A-Z][a-z]+){1,2})"/,
+        // Pattern 5: fallback - any capitalized paragraph after date (might be venue)
+        /(?:-\\s+)?p\s+"([A-Z][A-Za-z\s]{8,40})"/,
       ]
       
+      // Try patterns in both the window and text after date
       for (const pattern of venuePatterns) {
-        const venueMatch = window.match(pattern)
+        // Try in text after date first (more likely location)
+        let venueMatch = textAfterDate.match(pattern)
+        if (!venueMatch) {
+          // Try in full window as fallback
+          venueMatch = window.match(pattern)
+        }
         if (venueMatch) {
           venue = venueMatch[1].trim()
           // Clean up venue name
           venue = venue.replace(/^at\s+/i, '').replace(/^venue[:\s]+/i, '').trim()
-          if (venue.length > 3 && venue.length < 100) {
+          // Remove state/city suffixes that might be captured (but keep if it's part of venue name)
+          // Don't strip if it looks like a proper venue name with location
+          if (!venue.match(/,/)) {
+            venue = venue.replace(/\s+(Texas|TX|California|CA|New York|NY|Iowa|IA)\s*$/i, '')
+          }
+          // Validate venue length and content
+          if (venue.length > 5 && venue.length < 120 && !venue.match(/^\d+$/) && !venue.toLowerCase().includes('stubhub')) {
             break
+          } else {
+            venue = undefined // Reset if invalid
+          }
+        }
+      }
+      
+      // Additional fallback: look for venue in format "Venue Name, City, State"
+      if (!venue) {
+        const cityStatePattern = /(?:-\\s+)?p\s+"([^"]+,\s*[A-Z][a-z]+(?:,\s*[A-Z]{2})?)"/
+        const cityMatch = textAfterDate.match(cityStatePattern)
+        if (cityMatch) {
+          // Try to find venue name before the city in previous paragraphs
+          const beforeCity = window.substring(0, window.indexOf(cityMatch[0]))
+          const venueBeforeCity = beforeCity.match(/(?:-\\s+)?p\s+"([A-Z][A-Za-z\s&]{5,40})"\s*$/)
+          if (venueBeforeCity) {
+            venue = `${venueBeforeCity[1].trim()}, ${cityMatch[1]}`
+          } else {
+            // Just use the city/state as fallback
+            venue = cityMatch[1].trim()
           }
         }
       }
