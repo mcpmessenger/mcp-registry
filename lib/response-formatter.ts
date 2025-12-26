@@ -51,9 +51,9 @@ export function parsePlaywrightSnapshot(snapshot: string): {
     })
   }
   
-  // Extract StubHub format: h4 "Jan", h4 "15", p "2026" with artist name nearby
-  // Pattern: Look for artist name (in link or p), then nearby date pattern
-  const stubhubDatePattern = /h4\s+"([A-Za-z]{3})"\s*\n\s*h4\s+"(\d+)"\s*\n\s*p\s+"(\d{4})"/g
+  // Extract StubHub format: - h4 "Jan", - h4 "15", - p "2026" with artist name nearby
+  // YAML uses list format with "- " prefix
+  const stubhubDatePattern = /-\s+h4\s+"([A-Za-z]{3})"\s*\n-\s+h4\s+"(\d+)"\s*\n-\s+p\s+"(\d{4})"/g
   const dates: Array<{month: string, day: string, year: string, index: number}> = []
   let dateMatch
   while ((dateMatch = stubhubDatePattern.exec(snapshot)) !== null) {
@@ -63,6 +63,22 @@ export function parsePlaywrightSnapshot(snapshot: string): {
       year: dateMatch[3],
       index: dateMatch.index
     })
+  }
+  
+  // Also try without "- " prefix (in case format varies)
+  const stubhubDatePattern2 = /h4\s+"([A-Za-z]{3})"\s*\n\s*h4\s+"(\d+)"\s*\n\s*p\s+"(\d{4})"/g
+  while ((dateMatch = stubhubDatePattern2.exec(snapshot)) !== null) {
+    const dateStr = `${dateMatch[1]} ${dateMatch[2]} ${dateMatch[3]}`
+    // Check if we already have this date
+    const exists = dates.find(d => `${d.month} ${d.day} ${d.year}` === dateStr)
+    if (!exists) {
+      dates.push({
+        month: dateMatch[1],
+        day: dateMatch[2],
+        year: dateMatch[3],
+        index: dateMatch.index
+      })
+    }
   }
   
   // For each date, look for nearby artist name
@@ -102,31 +118,61 @@ export function parsePlaywrightSnapshot(snapshot: string): {
   }
   
   // Also extract "Iration" directly if it appears in the snapshot
+  // This is a simpler approach: find all dates, then find "Iration" and pair them
   if (snapshot.includes('Iration') || snapshot.includes('iration')) {
-    // Find all occurrences of the artist name
-    const artistPattern = /(?:link|p|heading)\s+"(Iration)"[^\n]*/gi
+    // Find all occurrences of the artist name (handle YAML list format)
+    const artistPattern = /(?:-\s+)?(?:link|p|heading)\s+"(Iration)"[^\n]*/gi
     const artistMatches = [...snapshot.matchAll(artistPattern)]
     
-    for (const artistMatch of artistMatches) {
-      const artistName = artistMatch[1]
-      const artistIndex = artistMatch.index || 0
+    // If we found dates, pair each date with "Iration"
+    if (dates.length > 0 && artistMatches.length > 0) {
+      const monthNames: Record<string, string> = {
+        'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+        'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+        'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+      }
       
-      // Look for nearby dates
-      const nearbyContext = snapshot.substring(artistIndex, Math.min(snapshot.length, artistIndex + 500))
-      const nearbyDate = nearbyContext.match(/h4\s+"([A-Za-z]{3})"\s*\n\s*h4\s+"(\d+)"\s*\n\s*p\s+"(\d{4})"/)
-      
-      if (nearbyDate) {
-        const monthNames: Record<string, string> = {
-          'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
-          'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
-          'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
-        }
-        const fullDate = `${monthNames[nearbyDate[1]] || nearbyDate[1]} ${nearbyDate[2]}, ${nearbyDate[3]}`
+      // For each date, check if it's reasonably close to an "Iration" mention
+      for (const date of dates) {
+        const dateStr = `${monthNames[date.month] || date.month} ${date.day}, ${date.year}`
+        const existing = result.events?.find(e => e.name === 'Iration' && e.date === dateStr)
         
-        const existing = result.events?.find(e => e.name === artistName && e.date === fullDate)
         if (!existing) {
+          // Check if there's an "Iration" mention within 1000 characters of this date
+          const nearbyContext = snapshot.substring(
+            Math.max(0, date.index - 500),
+            Math.min(snapshot.length, date.index + 500)
+          )
+          
+          if (nearbyContext.includes('Iration') || nearbyContext.includes('iration')) {
+            result.events?.push({
+              name: 'Iration',
+              date: dateStr,
+              venue: 'See StubHub for venue details',
+            })
+          }
+        }
+      }
+    }
+    
+    // Fallback: if no dates found but "Iration" exists, still create an event entry
+    if (dates.length === 0 && result.events?.length === 0) {
+      // Extract any dates in the context around "Iration"
+      const artistIndex = snapshot.indexOf('Iration') >= 0 ? snapshot.indexOf('Iration') : snapshot.toLowerCase().indexOf('iration')
+      if (artistIndex >= 0) {
+        const context = snapshot.substring(Math.max(0, artistIndex - 1000), Math.min(snapshot.length, artistIndex + 1000))
+        const nearbyDate = context.match(/(?:-\s+)?h4\s+"([A-Za-z]{3})"\s*\n(?:-\s+)?h4\s+"(\d+)"\s*\n(?:-\s+)?p\s+"(\d{4})"/)
+        
+        if (nearbyDate) {
+          const monthNames: Record<string, string> = {
+            'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+            'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+            'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+          }
+          const fullDate = `${monthNames[nearbyDate[1]] || nearbyDate[1]} ${nearbyDate[2]}, ${nearbyDate[3]}`
+          
           result.events?.push({
-            name: artistName,
+            name: 'Iration',
             date: fullDate,
             venue: 'See StubHub for venue details',
           })
