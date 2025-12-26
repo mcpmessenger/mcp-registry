@@ -310,23 +310,35 @@ function extractQueryEntities(query: string): { artist?: string; location?: stri
   const locationKeyword = locationMatch ? query.substring(locationMatch.index || 0) : null
   
   // Extract everything between "look for" and location/tickets
-  const lookForMatch = query.match(/(?:look for|search for|find|get)\s+(.+?)(?:\s+in\s+|$)/i)
+  // Use a pattern that captures until "concert tickets" or location keywords
+  const lookForMatch = query.match(/(?:look for|search for|find|get)\s+(.+?)(?:\s+(?:concert\s+)?tickets?|\s+in\s+|\s+near\s+|\s+at\s+|$)/i)
   if (lookForMatch) {
     artist = lookForMatch[1].trim()
-    // Remove ticket/concert/show keywords from the end
-    artist = artist.replace(/\s+(?:concert\s+)?tickets?.*$/i, '').trim()
-    artist = artist.replace(/\s+(?:concert|show|event).*$/i, '').trim()
+    // Remove ticket/concert/show keywords from the end if they were captured
+    artist = artist.replace(/\s+(?:concert\s+)?tickets?$/i, '').trim()
+    artist = artist.replace(/\s+(?:concert|show|event)$/i, '').trim()
     // Remove location if it was captured
-    if (locationKeyword) {
-      artist = artist.replace(new RegExp(`\\s+${locationKeyword}.*$`, 'i'), '').trim()
+    if (locationKeyword && artist.includes(locationKeyword)) {
+      artist = artist.replace(new RegExp(`\\s*${locationKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*$`, 'i'), '').trim()
     }
   }
   
-  // Fallback: try simpler pattern
+  // If still no good artist, try word-by-word extraction
+  // For "look for iration concert tickets in iowa"
+  // Extract: words after "for" until "concert", "tickets", or location
   if (!artist || artist.length < 2) {
-    const simpleMatch = query.match(/(?:look for|search for|find|get)\s+(\w+(?:\s+\w+)?)/i)
-    if (simpleMatch) {
-      artist = simpleMatch[1].trim()
+    const words = query.split(/\s+/)
+    const startIdx = words.findIndex(w => /^(for|find|get)$/i.test(w))
+    if (startIdx >= 0) {
+      const stopWords = ['concert', 'tickets', 'ticket', 'show', 'event', 'in', 'near', 'at']
+      const artistWords: string[] = []
+      for (let i = startIdx + 1; i < words.length; i++) {
+        if (stopWords.includes(words[i].toLowerCase())) break
+        artistWords.push(words[i])
+      }
+      if (artistWords.length > 0) {
+        artist = artistWords.join(' ').trim()
+      }
     }
   }
   
