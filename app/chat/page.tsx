@@ -1179,7 +1179,7 @@ export default function ChatPage() {
           })
         } else {
           // If it's a design request, route to design generation endpoint (handles tool discovery)
-          if (isDesignRequest) {
+          if (isDesignRequest(content)) {
             // This will be handled by the design generation endpoint above
             // But we're already past that, so show helpful message
             responseContent = `The selected agent "${selectedAgent?.name}" doesn't have available tools yet. Tool discovery is in progress. Please try again in a few seconds, or use "Auto-Route" mode.`
