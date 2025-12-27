@@ -1214,8 +1214,7 @@ export default function ChatPage() {
       }
 
       setMessages((prev) => [...prev, assistantMessage])
-    }
-    catch (error) {
+    } catch (error) {
       console.error('Error sending message:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to process your request'
       
@@ -1246,7 +1245,7 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  };
 
   const handleVoiceInput = () => {
     setVoiceDialogOpen(true)
