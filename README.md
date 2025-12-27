@@ -36,12 +36,44 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 - **Image Display**: View generated images directly in chat with automatic blob URL conversion
 - **STDIO Server Support**: Full support for STDIO-based MCP servers (like Nano Banana MCP)
 - **HTTP Server Support**: Support for HTTP-based MCP servers with custom headers
+- **Kafka Orchestrator**: Intelligent tool routing that bypasses Gemini for high-signal queries
 - **Auto Tool Discovery**: Automatic tool discovery for STDIO servers on registration
 - **Real-time Progress**: Server-Sent Events (SSE) for live job progress updates
 - **Multi-Tier Fallback**: Robust API fallback strategy for reliable AI generation
 - **Modern UI**: Built with Next.js and Tailwind CSS for a responsive experience
 
 ### 🆕 Latest Upgrades (December 2024)
+
+#### Kafka-First Orchestrator (NEW - December 2024)
+- **Intelligent Tool Routing**: Automatically routes high-signal queries (like "when is the next concert") directly to appropriate MCP tools without invoking Gemini
+- **Gemini Quota Protection**: Bypasses Gemini API for deterministic queries, saving quota for complex reasoning tasks
+- **Fast-Path Matching**: Keyword and semantic matching routes queries to tools in <50ms
+- **Asynchronous Processing**: Kafka-based event-driven architecture for scalable orchestration
+- **SSE Support**: Handles Server-Sent Events (SSE) responses from MCP servers like Exa
+- **Shared Result Consumer**: Always-ready consumer eliminates timeout issues
+- **Status Endpoint**: Check orchestrator health via `/api/orchestrator/status`
+
+**How it works:**
+1. User query enters via `/api/orchestrator/query`
+2. Ingress Gateway normalizes and publishes to `user-requests` topic
+3. MCP Matcher performs fast keyword/semantic matching
+4. Execution Coordinator invokes the matched tool
+5. Results published to `orchestrator-results` and returned to client
+
+**Setup:**
+```bash
+# Start Kafka (Docker)
+docker-compose -f docker-compose.kafka.yml up -d
+
+# Create topics
+.\scripts\setup-kafka-topics.ps1
+
+# Enable in backend .env
+ENABLE_KAFKA=true
+KAFKA_BROKERS=localhost:9092
+```
+
+See [Kafka Setup Guide](docs/KAFKA_SETUP.md) and [Orchestrator Architecture](docs/KAFKA_ORCHESTRATOR.md) for details.
 
 #### One-Click Installation
 - **Cursor Deep-Link Support**: Install STDIO servers directly to Cursor with automatic deep-link navigation
@@ -57,6 +89,7 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 - **Image Display in Chat**: Generated images display directly in the chat interface
 - **API Key Management**: Easy API key configuration via UI or API
 - **Quota Error Handling**: User-friendly error messages for API quota issues
+  - New: Heuristic guard prevents accidental image generation unless explicitly requested or overridden (backend route `POST /api/mcp/tools/generate`).
 
 #### STDIO Server Support
 - **Full STDIO Protocol**: Complete support for STDIO-based MCP servers using JSON-RPC
@@ -99,6 +132,10 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 - `POST /api/security/scan/:serverId` - Trigger security scan
 - `GET /api/security/scores` - Get all security scores
 - `GET /api/security/score/:serverId` - Get security score for a server
+
+#### Orchestrator Endpoints
+- `POST /api/orchestrator/query` - Submit a query to the intelligent orchestrator
+- `GET /api/orchestrator/status` - Check orchestrator health and service status
 
 ## 📁 Repository Structure
 
@@ -165,7 +202,39 @@ mcp-registry/
 }
 ```
 
-### 3. Add the Playwright Registry Bridge
+### 3. Enable Kafka Orchestrator (Recommended)
+
+The orchestrator intelligently routes queries to the right tools without using Gemini quota:
+
+1. **Start Kafka:**
+   ```powershell
+   docker-compose -f docker-compose.kafka.yml up -d
+   .\scripts\setup-kafka-topics.ps1
+   ```
+
+2. **Enable in backend `.env`:**
+   ```env
+   ENABLE_KAFKA=true
+   KAFKA_BROKERS=localhost:9092
+   ```
+
+3. **Restart backend** - You'll see:
+   - `[Server] ✓ MCP Matcher started successfully`
+   - `[Server] ✓ Execution Coordinator started successfully`
+   - `[Server] ✓ Result Consumer started successfully`
+
+4. **Test it:**
+   - Go to Chat page
+   - Select "Auto-Route (Recommended)"
+   - Ask: "when is the next iration concert in texas"
+   - Should route directly to Exa without Gemini!
+
+**Check status:**
+```bash
+curl http://localhost:3001/api/orchestrator/status
+```
+
+### 4. Add the Playwright Registry Bridge
 
 To browse the web and interact with maps via a real browser:
 
@@ -206,6 +275,12 @@ PORT=3001
 CORS_ORIGIN=http://localhost:3000
 GOOGLE_GEMINI_API_KEY=
 OPENAI_API_KEY=
+
+# Kafka Orchestrator (optional but recommended)
+ENABLE_KAFKA=true
+KAFKA_BROKERS=localhost:9092
+KAFKA_CLIENT_ID=mcp-orchestrator-coordinator
+KAFKA_GROUP_ID=mcp-orchestrator-coordinator
 ```
 
 ## 🏗️ Ecosystem Architecture
@@ -277,12 +352,24 @@ The backend provides the following key endpoints:
 
 ### Event-Driven Architecture Components
 
-- **Kafka**: A local Kafka broker powers the async design pipeline. Start it with `docker compose -f docker-compose.kafka.yml up -d`, which spins up Zookeeper and Kafka via the provided compose file. Shut it down with `docker compose -f docker-compose.kafka.yml down`.
-- **Topics**: `design-requests` receives `DESIGN_REQUEST_RECEIVED` events; `design-ready` carries `DESIGN_READY`/`DESIGN_FAILED` results. The backend consumes both topics internally.
+- **Kafka**: A local Kafka broker powers both the async design pipeline and the intelligent orchestrator. Start it with `docker compose -f docker-compose.kafka.yml up -d`, which spins up Zookeeper and Kafka. Shut it down with `docker compose -f docker-compose.kafka.yml down`.
+- **Orchestrator Topics**: 
+  - `user-requests`: Normalized user queries from the Ingress Gateway
+  - `tool-signals`: High-confidence tool matches from the MCP Matcher
+  - `orchestrator-plans`: Gemini fallback plans (when matcher can't resolve)
+  - `orchestrator-results`: Final tool execution results
+- **Design Pipeline Topics**: `design-requests` receives `DESIGN_REQUEST_RECEIVED` events; `design-ready` carries `DESIGN_READY`/`DESIGN_FAILED` results.
+- **Orchestrator Flow**: 
+  1. Frontend calls `POST /api/orchestrator/query` with user query
+  2. Ingress Gateway normalizes query and publishes to `user-requests`
+  3. MCP Matcher performs fast keyword/semantic matching (<50ms)
+  4. Execution Coordinator invokes matched tool and publishes result
+  5. Query route receives result via shared result consumer
+  6. Response returned to frontend
 - **Backend Flow**: `POST /api/mcp/tools/generate` queues a request (publishes `DESIGN_REQUEST_RECEIVED`), a multimodal worker consumes it, and the backend pushes progress/completions through its WebSocket (`ws://localhost:3001/ws`).
 - **WebSocket Testing**: You can watch jobs with `npx wscat -c ws://localhost:3001/ws` and send `{ "type": "subscribe", "jobId": "<id>" }` to receive `job_status` updates and the resulting SVG payload.
 
-By wiring Kafka to the Prisma-backed backend we now preserve a responsive frontend while heavy LLM work happens asynchronously in the background.
+By wiring Kafka to the Prisma-backed backend we now preserve a responsive frontend while heavy LLM work happens asynchronously in the background, and intelligent routing bypasses Gemini for high-signal queries.
 
 ### Database & Memory
 
@@ -298,6 +385,8 @@ Comprehensive documentation is available in the `docs/` directory:
 - **[API Documentation](docs/API.md)** - Complete API reference
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment instructions
 - **[Event-Driven Architecture](docs/EVENT_DRIVEN_ARCHITECTURE.md)** - Kafka and event processing
+- **[Kafka Setup Guide](docs/KAFKA_SETUP.md)** - How to set up Kafka locally
+- **[Kafka Orchestrator](docs/KAFKA_ORCHESTRATOR.md)** - Orchestrator architecture and implementation
 - **[Testing Guide](docs/TESTING_ONE_CLICK_INSTALL.md)** - One-click installation feature testing
 - **[Strategic Roadmap](docs/STRATEGIC_ROADMAP.md)** - Long-term vision and strategy
 
@@ -361,7 +450,7 @@ rm Dockerfile
 - **Google Gemini API** - AI-powered SVG generation and document analysis
 - **Google Vision API** - Image analysis capabilities
 - **OpenAI Whisper API** - Voice-to-text transcription
-- **Apache Kafka** - Event-driven architecture for async processing
+- **Apache Kafka** - Event-driven architecture for async processing and intelligent orchestration
 - **Server-Sent Events (SSE)** - Real-time progress streaming
 - **WebSocket** - Bidirectional communication
 - **ts-node** - TypeScript execution
@@ -430,6 +519,15 @@ Here's how to use the image generation feature:
 - Check environment variables are set
 - Look at backend logs for initialization errors
 - Ensure `npx` is available in the container
+
+### Orchestrator Not Working
+- **Check Kafka is running**: `docker ps` should show `zookeeper` and `kafka` containers
+- **Verify topics exist**: Run `.\scripts\setup-kafka-topics.ps1` if topics are missing
+- **Check backend logs**: Look for `[Server] ✓ MCP Matcher started successfully` and `[Server] ✓ Execution Coordinator started successfully`
+- **Verify environment variables**: Ensure `ENABLE_KAFKA=true` and `KAFKA_BROKERS=localhost:9092` in `backend/.env`
+- **Check status endpoint**: `curl http://localhost:3001/api/orchestrator/status` should show all services as `true`
+- **Timeout issues**: If queries timeout, check that Result Consumer is running (should see `[Server] ✓ Result Consumer started successfully`)
+- **SSE parsing errors**: Make sure backend has been restarted after the SSE parsing fix was applied
 
 ## 📞 Support
 
