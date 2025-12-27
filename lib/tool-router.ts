@@ -8,6 +8,34 @@
 import type { MCPServer } from './api'
 import { TOOL_CONTEXTS, getToolContext, findToolsByOutputContext, findToolsByResponsibility } from '@/types/tool-context'
 
+export function normalizeSearchText(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/\bwhen'?s\b/gi, 'when is')
+    .replace(/\bwhere'?s\b/gi, 'where is')
+    .replace(/\bwhat'?s\b/gi, 'what is')
+    .replace(/\bwho'?s\b/gi, 'who is')
+    .replace(/\bhow'?s\b/gi, 'how is')
+}
+
+export function extractFollowUpQuery(content: string): string {
+  if (!content) return ''
+  const marker = 'Follow-up question:'
+  const markerIndex = content.indexOf(marker)
+  if (markerIndex === -1) {
+    return content
+  }
+
+  const start = markerIndex + marker.length
+  const endMarker = '\n\nPrevious context:'
+  const endIndex = content.indexOf(endMarker, start)
+  if (endIndex === -1) {
+    return content.slice(start).trim()
+  }
+
+  return content.slice(start, endIndex).trim()
+}
+
 export interface RoutingIntent {
   needs: string[]
   preferredTool?: string
@@ -18,7 +46,8 @@ export interface RoutingIntent {
  * Analyze user request to determine routing intent
  */
 export function analyzeRoutingIntent(content: string): RoutingIntent {
-  const lowerContent = content.toLowerCase()
+  const normalizedContent = normalizeSearchText(content)
+  const lowerContent = normalizedContent.toLowerCase()
   const needs: string[] = []
   let preferredTool: string | undefined
   let requiresOrchestration = false
@@ -51,6 +80,9 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
                          lowerContent.includes('concert') ||
                          lowerContent.includes('event') ||
                          lowerContent.includes('ticket') ||
+                         lowerContent.includes('show') ||
+                         lowerContent.includes('gig') ||
+                         lowerContent.includes('tour') ||
                          (lowerContent.includes('when') && (lowerContent.includes('playing') || lowerContent.includes('performs'))) ||
                          (lowerContent.includes('find') && (lowerContent.includes('concert') || lowerContent.includes('playing')))
   
@@ -65,6 +97,9 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     lowerContent.includes('email') ||
     lowerContent.includes('terms') ||
     lowerContent.includes('rules') ||
+    lowerContent.includes('show') ||
+    lowerContent.includes('gig') ||
+    lowerContent.includes('tour') ||
     hasWebsiteCheck ||
     hasUsingDomain ||
     hasFindUsing ||
@@ -99,7 +134,6 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     'once you',
     'then',
     'after',
-    'next',
     'and then',
     'followed by',
     'use that to',
@@ -148,6 +182,17 @@ export function findBestServerForIntent(
   intent: RoutingIntent,
   availableServers: MCPServer[]
 ): MCPServer | null {
+  // If an administrator set a default search server via env var, prefer it first
+  const defaultSearchServerId = process.env.DEFAULT_SEARCH_SERVER_ID
+  if (defaultSearchServerId) {
+    const defaultServer = availableServers.find(s =>
+      s.serverId === defaultSearchServerId ||
+      s.serverId.includes(defaultSearchServerId) ||
+      s.name.toLowerCase().includes(defaultSearchServerId.toLowerCase())
+    )
+    if (defaultServer) return defaultServer
+  }
+
   if (!intent.preferredTool) {
     // If no preferred tool, try to find by output context
     for (const need of intent.needs) {
@@ -161,6 +206,16 @@ export function findBestServerForIntent(
       }
     }
     return null
+  }
+
+  // Special case: prefer Exa MCP when the preferred tool is 'search'
+  if (intent.preferredTool === 'search') {
+    const exaServer = availableServers.find(s =>
+      s.serverId.toLowerCase().includes('exa') ||
+      s.name.toLowerCase().includes('exa') ||
+      (s.metadata && typeof s.metadata === 'object' && ((s.metadata as any).npmPackage === 'exa-mcp-server' || JSON.stringify(s.metadata).toLowerCase().includes('exa-mcp-server')))
+    )
+    if (exaServer) return exaServer
   }
 
   // Find server matching preferred tool
@@ -202,7 +257,23 @@ export function routeRequest(
   toolContext?: ReturnType<typeof getToolContext>
 } {
   const intent = analyzeRoutingIntent(content)
-  const primaryServer = findBestServerForIntent(intent, availableServers)
+  let primaryServer = findBestServerForIntent(intent, availableServers)
+
+  // If this is a concert/ticket search (e.g., "when is X playing in Y" or "find X concerts"),
+  // prefer Exa (search provider) when available unless the user explicitly requested a specific site.
+  const normalizedContent = normalizeSearchText(content)
+  const isConcertQuery = /\b(concert|concerts|playing|when\s+is|tickets?)\b/i.test(normalizedContent)
+  const explicitSite = /\busing\s+\w+\.com|ticketmaster|stubhub|see tickets|get tickets|on\s+\w+\.com\b/i.test(content)
+  if (isConcertQuery && !explicitSite) {
+    const exaServer = availableServers.find(s =>
+      s.serverId.toLowerCase().includes('exa') ||
+      s.name.toLowerCase().includes('exa') ||
+      (s.metadata && typeof s.metadata === 'object' && ((s.metadata as any).npmPackage === 'exa-mcp-server' || JSON.stringify(s.metadata).toLowerCase().includes('exa-mcp-server')))
+    )
+    if (exaServer) {
+      primaryServer = exaServer
+    }
+  }
 
   return {
     primaryServer,

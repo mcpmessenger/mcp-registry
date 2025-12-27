@@ -7,7 +7,7 @@
 
 import type { MCPServer } from './api'
 import { getToolContext, type ToolContext } from '@/types/tool-context'
-import { routeRequest, analyzeRoutingIntent } from './tool-router'
+import { routeRequest, analyzeRoutingIntent, normalizeSearchText, extractFollowUpQuery } from './tool-router'
 
 export interface WorkflowStep {
   step: number
@@ -401,20 +401,26 @@ export class NativeOrchestrator {
    * Check if a query requires orchestration
    */
   requiresOrchestration(query: string): boolean {
-    const intent = analyzeRoutingIntent(query)
-    const lowerQuery = query.toLowerCase()
+    const cleanedQuery = extractFollowUpQuery(query)
+    const intent = analyzeRoutingIntent(cleanedQuery)
+    const normalizedQuery = normalizeSearchText(cleanedQuery)
+    const lowerQuery = normalizedQuery.toLowerCase()
     
     // Single-step concert queries should NOT require orchestration
     // Check for simple concert/event searches (these should go directly to Playwright)
     const isSimpleConcertQuery = (
-      (lowerQuery.includes('playing') || lowerQuery.includes('concert') || lowerQuery.includes('ticket') || lowerQuery.includes('when is')) &&
+      (lowerQuery.includes('playing') ||
+        lowerQuery.includes('concert') ||
+        lowerQuery.includes('ticket') ||
+        lowerQuery.includes('when is') ||
+        lowerQuery.includes('show')) &&
       !lowerQuery.includes('once you') &&
       !lowerQuery.includes('then use') &&
       !lowerQuery.includes('finally') &&
       !lowerQuery.includes('followed by') &&
       !lowerQuery.includes('and then') &&
       !lowerQuery.match(/\.\s+(?:Once|Then|Finally|Use)/) && // Not followed by multi-step phrases
-      (lowerQuery.match(/\b(when|where|find|search|look)\s+.*(?:concert|playing|ticket)/i) !== null) // Has concert-related query words
+      (lowerQuery.match(/\b(when|where|find|search|look)\s+.*(?:concert|playing|ticket|show)/i) !== null) // Has concert-related query words
     )
     
     // If it's a simple concert query, don't orchestrate
@@ -433,7 +439,7 @@ export class NativeOrchestrator {
       /check.*and.*find/i,
     ]
     
-    const hasMultiStep = multiStepPatterns.some(pattern => pattern.test(query))
+    const hasMultiStep = multiStepPatterns.some(pattern => pattern.test(normalizedQuery))
     
     return intent.requiresOrchestration || hasMultiStep || intent.needs.length > 1
   }
