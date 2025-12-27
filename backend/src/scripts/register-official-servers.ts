@@ -290,6 +290,62 @@ const googleMapsMcpServer = {
   },
 }
 
+// Exa MCP Server (HTTP remote server hosted at mcp.exa.ai)
+const exaServer = {
+  serverId: 'io.github.exa-labs/exa-mcp-server',
+  name: 'Exa MCP Server',
+  description: 'Exa MCP server providing web search, code search, crawling and research tools via Exa AI.',
+  version: '3.1.3',
+  command: undefined as string | undefined,
+  args: undefined as string[] | undefined,
+  env: {},
+  tools: [
+    {
+      name: 'web_search_exa',
+      description: 'Perform real-time web search via Exa',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query' },
+          count: { type: 'number', description: 'Number of results (optional)' }
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'get_code_context_exa',
+      description: 'Search code and return relevant context snippets',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Code search query' },
+          repo: { type: 'string', description: 'Optional GitHub repo to scope search' },
+          path: { type: 'string', description: 'Optional file/path to narrow search' },
+        },
+        required: ['query'],
+      },
+    },
+  ],
+  capabilities: ['tools'],
+  manifest: {
+    name: 'exa-mcp-server',
+    version: '3.1.3',
+    endpoint: 'https://mcp.exa.ai/mcp',
+    tools: ['web_search_exa','get_code_context_exa'],
+  },
+  metadata: {
+    source: 'official',
+    publisher: 'Exa Labs',
+    documentation: 'https://github.com/exa-labs/exa-mcp-server',
+    endpoint: 'https://mcp.exa.ai/mcp',
+    npmPackage: 'exa-mcp-server',
+    verified: true,
+    // Optional: include EXA API key from env var for authenticated requests
+    httpHeaders: process.env.EXA_API_KEY ? { Authorization: `Bearer ${process.env.EXA_API_KEY}` } : undefined,
+  },
+}
+
+
 async function registerOfficialServers() {
   console.log('🚀 Registering official MCP servers...\n')
 
@@ -299,6 +355,7 @@ async function registerOfficialServers() {
     playwrightServer, // ✅ Available: @playwright/mcp exists on npm
     langchainAgentServer, // ✅ Your LangChain MCP instance
     googleMapsMcpServer, // Grounding Lite MCP over HTTP (requires X-Goog-Api-Key header)
+    exaServer, // ✅ Exa MCP Server (https://mcp.exa.ai/mcp)
     // googleBigQueryServer, // ⏳ Not yet published: @google/bigquery-mcp returns 404
   ]
   
@@ -352,6 +409,10 @@ if (require.main === module) {
 }
 
 export { registerOfficialServers }
+
+
+
+
 
 
 
