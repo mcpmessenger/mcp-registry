@@ -222,15 +222,15 @@ export function ChatInput({
         </div>
 
         <div className="flex-1 relative">
-          <Textarea
-            ref={textareaRef}
-            value={message}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
+        <Textarea
+          ref={textareaRef}
+          value={message}
+          onChange={handleTextareaChange}
+          onKeyDown={handleKeyDown}
             placeholder="Type your message... (Shift+Enter for new line, / for commands)"
-            className="min-h-[44px] max-h-[200px] resize-none"
-            disabled={isLoading}
-          />
+          className="min-h-[44px] max-h-[200px] resize-none"
+          disabled={isLoading}
+        />
 
           {/* Slash command menu */}
           {showSlashMenu && agentOptions.length > 0 && (

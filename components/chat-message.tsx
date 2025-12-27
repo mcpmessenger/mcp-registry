@@ -6,6 +6,52 @@ import { FileText, ImageIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 
+// Helper function to convert text with URLs to JSX with clickable links
+function renderContentWithLinks(content: string) {
+  // URL regex pattern - matches http(s):// URLs and www. URLs
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|\b[\w-]+\.[a-z]{2,}(?:\/[^\s]*)?)/gi
+  
+  const parts: (string | JSX.Element)[] = []
+  let lastIndex = 0
+  let match
+  
+  while ((match = urlRegex.exec(content)) !== null) {
+    // Add text before the URL
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index))
+    }
+    
+    // Process the matched URL
+    let url = match[0]
+    // Add protocol if missing
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url
+    }
+    
+    // Add the clickable link
+    parts.push(
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline underline-offset-2"
+      >
+        {match[0]}
+      </a>
+    )
+    
+    lastIndex = match.index + match[0].length
+  }
+  
+  // Add remaining text
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex))
+  }
+  
+  return parts.length > 0 ? parts : content
+}
+
 interface ChatMessageProps {
   message: ChatMessage
 }
@@ -88,7 +134,9 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
             isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
           )}
         >
-          {message.content}
+          <div className="whitespace-pre-wrap break-words">
+            {renderContentWithLinks(message.content)}
+          </div>
           
           {/* Display image if available */}
           {imageSrc && (

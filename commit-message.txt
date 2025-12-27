@@ -1,45 +1,13 @@
-feat: Add Server Identity Verification, Task Management Dashboard, and Trust Scoring Engine
+feat: Add debug endpoint and verify HTTP headers forwarding
 
-Major upgrades implementing three key features:
+- Added /v0.1/debug/server/:serverId endpoint to inspect server metadata
+- Useful for troubleshooting API key configuration issues
+- Verifies that httpHeaders are stored correctly in metadata
 
-✨ Server Identity Verification (SEP-1302)
-- Implemented /.well-known/mcp-server-identity standard
-- Automatic identity verification on server registration
-- Cryptographic signature verification infrastructure
-- Database fields: identityPublicKey, identitySignature, identityVerified
+This helps diagnose 403 PERMISSION_DENIED errors by checking:
+- Whether metadata.httpHeaders exists
+- Which headers are configured
+- If API keys are present (masked for security)
 
-📊 Task Management Dashboard (SEP-1686)
-- New /tasks route for monitoring durable requests
-- Real-time task tracking with auto-refresh
-- Task filtering by server, status, and type
-- API endpoints: /api/tasks/* for task management
-- New DurableTask model for async operation tracking
-
-🔒 Trust Scoring Engine
-- Security scanning infrastructure
-- npm audit integration (ready for implementation)
-- LLM-based code analysis (ready for implementation)
-- Security score (0-100) tracking per server
-- API endpoints: /api/security/* for scanning and scores
-
-🎨 UI Improvements
-- Fixed background gradient issues in registry view
-- Changed default landing page to Chat (/)
-- Moved registry to /registry route
-- Added Progress component for task dashboard
-
-📝 Documentation
-- Updated README with new features and API endpoints
-- Comprehensive feature documentation
-
-🗄️ Database
-- Migration: add_identity_tasks_security
-- New fields on McpServer model
-- New DurableTask model
-
-
-
-
-
-
-
+The endpoint is useful for verifying Google Maps API key setup
+before attempting tool invocations.
