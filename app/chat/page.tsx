@@ -46,8 +46,21 @@ function isPlaceholderResponse(content: string): boolean {
 
 /**
  * Detect if a message is requesting design/generation work
+ * Excludes search queries, concert queries, and other non-design requests
  */
 function isDesignRequest(content: string): boolean {
+  const lowerContent = content.toLowerCase()
+  
+  // Exclude search queries, concert queries, and location queries
+  const searchIndicators = [
+    'look for', 'search for', 'find', 'when is', 'where is', 'playing', 'concert', 'ticket',
+    'location', 'address', 'venue', 'schedule', 'tour', 'event', 'show', 'gig'
+  ]
+  
+  if (searchIndicators.some(indicator => lowerContent.includes(indicator))) {
+    return false
+  }
+  
   const designKeywords = [
     /(create|generate|make|design|build).*(poster|banner|image|picture|photo|graphic|logo|artwork|visual|design|svg|illustration)/i,
     /(poster|banner|marketing.*material|graphic|logo|artwork|visual|design|svg|illustration|picture|photo).*(for|with|in)/i,
@@ -147,8 +160,55 @@ export default function ChatPage() {
         let toolName: string | undefined = undefined // Don't default to agent_executor
         let toolArgs: Record<string, unknown> = {}
         
-        // Check for design/generation requests first
-        if (isDesignRequest(content)) {
+        // Check for search queries first (before design requests)
+        // This prevents search queries from being misrouted to image generation
+        const lowerContent = content.toLowerCase()
+        const isSearchQuery = lowerContent.includes('look for') || 
+                             lowerContent.includes('search for') || 
+                             lowerContent.includes('find') ||
+                             (lowerContent.includes('concert') && !isDesignRequest(content)) ||
+                             (lowerContent.includes('playing') && !isDesignRequest(content)) ||
+                             (lowerContent.includes('when is') && !isDesignRequest(content))
+        
+        // CRITICAL: If this is a search query, NEVER route to image generation
+        // Even if Exa is not available, we should route to a search-capable server or fail gracefully
+        if (isSearchQuery && !isDesignRequest(content)) {
+          // Route to Exa MCP server for search queries
+          const exaServer = availableServers.find(s => 
+            s.serverId.toLowerCase().includes('exa') ||
+            s.name.toLowerCase().includes('exa') ||
+            (s.metadata && typeof s.metadata === 'object' && 
+             ((s.metadata as any).npmPackage === 'exa-mcp-server' || 
+              JSON.stringify(s.metadata).toLowerCase().includes('exa-mcp-server')))
+          )
+          
+          if (exaServer) {
+            targetServer = exaServer
+            agentName = "Exa MCP Server"
+            toolName = 'web_search_exa'
+            
+            // Extract search query from content
+            const searchMatch = content.match(/(?:look for|search for|find)\s+(.+?)(?:\.|$|in|at)/i)
+            if (searchMatch) {
+              toolArgs.query = searchMatch[1].trim()
+            } else {
+              // Use the full content as query, but clean it up
+              toolArgs.query = content.replace(/^(look for|search for|find)\s+/i, '').trim()
+            }
+            
+            // Skip design generation and other routing
+            responseContent = "" // Will be set by tool result
+          } else {
+            // Exa not found - try to route to another search-capable server
+            // But NEVER route to image generation for search queries
+            console.warn('[Chat] Exa MCP server not found, trying alternative routing for search query')
+            // Continue to normal routing, but isDesignRequest check below will prevent image generation
+          }
+        }
+        
+        // Check for design/generation requests (only if not already routed to search)
+        // CRITICAL: Never allow image generation for search queries, even if isDesignRequest returns true
+        if (!targetServer && isDesignRequest(content) && !isSearchQuery) {
           // Route to design generation API - will be updated with actual server name from response
           agentName = "Design Generator" // Temporary, will be replaced
           
@@ -367,156 +427,185 @@ export default function ChatPage() {
           }
           
           // Use intelligent routing based on tool context (if not already set)
+          // BUT: If this is a search query, make sure we don't route to image generation
+          let routing: ReturnType<typeof routeRequest> | null = null
           if (!targetServer) {
-            const routing = routeRequest(content, availableServers)
-          
-            // Check if native orchestration is available and needed
-            const orchestrator = getNativeOrchestrator()
-            // Use enhanced content for orchestration detection (includes context)
-            const needsOrchestration = orchestrator.requiresOrchestration(enhancedContent || content)
-          
-            if (needsOrchestration) {
-              // Use native orchestrator for complex multi-step workflows
-              try {
-                agentName = "Native Orchestrator"
-                
-                // Plan workflow (use enhanced content with context)
-                const plan = orchestrator.planWorkflow(enhancedContent || content)
-                
-                // Generate workflow ID for context tracking
-                const workflowId = `workflow-${Date.now()}`
-                
-                // Display planning status
-                const planningMessage: ChatMessage = {
-                  id: `planning-${Date.now()}`,
-                  role: "assistant",
-                  content: `🔀 **Planning workflow** (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''}):\n\n${plan.steps.map((s, i) => {
-                    const toolName = s.selectedServer?.name || s.toolContext?.tool || 'Tool TBD'
-                    const status = s.selectedServer ? '✓' : '⚠️'
-                    return `${i + 1}. ${s.description} → ${status} ${toolName}`
-                  }).join('\n')}`,
-                  timestamp: new Date(),
-                  agentName: agentName,
+            // Double-check: if it's a search query, try to find Exa or another search server
+            if (isSearchQuery && !isDesignRequest(content)) {
+              // Try Exa again (maybe it wasn't loaded yet)
+              const exaServer = availableServers.find(s => 
+                s.serverId.toLowerCase().includes('exa') ||
+                s.name.toLowerCase().includes('exa') ||
+                (s.metadata && typeof s.metadata === 'object' && 
+                 ((s.metadata as any).npmPackage === 'exa-mcp-server' || 
+                  JSON.stringify(s.metadata).toLowerCase().includes('exa-mcp-server')))
+              )
+              if (exaServer) {
+                targetServer = exaServer
+                agentName = "Exa MCP Server"
+                toolName = 'web_search_exa'
+                const searchMatch = content.match(/(?:look for|search for|find)\s+(.+?)(?:\.|$|in|at)/i)
+                if (searchMatch) {
+                  toolArgs.query = searchMatch[1].trim()
+                } else {
+                  toolArgs.query = content.replace(/^(look for|search for|find)\s+/i, '').trim()
                 }
-                setMessages((prev) => [...prev, planningMessage])
-                
-                // Check if all steps have tools selected
-                const allStepsHaveTools = plan.steps.every(s => s.selectedServer && s.selectedTool)
-                if (!allStepsHaveTools) {
-                  console.warn('[Native Orchestrator] Some steps missing tools:', plan.steps.filter(s => !s.selectedServer))
-                }
-                
-                // Execute workflow (use original content for execution, enhanced for planning)
-                const workflowResult = await executeWorkflow(enhancedContent || content, plan)
-                
-                         if (workflowResult.success) {
-                           // Use formatted result if available, otherwise format it
-                           let resultText: string
-                           if (typeof workflowResult.finalResult === 'string') {
-                             resultText = workflowResult.finalResult
-                           } else if (workflowResult.finalResult && typeof workflowResult.finalResult === 'object' && 'formatted' in workflowResult.finalResult) {
-                             resultText = (workflowResult.finalResult as { formatted: string }).formatted
-                           } else {
-                             resultText = typeof workflowResult.finalResult === 'object' 
-                               ? JSON.stringify(workflowResult.finalResult, null, 2)
-                               : String(workflowResult.finalResult || 'Workflow completed successfully')
-                           }
-                           
-                           responseContent = `✅ **Workflow completed**\n\n${resultText}`
-                           
-                           // Add step summary (optional, only if not already included in formatted result)
-                           if (!resultText.includes('Step')) {
-                             responseContent += `\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
-                           }
+                responseContent = ""
+              }
+            }
+            
+            // Only proceed with normal routing if we still don't have a targetServer
+            // AND it's not a search query (to prevent routing to image generation)
+            if (!targetServer && !(isSearchQuery && !isDesignRequest(content))) {
+              routing = routeRequest(content, availableServers)
+            
+              // Check if native orchestration is available and needed
+              const orchestrator = getNativeOrchestrator()
+              // Use enhanced content for orchestration detection (includes context)
+              const needsOrchestration = orchestrator.requiresOrchestration(enhancedContent || content)
+            
+              if (needsOrchestration) {
+                // Use native orchestrator for complex multi-step workflows
+                try {
+                  agentName = "Native Orchestrator"
                   
-                  // Store workflow result in context
-                  contextManager.addMessage({
-                    role: 'assistant',
-                    content: responseContent,
+                  // Plan workflow (use enhanced content with context)
+                  const plan = orchestrator.planWorkflow(enhancedContent || content)
+                  
+                  // Generate workflow ID for context tracking
+                  const workflowId = `workflow-${Date.now()}`
+                  
+                  // Display planning status
+                  const planningMessage: ChatMessage = {
+                    id: `planning-${Date.now()}`,
+                    role: "assistant",
+                    content: `🔀 **Planning workflow** (${plan.steps.length} step${plan.steps.length > 1 ? 's' : ''}):\n\n${plan.steps.map((s, i) => {
+                      const toolName = s.selectedServer?.name || s.toolContext?.tool || 'Tool TBD'
+                      const status = s.selectedServer ? '✓' : '⚠️'
+                      return `${i + 1}. ${s.description} → ${status} ${toolName}`
+                    }).join('\n')}`,
                     timestamp: new Date(),
                     agentName: agentName,
-                    workflowId: workflowId,
-                    stepResults: workflowResult.steps.reduce((acc, s) => {
-                      if (s.result) acc[`step${s.step}`] = s.result
-                      return acc
-                    }, {} as Record<string, unknown>),
-                  })
-                } else {
-                  responseContent = `❌ **Workflow failed**: ${workflowResult.error || 'Unknown error'}\n\n**Steps:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.error ? ` ✗ ${s.error}` : s.result ? ' ✓' : ''}`).join('\n')}`
+                  }
+                  setMessages((prev) => [...prev, planningMessage])
+                  
+                  // Check if all steps have tools selected
+                  const allStepsHaveTools = plan.steps.every(s => s.selectedServer && s.selectedTool)
+                  if (!allStepsHaveTools) {
+                    console.warn('[Native Orchestrator] Some steps missing tools:', plan.steps.filter(s => !s.selectedServer))
+                  }
+                  
+                  // Execute workflow (use original content for execution, enhanced for planning)
+                  const workflowResult = await executeWorkflow(enhancedContent || content, plan)
+                  
+                  if (workflowResult.success) {
+                    // Use formatted result if available, otherwise format it
+                    let resultText: string
+                    if (typeof workflowResult.finalResult === 'string') {
+                      resultText = workflowResult.finalResult
+                    } else if (workflowResult.finalResult && typeof workflowResult.finalResult === 'object' && 'formatted' in workflowResult.finalResult) {
+                      resultText = (workflowResult.finalResult as { formatted: string }).formatted
+                    } else {
+                      resultText = typeof workflowResult.finalResult === 'object' 
+                        ? JSON.stringify(workflowResult.finalResult, null, 2)
+                        : String(workflowResult.finalResult || 'Workflow completed successfully')
+                    }
+                    
+                    responseContent = `✅ **Workflow completed**\n\n${resultText}`
+                    
+                    // Add step summary (optional, only if not already included in formatted result)
+                    if (!resultText.includes('Step')) {
+                      responseContent += `\n\n**Steps executed:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.result ? ' ✓' : s.error ? ` ✗ ${s.error}` : ''}`).join('\n')}`
+                    }
+            
+                    // Store workflow result in context
+                    contextManager.addMessage({
+                      role: 'assistant',
+                      content: responseContent,
+                      timestamp: new Date(),
+                      agentName: agentName,
+                      workflowId: workflowId,
+                      stepResults: workflowResult.steps.reduce((acc, s) => {
+                        if (s.result) acc[`step${s.step}`] = s.result
+                        return acc
+                      }, {} as Record<string, unknown>),
+                    })
+                  } else {
+                    responseContent = `❌ **Workflow failed**: ${workflowResult.error || 'Unknown error'}\n\n**Steps:**\n${workflowResult.steps.map((s, i) => `${i + 1}. ${s.description}${s.error ? ` ✗ ${s.error}` : s.result ? ' ✓' : ''}`).join('\n')}`
+                  }
+                  
+                  // Skip normal tool invocation, workflow result is ready
+                  targetServer = null
+                } catch (workflowError) {
+                  console.error('Native orchestration failed, falling back to LangChain:', workflowError)
+                  // Set error message but don't throw - let it fall through to LangChain
+                  responseContent = `⚠️ Native orchestrator encountered an error: ${workflowError instanceof Error ? workflowError.message : 'Unknown error'}. Falling back to LangChain.`
+                  
+                  // Fall through to LangChain fallback
+                  if (routing && routing.orchestrationNeeded) {
+                    const langchainServer = availableServers.find(s => 
+                      s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
+                    )
+                    if (langchainServer) {
+                      targetServer = langchainServer
+                      agentName = "LangChain Orchestrator (Fallback)"
+                      // Clear responseContent so LangChain can respond
+                      responseContent = ""
+                    }
+                  }
                 }
-                
-                // Skip normal tool invocation, workflow result is ready
-                targetServer = null
-              } catch (workflowError) {
-                console.error('Native orchestration failed, falling back to LangChain:', workflowError)
-                // Set error message but don't throw - let it fall through to LangChain
-                responseContent = `⚠️ Native orchestrator encountered an error: ${workflowError instanceof Error ? workflowError.message : 'Unknown error'}. Falling back to LangChain.`
-                
-                // Fall through to LangChain fallback
-                if (routing.orchestrationNeeded) {
-                  const langchainServer = availableServers.find(s => 
-                    s.serverId.includes('langchain') || s.name.toLowerCase().includes('langchain')
-                  )
-                  if (langchainServer) {
-                    targetServer = langchainServer
-                    agentName = "LangChain Orchestrator (Fallback)"
-                    // Clear responseContent so LangChain can respond
-                    responseContent = ""
+            
+                // Continue with normal routing if native orchestrator didn't handle it
+                if (!targetServer && routing && routing.primaryServer) {
+                  // Simple single-step query, use the primary server
+                  // BUT: If it's a concert query and LangChain was selected, prefer Playwright
+                  const isConcertQuery = (content.toLowerCase().includes('playing') || 
+                                         content.toLowerCase().includes('concert') ||
+                                         content.toLowerCase().includes('ticket') ||
+                                         content.toLowerCase().includes('when is'))
+                  const isLangChain = routing.primaryServer.serverId.includes('langchain') || 
+                                     routing.primaryServer.serverId.includes('agent')
+                  
+                  if (isConcertQuery && isLangChain) {
+                    // Override: Use Playwright for concert queries instead of LangChain
+                    const playwrightServer = availableServers.find(s => 
+                      s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+                    )
+                    if (playwrightServer) {
+                      targetServer = playwrightServer
+                      agentName = "Playwright MCP Server"
+                    } else {
+                      targetServer = routing.primaryServer
+                      agentName = toolContext?.tool || routing.primaryServer.name
+                    }
+                  } else {
+                    targetServer = routing.primaryServer
+                    const toolContext = getServerToolContext(routing.primaryServer)
+                    agentName = toolContext?.tool || routing.primaryServer.name
+                  }
+                } else if (!targetServer) {
+                  // Fallback to LangChain agent for general queries (but not concert queries)
+                  const isConcertQuery = (content.toLowerCase().includes('playing') || 
+                                         content.toLowerCase().includes('concert') ||
+                                         content.toLowerCase().includes('ticket'))
+                  if (isConcertQuery) {
+                    // For concert queries, try Playwright first
+                    targetServer = availableServers.find(s => 
+                      s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
+                    )
+                    agentName = targetServer ? "Playwright MCP Server" : undefined
+                  }
+                  
+                  // Only fallback to LangChain if we don't have Playwright
+                  if (!targetServer) {
+                    targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
+                                  availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
+                                availableServers[0]
+                    agentName = "AI Assistant"
                   }
                 }
               }
             }
-            
-            // Continue with normal routing if native orchestrator didn't handle it
-            if (!targetServer && routing.primaryServer) {
-              // Simple single-step query, use the primary server
-              // BUT: If it's a concert query and LangChain was selected, prefer Playwright
-              const isConcertQuery = (content.toLowerCase().includes('playing') || 
-                                     content.toLowerCase().includes('concert') ||
-                                     content.toLowerCase().includes('ticket') ||
-                                     content.toLowerCase().includes('when is'))
-              const isLangChain = routing.primaryServer.serverId.includes('langchain') || 
-                                 routing.primaryServer.serverId.includes('agent')
-              
-              if (isConcertQuery && isLangChain) {
-                // Override: Use Playwright for concert queries instead of LangChain
-                const playwrightServer = availableServers.find(s => 
-                  s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
-                )
-                if (playwrightServer) {
-                  targetServer = playwrightServer
-                  agentName = "Playwright MCP Server"
-                } else {
-                  targetServer = routing.primaryServer
-                  agentName = toolContext?.tool || routing.primaryServer.name
-                }
-              } else {
-                targetServer = routing.primaryServer
-                const toolContext = getServerToolContext(routing.primaryServer)
-                agentName = toolContext?.tool || routing.primaryServer.name
-              }
-            } else if (!targetServer) {
-              // Fallback to LangChain agent for general queries (but not concert queries)
-              const isConcertQuery = (content.toLowerCase().includes('playing') || 
-                                     content.toLowerCase().includes('concert') ||
-                                     content.toLowerCase().includes('ticket'))
-              if (isConcertQuery) {
-                // For concert queries, try Playwright first
-                targetServer = availableServers.find(s => 
-                  s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
-                )
-                agentName = targetServer ? "Playwright MCP Server" : undefined
-              }
-              
-              // Only fallback to LangChain if we don't have Playwright
-              if (!targetServer) {
-                targetServer = availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') ||
-                              availableServers.find(s => s.serverId === 'com.valuation/mcp-server') ||
-                            availableServers[0]
-              agentName = "AI Assistant"
-            }
-          }
-        }
 
         // Only invoke tool if we didn't handle it as a design request
         // (Design requests are handled above and responseContent is already set)
@@ -904,7 +993,6 @@ export default function ChatPage() {
         } else if (!isDesignRequest(content)) {
           // Only show this error if it wasn't a design request (design requests are handled above)
           responseContent = "I couldn't find an available MCP server to handle your request. Please try selecting a specific agent."
-        }
         }
       } else {
         // Use selected agent
