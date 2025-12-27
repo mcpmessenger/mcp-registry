@@ -15,19 +15,43 @@ const getApiBaseUrl = () => {
   // Get the env var value if set
   const envUrl = process.env.NEXT_PUBLIC_API_URL
   
-  // If we're in production and the env var points to localhost, ignore it and use production URL
-  // This prevents accidentally using localhost in production deployments
-  if (isProduction && envUrl && envUrl.includes('localhost')) {
-    console.warn('NEXT_PUBLIC_API_URL points to localhost in production, using production URL instead')
-    return PROD_BACKEND_URL
-  }
-  
-  // If NEXT_PUBLIC_API_URL is explicitly set and not localhost, use it
-  if (envUrl && !envUrl.includes('localhost')) {
+  // If NEXT_PUBLIC_API_URL is explicitly set, use it (with safety checks)
+  if (envUrl) {
+    // If we're in production and the env var points to localhost, ignore it and use production URL
+    // This prevents accidentally using localhost in production deployments
+    if (isProduction && envUrl.includes('localhost')) {
+      console.warn('NEXT_PUBLIC_API_URL points to localhost in production, using production URL instead')
+      return PROD_BACKEND_URL
+    }
     return envUrl
   }
   
-  // Otherwise, use production URL for production, localhost for development
+  // Client-side: Auto-detect backend URL based on current hostname
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    const protocol = window.location.protocol
+    
+    // If accessing via localhost or 127.0.0.1, use localhost backend
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return DEV_BACKEND_URL
+    }
+    
+    // If accessing via IP address (e.g., 192.168.4.22), use same IP with backend port
+    // Match IPv4 or IPv6 addresses
+    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$|^\[?([0-9a-fA-F:]+)\]?$/
+    if (ipPattern.test(hostname)) {
+      const backendPort = '3001'
+      return `${protocol}//${hostname}:${backendPort}`
+    }
+    
+    // For other hostnames (like domain names), assume production unless in dev mode
+    if (!isProduction) {
+      // In development but accessed via domain/IP, try to use same host with backend port
+      return `${protocol}//${hostname}:3001`
+    }
+  }
+  
+  // Server-side or fallback: use production URL for production, localhost for development
   return isProduction ? PROD_BACKEND_URL : DEV_BACKEND_URL
 }
 
@@ -76,6 +100,7 @@ export interface GenerateSVGRequest {
     height: number
   }
   serverId?: string
+  allowImageGeneration?: boolean
 }
 
 export interface GenerateSVGResponse {
@@ -646,6 +671,65 @@ export async function analyzeDocument(request: AnalyzeDocumentRequest): Promise<
     console.error('Document analysis fetch error:', error)
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error(`Cannot connect to backend at ${API_BASE_URL}. Make sure the backend server is running.`)
+    }
+    throw error
+  }
+}
+
+/**
+ * Orchestrator Query API
+ * Uses the Kafka-based orchestrator to process queries without Gemini quota
+ */
+export interface OrchestratorQueryRequest {
+  query: string
+  sessionId?: string
+  contextSnapshot?: Record<string, unknown>
+}
+
+export interface OrchestratorQueryResponse {
+  success: boolean
+  requestId: string
+  result?: {
+    content: Array<{
+      type: 'text' | 'image' | 'resource'
+      text?: string
+      data?: string
+      mimeType?: string
+    }>
+    isError?: boolean
+  }
+  tool?: string
+  status?: 'tool' | 'plan' | 'failed'
+  error?: string
+}
+
+export async function queryOrchestrator(request: OrchestratorQueryRequest): Promise<OrchestratorQueryResponse> {
+  // Use AbortController for timeout (25 seconds to allow for backend 20s timeout + network)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 25000)
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/orchestrator/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    })
+    
+    clearTimeout(timeoutId)
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }))
+      throw new Error(error.message || error.error || `Orchestrator query failed: ${response.statusText}`)
+    }
+    
+    return response.json()
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Orchestrator request timed out after 25 seconds')
     }
     throw error
   }
