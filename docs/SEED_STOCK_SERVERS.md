@@ -22,6 +22,12 @@ gcloud run jobs create seed-stock-servers \
   --command npm \
   --args "run,seed"
 
+# (Optional) If you have an Exa API key, create a secret and include it when creating the job:
+# gcloud secrets create exa-api-key --replication-policy="automatic" --data-file="-"
+# gcloud secrets versions add exa-api-key --data-file=<(echo -n "YOUR_EXA_API_KEY")
+# Then add it to the job via --set-secrets "EXA_API_KEY=exa-api-key:latest"
+# This will populate process.env.EXA_API_KEY for the seeding script to inject Authorization headers for Exa.
+
 # Execute the seed job
 gcloud run jobs execute seed-stock-servers --region us-central1
 ```
