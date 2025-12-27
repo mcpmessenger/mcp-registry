@@ -606,6 +606,7 @@ export default function ChatPage() {
                 }
               }
             }
+          }
 
         // Only invoke tool if we didn't handle it as a design request
         // (Design requests are handled above and responseContent is already set)
@@ -990,7 +991,9 @@ export default function ChatPage() {
             responseLength: responseContent.length,
             preview: responseContent.substring(0, 100),
           })
-        } else if (!isDesignRequest(content)) {
+        }
+        
+        if (!isDesignRequest(content) && !responseContent) {
           // Only show this error if it wasn't a design request (design requests are handled above)
           responseContent = "I couldn't find an available MCP server to handle your request. Please try selecting a specific agent."
         }
@@ -1319,3 +1322,5 @@ export default function ChatPage() {
     </div>
   )
 }
+}
+
