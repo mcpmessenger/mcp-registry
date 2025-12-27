@@ -11,15 +11,44 @@ import v0ServersRouter from './routes/v0/servers'
 import debugRouter from './routes/v0/debug'
 import mcpToolsRouter from './routes/mcp/tools'
 import documentsRouter from './routes/documents/analyze'
+import orchestratorRouter from './routes/orchestrator/query'
 import { registryService } from './services/registry.service'
 
 const app = express()
 
 // Middleware
-app.use(cors({
-  origin: env.server.corsOrigin || '*',
+// In development, allow requests from localhost and IP addresses
+// In production, use the configured CORS origin
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true)
+    }
+    
+    // In development, allow localhost and IP addresses
+    if (env.server.nodeEnv === 'development') {
+      if (
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1') ||
+        /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(origin) || // IPv4
+        /^https?:\/\/\[?([0-9a-fA-F:]+)\]?(:\d+)?$/.test(origin) // IPv6
+      ) {
+        return callback(null, true)
+      }
+    }
+    
+    // Use configured CORS origin or allow all if not set
+    const allowedOrigin = env.server.corsOrigin || '*'
+    if (allowedOrigin === '*' || origin === allowedOrigin) {
+      return callback(null, true)
+    }
+    
+    callback(new Error('Not allowed by CORS'))
+  },
   credentials: true,
-}))
+}
+app.use(cors(corsOptions))
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
@@ -111,6 +140,32 @@ app.use('/v0.1', v0ServersRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/documents', documentsRouter)
 
+// Orchestrator status endpoint (must be before router to avoid 404)
+let orchestratorStatus = {
+  matcherRunning: false,
+  coordinatorRunning: false,
+  resultConsumerRunning: false,
+  kafkaEnabled: false,
+  kafkaBrokers: [] as string[],
+}
+
+app.get('/api/orchestrator/status', (req: Request, res: Response) => {
+  res.json({
+    kafka: {
+      enabled: orchestratorStatus.kafkaEnabled,
+      brokers: orchestratorStatus.kafkaBrokers,
+    },
+    services: {
+      matcher: orchestratorStatus.matcherRunning,
+      coordinator: orchestratorStatus.coordinatorRunning,
+      resultConsumer: orchestratorStatus.resultConsumerRunning,
+    },
+    topics: env.kafka.topics,
+  })
+})
+
+app.use('/api/orchestrator', orchestratorRouter)
+
 // 404 handler
 app.use((req: Request, res: Response) => {
   console.log('[Server] ===== 404 HANDLER =====')
@@ -137,8 +192,16 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 // Cloud Run sets PORT automatically, fallback to env config or 8080
 const PORT: number = parseInt(process.env.PORT || String(env.server.port || 8080), 10)
 
+let orchestratorShutdown: (() => Promise<void>) | null = null
+let matcherShutdown: (() => Promise<void>) | null = null
+let resultConsumerShutdown: (() => Promise<void>) | null = null
+
 // Initialize Kafka producer for discovery events (if available)
 if (process.env.KAFKA_BROKERS || process.env.ENABLE_KAFKA === 'true') {
+  orchestratorStatus.kafkaEnabled = true
+  orchestratorStatus.kafkaBrokers = env.kafka.brokers
+  console.log('[Server] Kafka enabled, brokers:', env.kafka.brokers.join(', '))
+  
   import('./services/mcp-discovery.service').then(async ({ initializeKafkaProducer }) => {
     try {
       await initializeKafkaProducer()
@@ -148,6 +211,60 @@ if (process.env.KAFKA_BROKERS || process.env.ENABLE_KAFKA === 'true') {
   }).catch(() => {
     // Kafka optional, continue without it
   })
+
+  if (env.kafka.enabled || process.env.KAFKA_BROKERS) {
+    // Start MCP Matcher (fast-path tool matching)
+    import('./services/orchestrator/matcher').then(async ({ startMCPMatcher }) => {
+      try {
+        console.log('[Server] Starting MCP Matcher...')
+        matcherShutdown = await startMCPMatcher()
+        orchestratorStatus.matcherRunning = true
+        console.log('[Server] ✓ MCP Matcher started successfully')
+      } catch (error) {
+        console.error('[Server] ✗ Failed to start MCP Matcher:', error)
+        orchestratorStatus.matcherRunning = false
+      }
+    }).catch(error => {
+      console.warn('[Server] ✗ Unable to load MCP Matcher:', error)
+      orchestratorStatus.matcherRunning = false
+    })
+    
+    // Start Execution Coordinator
+    import('./services/orchestrator/coordinator').then(async ({ startExecutionCoordinator }) => {
+      try {
+        console.log('[Server] Starting Execution Coordinator...')
+        orchestratorShutdown = await startExecutionCoordinator()
+        orchestratorStatus.coordinatorRunning = true
+        console.log('[Server] ✓ Execution Coordinator started successfully')
+      } catch (error) {
+        console.error('[Server] ✗ Failed to start Execution Coordinator:', error)
+        orchestratorStatus.coordinatorRunning = false
+      }
+    }).catch(error => {
+      console.warn('[Server] ✗ Unable to load Execution Coordinator:', error)
+      orchestratorStatus.coordinatorRunning = false
+    })
+    
+    // Start Result Consumer (shared consumer for query route)
+    import('./services/orchestrator/result-consumer').then(async ({ startResultConsumer }) => {
+      try {
+        console.log('[Server] Starting Result Consumer...')
+        resultConsumerShutdown = await startResultConsumer()
+        orchestratorStatus.resultConsumerRunning = true
+        console.log('[Server] ✓ Result Consumer started successfully')
+      } catch (error) {
+        console.error('[Server] ✗ Failed to start Result Consumer:', error)
+        orchestratorStatus.resultConsumerRunning = false
+      }
+    }).catch(error => {
+      console.warn('[Server] ✗ Unable to load Result Consumer:', error)
+      orchestratorStatus.resultConsumerRunning = false
+    })
+  } else {
+    console.log('[Server] Kafka not enabled (ENABLE_KAFKA not set to "true" and KAFKA_BROKERS not set)')
+  }
+} else {
+  console.log('[Server] Kafka not configured (set ENABLE_KAFKA=true or KAFKA_BROKERS to enable orchestrator)')
 }
 
 const server = app.listen(PORT, '0.0.0.0', () => {
@@ -157,16 +274,40 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 })
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...')
+  if (matcherShutdown) {
+    await matcherShutdown()
+    matcherShutdown = null
+  }
+  if (orchestratorShutdown) {
+    await orchestratorShutdown()
+    orchestratorShutdown = null
+  }
+  if (resultConsumerShutdown) {
+    await resultConsumerShutdown()
+    resultConsumerShutdown = null
+  }
   server.close(() => {
     console.log('Server closed')
     process.exit(0)
   })
 })
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...')
+  if (matcherShutdown) {
+    await matcherShutdown()
+    matcherShutdown = null
+  }
+  if (orchestratorShutdown) {
+    await orchestratorShutdown()
+    orchestratorShutdown = null
+  }
+  if (resultConsumerShutdown) {
+    await resultConsumerShutdown()
+    resultConsumerShutdown = null
+  }
   server.close(() => {
     console.log('Server closed')
     process.exit(0)

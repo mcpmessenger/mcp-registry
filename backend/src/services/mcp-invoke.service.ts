@@ -175,11 +175,42 @@ export class MCPInvokeService {
         }
       }
 
-      // Build request headers - merge metadata headers with defaults
-      const requestHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...httpHeaders, // Metadata headers override defaults
+      // Build request headers - use a Headers object so we can send multiple
+      // `Accept` header entries (some servers require separate Accept headers)
+      const buildHeaders = (metadataHeaders: Record<string, string>) => {
+        const headers = new Headers()
+
+        // defaults
+        headers.set('Content-Type', 'application/json')
+        // For JSON-RPC servers (like Exa), try single comma-separated header first
+        // For custom API format servers, use separate headers
+        if (apiFormat === 'jsonrpc' || (!apiFormat && !endpoint.includes('/mcp/invoke'))) {
+          // JSON-RPC format: use single comma-separated Accept header
+          headers.set('Accept', 'application/json, text/event-stream')
+        } else {
+          // Custom format: append as separate headers
+          'application/json, text/event-stream'
+            .split(',')
+            .map(s => s.trim())
+            .forEach(v => headers.append('Accept', v))
+        }
+
+        // apply metadata headers (override or add)
+        for (const [k, v] of Object.entries(metadataHeaders)) {
+          if (!v) continue
+          if (k.toLowerCase() === 'accept') {
+            // replace existing Accept values with the metadata-provided ones (split by comma)
+            headers.delete('Accept')
+            v.split(',').map(s => s.trim()).forEach(val => headers.append('Accept', val))
+          } else {
+            headers.set(k, v)
+          }
+        }
+
+        return headers
       }
+
+      const baseHeaders = buildHeaders(httpHeaders)
 
       let response: Response
 
@@ -191,14 +222,15 @@ export class MCPInvokeService {
           : `${endpoint.replace(/\/$/, '')}/mcp/invoke`
 
         console.log(`[HTTP] Invoking ${toolName} on ${server.serverId} at ${invokeUrl}`)
-        console.log(`[HTTP] Headers:`, Object.keys(requestHeaders).join(', '))
+        console.log(`[HTTP] Headers:`, Array.from(baseHeaders.keys()).join(', '))
+        console.log(`[HTTP] Request headers full:`, JSON.stringify(Object.fromEntries(baseHeaders.entries())))
         if (httpHeaders['X-Goog-Api-Key']) {
           console.log(`[HTTP] Google Maps API key present: ${httpHeaders['X-Goog-Api-Key'].substring(0, 10)}...`)
         }
 
         response = await fetch(invokeUrl, {
           method: 'POST',
-          headers: requestHeaders,
+          headers: baseHeaders,
           body: JSON.stringify({
             tool: toolName,
             arguments: toolArgs,
@@ -208,14 +240,15 @@ export class MCPInvokeService {
         // Standard MCP JSON-RPC format (e.g., Google Maps Grounding Lite)
         // POST to endpoint with JSON-RPC request
         console.log(`[HTTP] Invoking ${toolName} on ${server.serverId} at ${endpoint}`)
-        console.log(`[HTTP] Headers:`, Object.keys(requestHeaders).join(', '))
+        console.log(`[HTTP] Headers:`, Array.from(baseHeaders.keys()).join(', '))
+        console.log(`[HTTP] Request headers full:`, JSON.stringify(Object.fromEntries(baseHeaders.entries())))
         if (httpHeaders['X-Goog-Api-Key']) {
           console.log(`[HTTP] Google Maps API key present: ${httpHeaders['X-Goog-Api-Key'].substring(0, 10)}...`)
         }
 
         response = await fetch(endpoint, {
           method: 'POST',
-          headers: requestHeaders,
+          headers: baseHeaders,
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 1,
@@ -230,10 +263,136 @@ export class MCPInvokeService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
+
+        // If the server complains about Accept negotiation, retry with several Accept header permutations
+          if (response.status === 406 && typeof errorText === 'string' && errorText.toLowerCase().includes('not acceptable')) {
+          console.log(`[HTTP] Received 406 Not Acceptable - attempting Accept header fallbacks`)
+
+          const attempts = [
+            // Try as single comma-separated header (some servers require this format)
+            { Accept: 'application/json, text/event-stream', useSingleHeader: true },
+            { Accept: 'text/event-stream, application/json', useSingleHeader: true },
+            // Try as separate headers (current approach)
+            { Accept: 'application/json, text/event-stream', useSingleHeader: false },
+            { Accept: 'text/event-stream, application/json', useSingleHeader: false },
+            // Try just one
+            { Accept: 'text/event-stream', useSingleHeader: true },
+            { Accept: 'application/json', useSingleHeader: true },
+          ]
+
+          let success = false
+          let lastErr: string | null = null
+
+          for (const attempt of attempts) {
+            // clone baseHeaders
+            const retryHeaders = new Headers(baseHeaders)
+            // apply Accept override from attempt
+            if (attempt.Accept) {
+              retryHeaders.delete('Accept')
+              if (attempt.useSingleHeader) {
+                // Set as single comma-separated value
+                retryHeaders.set('Accept', attempt.Accept)
+              } else {
+                // Append as separate headers
+                attempt.Accept.split(',').map(s => s.trim()).forEach(v => retryHeaders.append('Accept', v))
+              }
+            }
+            retryHeaders.set('Connection', 'keep-alive')
+            try {
+              const body = (response.url && response.url.includes('/mcp/invoke'))
+                ? JSON.stringify({ tool: toolName, arguments: toolArgs })
+                : JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: toolName, arguments: toolArgs } })
+
+              const retryResponse = await fetch(response.url || endpoint, {
+                method: 'POST',
+                headers: retryHeaders,
+                body,
+              })
+
+              if (retryResponse.ok) {
+                response = retryResponse
+                success = true
+                console.log(`[HTTP] Retry succeeded with Accept=${attempt.Accept} (singleHeader=${attempt.useSingleHeader})`)
+                break
+              } else {
+                const retryText = await retryResponse.text()
+                lastErr = `HTTP ${retryResponse.status}: ${retryText}`
+                console.log(`[HTTP] Retry failed with Accept=${attempt.Accept} (singleHeader=${attempt.useSingleHeader}): ${lastErr}`)
+              }
+            } catch (e) {
+              lastErr = String(e)
+              console.log(`[HTTP] Retry fetch failed with Accept=${attempt.Accept} (singleHeader=${attempt.useSingleHeader}): ${lastErr}`)
+            }
+          }
+
+          if (!success) {
+            throw new Error(`HTTP ${response.status}: ${errorText} (retries failed: ${lastErr}) -- requestHeaders: ${JSON.stringify(Object.fromEntries(baseHeaders.entries()))}`)
+          }
+        } else {
+          // Include the request headers in the thrown error for debugging
+          throw new Error(`HTTP ${response.status}: ${errorText} -- requestHeaders: ${JSON.stringify(Object.fromEntries(baseHeaders.entries()))}`)
+        }
       }
 
-      const data = await response.json() as any
+      // Check if response is Server-Sent Events (SSE) format
+      const contentType = response.headers.get('content-type') || ''
+      const isSSE = contentType.includes('text/event-stream') || contentType.includes('text/event')
+      
+      // Read response as text first (can be reused for both JSON and SSE)
+      const text = await response.text()
+      let data: any
+      
+      if (isSSE || text.trim().startsWith('event:') || text.trim().startsWith('data:')) {
+        // Parse SSE format
+        console.log(`[HTTP] Received SSE response (first 200 chars):`, text.substring(0, 200))
+        
+        // SSE format: "event: message\ndata: {...}\n\n"
+        // Extract the data field from SSE
+        const lines = text.split('\n')
+        let sseData = ''
+        let inDataBlock = false
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            sseData += line.substring(6) // Remove "data: " prefix
+            inDataBlock = true
+          } else if (line.trim() === '' && inDataBlock) {
+            // Empty line after data block - end of message
+            break
+          } else if (inDataBlock && !line.startsWith('event:') && !line.startsWith('id:')) {
+            // Continuation of data (multi-line JSON)
+            sseData += '\n' + line
+          }
+        }
+        
+        if (sseData) {
+          try {
+            data = JSON.parse(sseData)
+            console.log(`[HTTP] Parsed SSE data successfully`)
+          } catch (e) {
+            // If SSE data isn't JSON, treat as plain text
+            console.log(`[HTTP] SSE data is not JSON, treating as text`)
+            data = { result: { content: [{ type: 'text', text: sseData }] } }
+          }
+        } else {
+          // No data field found, try parsing entire response as JSON
+          try {
+            data = JSON.parse(text)
+          } catch (e) {
+            // Last resort: return text content
+            data = { result: { content: [{ type: 'text', text }] } }
+          }
+        }
+      } else {
+        // Standard JSON response
+        try {
+          data = JSON.parse(text)
+        } catch (e) {
+          // If JSON parsing fails, return text content
+          console.log(`[HTTP] Failed to parse as JSON, treating as text`)
+          data = { result: { content: [{ type: 'text', text }] } }
+        }
+      }
 
       // Handle different response formats
       let content: InvokeToolResponse['result']['content'] = []
@@ -284,12 +443,13 @@ export class MCPInvokeService {
       }
     } catch (error) {
       console.error(`Error invoking tool ${toolName} on server ${server.serverId}:`, error)
+      const message = error instanceof Error ? `${error.message}` + (error.stack ? `\n${error.stack}` : '') : String(error)
       return {
         result: {
           content: [
             {
               type: 'text',
-              text: error instanceof Error ? error.message : 'Unknown error occurred',
+              text: message,
             },
           ],
           isError: true,

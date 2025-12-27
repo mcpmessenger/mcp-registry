@@ -9,7 +9,7 @@ import { VoiceInputDialog } from "@/components/voice-input-dialog"
 import { FileUploadDialog } from "@/components/file-upload-dialog"
 import { GlazyrCaptureDialog } from "@/components/glazyr-capture-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { getServers, generateSVG, getJobStatus, createJobProgressStream } from "@/lib/api"
+import { getServers, generateSVG, getJobStatus, createJobProgressStream, queryOrchestrator } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPServer } from "@/lib/api"
 import { invokeMCPTool } from "@/lib/api"
@@ -155,7 +155,84 @@ export default function ChatPage() {
       const isRouter = selectedAgentId === "router"
       
       if (isRouter) {
-        // Auto-route based on content and attachment type
+        // Try Kafka orchestrator first (bypasses Gemini for high-signal queries)
+        // Only skip for explicit design requests
+        const isDesign = isDesignRequest(content)
+        if (!isDesign && !attachment) {
+          try {
+            console.log('[Chat] Trying Kafka orchestrator...')
+            
+            // Show status message to user
+            const statusMessage: ChatMessage = {
+              id: `status-${Date.now()}`,
+              role: "assistant",
+              content: "🔍 Matching tools...",
+              timestamp: new Date(),
+              agentName: "Orchestrator",
+            }
+            setMessages((prev) => [...prev, statusMessage])
+            
+            const orchestratorResult = await queryOrchestrator({
+              query: enhancedContent || content,
+              sessionId: `session-${Date.now()}`,
+            })
+            
+            // Remove status message
+            setMessages((prev) => prev.filter(m => m.id !== statusMessage.id))
+            
+            if (orchestratorResult.success && orchestratorResult.result) {
+              // Extract text content from result
+              const resultContent = orchestratorResult.result.content
+              if (resultContent && Array.isArray(resultContent)) {
+                const textContent = resultContent
+                  .filter(item => item.type === 'text' && item.text)
+                  .map(item => item.text)
+                  .join('\n\n')
+                
+                if (textContent) {
+                  responseContent = textContent
+                  agentName = orchestratorResult.tool || "Orchestrator"
+                  
+                  // Create assistant message and return early
+                  const assistantMessage: ChatMessage = {
+                    id: `assistant-${Date.now()}`,
+                    role: "assistant",
+                    content: responseContent,
+                    timestamp: new Date(),
+                    agentName: agentName,
+                  }
+                  
+                  setMessages((prev) => [...prev, assistantMessage])
+                  setIsLoading(false)
+                  return // Successfully handled by orchestrator
+                }
+              }
+            }
+          } catch (orchestratorError) {
+            // Orchestrator failed or unavailable, fall through to old routing
+            console.warn('[Chat] Orchestrator failed, falling back to old routing:', orchestratorError)
+            
+            // Remove status message if it exists
+            setMessages((prev) => prev.filter(m => !m.id?.startsWith('status-')))
+            
+            // Show fallback message
+            const fallbackMessage: ChatMessage = {
+              id: `fallback-${Date.now()}`,
+              role: "assistant",
+              content: "⏱️ Orchestrator timed out, using fallback routing...",
+              timestamp: new Date(),
+              agentName: "System",
+            }
+            setMessages((prev) => [...prev, fallbackMessage])
+            
+            // Remove fallback message after a short delay
+            setTimeout(() => {
+              setMessages((prev) => prev.filter(m => m.id !== fallbackMessage.id))
+            }, 2000)
+          }
+        }
+        
+        // Auto-route based on content and attachment type (fallback)
         let targetServer: MCPServer | null = null
         let toolName: string | undefined = undefined // Don't default to agent_executor
         let toolArgs: Record<string, unknown> = {}
