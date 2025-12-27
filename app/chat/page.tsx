@@ -13,7 +13,7 @@ import { getServers, generateSVG, getJobStatus, createJobProgressStream } from "
 import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPServer } from "@/lib/api"
 import { invokeMCPTool } from "@/lib/api"
-import { routeRequest, getServerToolContext } from "@/lib/tool-router"
+import { routeRequest, getServerToolContext, normalizeSearchText } from "@/lib/tool-router"
 import { getNativeOrchestrator } from "@/lib/native-orchestrator"
 import { executeWorkflow } from "@/lib/workflow-executor"
 import { getChatContextManager } from "@/lib/chat-context"
@@ -162,7 +162,8 @@ export default function ChatPage() {
         
         // Check for search queries first (before design requests)
         // This prevents search queries from being misrouted to image generation
-        const lowerContent = content.toLowerCase()
+        const normalizedContent = normalizeSearchText(content)
+        const lowerContent = normalizedContent.toLowerCase()
         const isSearchQuery = lowerContent.includes('look for') || 
                              lowerContent.includes('search for') || 
                              lowerContent.includes('find') ||
@@ -606,6 +607,7 @@ export default function ChatPage() {
                 }
               }
             }
+          }
           }
 
         // Only invoke tool if we didn't handle it as a design request
@@ -1245,7 +1247,7 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false)
     }
-  };
+  }
 
   const handleVoiceInput = () => {
     setVoiceDialogOpen(true)
@@ -1323,6 +1325,5 @@ export default function ChatPage() {
       />
     </div>
   )
-}
 }
 
