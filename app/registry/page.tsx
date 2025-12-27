@@ -125,7 +125,27 @@ export default function RegistryPage() {
   const handleSaveAgent = async (data: Partial<MCPAgent> & { command?: string; args?: string; credentials?: string }) => {
     try {
       // Determine if this is HTTP or STDIO server
-      const isStdioServer = ((data as any).command && (data as any).args) || (!data.endpoint || data.endpoint.trim() === '')
+      // Priority: Check if endpoint exists in form data (HTTP) OR in existing server metadata
+      const hasEndpointInForm = data.endpoint && data.endpoint.trim() !== '' && !data.endpoint.startsWith('stdio://')
+      let hasEndpointInMetadata = false
+      if (editingAgent && editingAgent.metadata && typeof editingAgent.metadata === 'object') {
+        const metadata = editingAgent.metadata as Record<string, unknown>
+        hasEndpointInMetadata = typeof metadata.endpoint === 'string' && metadata.endpoint.trim() !== ''
+      }
+      const hasEndpoint = hasEndpointInForm || hasEndpointInMetadata
+      const hasCommandArgs = (data as any).command && (data as any).args
+      
+      // HTTP if endpoint exists, STDIO if command/args exist and no endpoint
+      const isStdioServer = hasCommandArgs && !hasEndpoint
+      
+      console.log('[Save Agent] Server type detection:', {
+        hasEndpointInForm,
+        hasEndpointInMetadata,
+        hasEndpoint,
+        hasCommandArgs,
+        isStdioServer: isStdioServer ? 'STDIO' : 'HTTP',
+        editingAgentId: editingAgent?.id
+      })
       
       // Validate based on server type
       if (!isStdioServer && (!data.endpoint || data.endpoint.trim() === '')) {
@@ -165,8 +185,24 @@ export default function RegistryPage() {
       let httpHeaders: Record<string, unknown> | undefined
       if (data.httpHeaders && data.httpHeaders.trim() !== "") {
         try {
-          const parsed = JSON.parse(data.httpHeaders)
-          if (parsed && typeof parsed === 'object') {
+          const headerValue = data.httpHeaders.trim()
+          let parsed: Record<string, unknown>
+          
+          // Try parsing as JSON first
+          try {
+            parsed = JSON.parse(headerValue)
+          } catch {
+            // If not JSON, treat as plain API key and wrap it
+            // Check if it looks like a Google Maps API key
+            if (headerValue.startsWith('AIza')) {
+              parsed = { "X-Goog-Api-Key": headerValue }
+            } else {
+              // Generic API key - user needs to specify header name
+              throw new Error('Plain API key detected. Please use JSON format: {"X-Goog-Api-Key": "your-key"}')
+            }
+          }
+          
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
             httpHeaders = parsed
           } else {
             throw new Error('Headers must be a JSON object')
@@ -174,7 +210,7 @@ export default function RegistryPage() {
         } catch (e) {
           toast({
             title: "Invalid HTTP headers",
-            description: "HTTP headers must be valid JSON object.",
+            description: e instanceof Error ? e.message : "HTTP headers must be valid JSON object.",
             variant: "destructive",
           })
           return
@@ -234,8 +270,16 @@ export default function RegistryPage() {
         name,
         description: manifestData.description || (isStdioServer ? `${(data as any).command} ${(data as any).args}` : data.endpoint) || undefined,
         version: manifestData.version || "v0.1",
-        command: isStdioServer ? (data as any).command : undefined,
-        args: isStdioServer ? args : undefined,
+        // For HTTP servers, explicitly set command/args to undefined (not null) to clear STDIO mode
+        // Only include command/args if it's STDIO
+        ...(isStdioServer ? {
+          command: (data as any).command,
+          args: args,
+        } : {
+          // HTTP servers: explicitly exclude command/args (undefined means clear/remove)
+          command: undefined,
+          args: undefined,
+        }),
         tools: manifestData.tools || [],
         capabilities: manifestData.capabilities || [],
         env: env,
@@ -251,12 +295,19 @@ export default function RegistryPage() {
         },
       }
       
+      console.log('[Save Agent] Server type:', isStdioServer ? 'STDIO' : 'HTTP')
+      console.log('[Save Agent] Command:', publishData.command)
+      console.log('[Save Agent] Args:', publishData.args)
+      
       console.log('[Save Agent] Publishing data:', {
         serverId,
         name,
         hasCommand: !!publishData.command,
         hasArgs: !!publishData.args,
         hasEnv: !!publishData.env,
+        hasHttpHeaders: !!httpHeaders,
+        httpHeaders: httpHeaders,
+        metadataKeys: publishData.metadata ? Object.keys(publishData.metadata) : [],
         toolsCount: publishData.tools?.length || 0,
       })
 

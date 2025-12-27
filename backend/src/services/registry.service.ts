@@ -332,6 +332,20 @@ export class RegistryService {
         updateData.args = existing.args
       }
 
+      // Merge metadata instead of replacing it completely
+      let mergedMetadata: Record<string, unknown> = {}
+      if (existing.metadata) {
+        try {
+          mergedMetadata = JSON.parse(existing.metadata)
+        } catch (e) {
+          console.warn(`Failed to parse existing metadata for ${serverData.serverId}:`, e)
+        }
+      }
+      if (serverData.metadata) {
+        // Merge new metadata into existing (new values override existing)
+        mergedMetadata = { ...mergedMetadata, ...serverData.metadata }
+      }
+      
       const updatePayload: any = {
         ...updateData,
         env: serverData.env ? JSON.stringify(serverData.env) : existing.env,
@@ -343,7 +357,7 @@ export class RegistryService {
         federationId: serverData.federationId ?? existing.federationId,
         publishedBy: serverData.publishedBy ?? existing.publishedBy,
         publishedAt: new Date(),
-        metadata: serverData.metadata ? JSON.stringify(serverData.metadata) : existing.metadata,
+        metadata: Object.keys(mergedMetadata).length > 0 ? JSON.stringify(mergedMetadata) : existing.metadata,
         authConfig: serverData.authConfig ? JSON.stringify(serverData.authConfig) : existing.authConfig,
       }
 
@@ -360,6 +374,16 @@ export class RegistryService {
         where: { serverId: serverData.serverId },
         data: updatePayload,
       })
+
+      // Emit discovery event for orchestrators (Kafka/webhook)
+      try {
+        const { createDiscoveryEvent, emitDiscoveryEvent } = await import('./mcp-discovery.service')
+        const event = createDiscoveryEvent('server.updated', this.transformToMCPFormat(updated))
+        await emitDiscoveryEvent(event)
+      } catch (error) {
+        console.warn('[Registry] Failed to emit discovery event:', error)
+        // Don't fail the update if event emission fails
+      }
 
       return this.transformToMCPFormat(updated)
     } else {
@@ -428,6 +452,7 @@ export class RegistryService {
         }
       }
 
+      // Return the created server (transformed to MCP format)
       return this.transformToMCPFormat(server)
     }
   }
@@ -620,6 +645,16 @@ export class RegistryService {
 
     if (!server) {
       throw new Error(`Server ${serverId} not found`)
+    }
+
+    // Emit discovery event before deletion
+    try {
+      const { createDiscoveryEvent, emitDiscoveryEvent } = await import('./mcp-discovery.service')
+      const event = createDiscoveryEvent('server.removed', { serverId })
+      await emitDiscoveryEvent(event)
+    } catch (error) {
+      console.warn('[Registry] Failed to emit discovery event for deletion:', error)
+      // Continue with deletion even if event emission fails
     }
 
     // Soft delete by setting isActive to false

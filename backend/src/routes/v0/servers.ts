@@ -18,15 +18,67 @@ const router = Router()
  * Query parameters:
  * - search: Search term to filter servers by name or description
  * - capability: Filter by capability (e.g., "tools", "resources", "prompts")
+ * - for_orchestrator: If true, returns enhanced format with tool context for orchestrators
  */
 router.get('/servers', async (req, res, next) => {
   try {
-    const { search, capability } = req.query
-    const servers = await registryService.getServers({
+    const { search, capability, for_orchestrator } = req.query
+    const options = {
       search: typeof search === 'string' ? search : undefined,
       capability: typeof capability === 'string' ? capability : undefined,
-    })
+    }
+    
+    // If for_orchestrator=true, use discovery service for enhanced format
+    if (for_orchestrator === 'true') {
+      const { getServersForOrchestrator } = await import('../../services/mcp-discovery.service')
+      const discoveryResponse = await getServersForOrchestrator(options)
+      return res.json(discoveryResponse)
+    }
+    
+    // Standard response for frontend
+    const servers = await registryService.getServers(options)
     res.json(servers)
+  } catch (error) {
+    next(error)
+  }
+})
+
+// Debug endpoint - simple and direct
+// Use regex to match serverId with dots and slashes (e.g., com.google/maps-mcp)
+router.get(/^\/debug\/server\/(.+)$/, async (req, res, next) => {
+  try {
+    // Extract serverId from the regex match
+    const serverId = req.params[0] || req.path.replace('/debug/server/', '')
+    console.log('[Servers Router] Extracted serverId:', serverId)
+    const server = await registryService.getServerById(serverId)
+    
+    if (!server) {
+      return res.status(404).json({ success: false, error: `Server ${serverId} not found` })
+    }
+
+    const metadata = server.metadata as Record<string, unknown> | undefined
+    const httpHeaders = metadata?.httpHeaders as Record<string, unknown> | undefined
+
+    res.json({
+      success: true,
+      server: {
+        serverId: server.serverId,
+        name: server.name,
+        endpoint: metadata?.endpoint,
+        hasMetadata: !!metadata,
+        hasHttpHeaders: !!httpHeaders,
+        httpHeaders: httpHeaders ? Object.keys(httpHeaders) : [],
+        httpHeadersPreview: httpHeaders ? Object.fromEntries(
+          Object.entries(httpHeaders).map(([key, value]) => [
+            key,
+            typeof value === 'string' && key.toLowerCase().includes('key')
+              ? `${String(value).substring(0, 10)}...` 
+              : value
+          ])
+        ) : null,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      },
+    })
   } catch (error) {
     next(error)
   }
@@ -253,13 +305,17 @@ router.put('/servers/:serverId', authenticateUser, async (req, res, next) => {
     }))
 
     // Merge update data with existing server data, ensuring required fields are present
+    // For command/args: explicitly check if they're in updateData to allow clearing (null/undefined)
+    // Use 'command' in updateData to detect if it was explicitly provided (even if null/undefined)
     const server = await registryService.publishServer({
       serverId: decodedServerId,
       name: updateData.name || existingServer.name, // Ensure name is always provided
       description: updateData.description ?? existingServer.description,
       version: updateData.version || existingServer.version,
-      command: updateData.command ?? existingServer.command,
-      args: updateData.args ?? existingServer.args,
+      // Explicitly pass command/args if they're in the update data (even if null/undefined)
+      // This allows clearing STDIO mode when converting to HTTP
+      command: 'command' in updateData ? updateData.command : existingServer.command,
+      args: 'args' in updateData ? updateData.args : existingServer.args,
       env: updateData.env ?? existingServer.env,
       tools: normalizedTools ?? existingServer.tools,
       capabilities: updateData.capabilities ?? existingServer.capabilities,
@@ -508,6 +564,57 @@ router.post('/invoke', async (req, res, next) => {
       })
     }
 
+    next(error)
+  }
+})
+
+/**
+ * GET /v0.1/debug/server/:serverId
+ * Debug endpoint to check server metadata and HTTP headers
+ * Useful for troubleshooting API key issues
+ */
+router.get(/^\/debug\/server\/(.+)$/, async (req, res, next) => {
+  try {
+    // Extract serverId from the regex match
+    const serverId = req.params[0] || req.path.replace('/debug/server/', '')
+    console.log('[Debug Route in Servers Router] Route matched! Path:', req.path, 'Extracted serverId:', serverId, 'Original URL:', req.originalUrl)
+    console.log('[Debug] Fetching server:', serverId)
+    const server = await registryService.getServerById(serverId)
+    
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        error: `Server ${serverId} not found`,
+      })
+    }
+
+    const metadata = server.metadata as Record<string, unknown> | undefined
+    const httpHeaders = metadata?.httpHeaders as Record<string, unknown> | undefined
+
+    res.json({
+      success: true,
+      server: {
+        serverId: server.serverId,
+        name: server.name,
+        endpoint: metadata?.endpoint,
+        hasMetadata: !!metadata,
+        hasHttpHeaders: !!httpHeaders,
+        httpHeaders: httpHeaders ? Object.keys(httpHeaders) : [],
+        httpHeadersPreview: httpHeaders 
+          ? Object.fromEntries(
+              Object.entries(httpHeaders).map(([key, value]) => [
+                key,
+                typeof value === 'string' && key.toLowerCase().includes('key')
+                  ? `${String(value).substring(0, 10)}...` 
+                  : value
+              ])
+            )
+          : null,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      },
+    })
+  } catch (error) {
+    console.error('[Debug] Error:', error)
     next(error)
   }
 })

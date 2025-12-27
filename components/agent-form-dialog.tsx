@@ -30,16 +30,36 @@ interface AgentFormDialogProps {
 }
 
 export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentFormDialogProps) {
-  // Determine server type from agent or default to HTTP
-  const isStdioServer = agent?.endpoint?.startsWith('stdio://') || false
-  const [serverType, setServerType] = useState<"http" | "stdio">(isStdioServer ? "stdio" : "http")
+  // Determine server type from agent
+  // Check if endpoint starts with stdio:// (STDIO) OR if metadata has endpoint (HTTP)
+  let initialServerType: "http" | "stdio" = "http"
+  let initialEndpoint = ""
+  
+  if (agent) {
+    if (agent.endpoint?.startsWith('stdio://')) {
+      initialServerType = "stdio"
+      initialEndpoint = ""
+    } else if (agent.endpoint && !agent.endpoint.startsWith('stdio://')) {
+      initialServerType = "http"
+      initialEndpoint = agent.endpoint
+    } else if (agent.metadata && typeof agent.metadata === 'object') {
+      const metadata = agent.metadata as Record<string, unknown>
+      if (metadata.endpoint && typeof metadata.endpoint === 'string') {
+        initialServerType = "http"
+        initialEndpoint = metadata.endpoint
+      }
+    }
+  }
+  
+  const [serverType, setServerType] = useState<"http" | "stdio">(initialServerType)
   
   const [formData, setFormData] = useState({
     name: agent?.name || "",
-    endpoint: agent?.endpoint?.replace('stdio://', '') || "",
+    endpoint: initialEndpoint,
     command: "",
     args: "",
     credentials: "", // Unified credentials field (JSON or simple key)
+    httpHeaders: agent?.httpHeaders || "", // HTTP headers for HTTP servers (JSON object)
   })
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
@@ -60,9 +80,11 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
         args: formData.args,
         credentials: formData.credentials,
         endpoint: undefined, // Clear endpoint for STDIO
+        httpHeaders: undefined, // Clear httpHeaders for STDIO
       } : {
         endpoint: formData.endpoint,
         credentials: formData.credentials,
+        httpHeaders: formData.httpHeaders, // Include httpHeaders for HTTP servers
         command: undefined, // Clear command/args for HTTP
         args: undefined,
       }),
@@ -76,6 +98,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       command: "",
       args: "",
       credentials: "",
+      httpHeaders: "",
     })
     setServerType("http")
   }
@@ -192,23 +215,61 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
               </>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="credentials">Credentials (Optional)</Label>
-              <Textarea
-                id="credentials"
-                placeholder={serverType === "stdio" 
-                  ? '{"GEMINI_API_KEY": "your-key-here"} or just paste API key'
-                  : 'API key or {"API_KEY": "value"} JSON'}
-                value={formData.credentials}
-                onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
-                className="font-mono text-xs min-h-[80px]"
-              />
-              <p className="text-xs text-muted-foreground">
-                {serverType === "stdio" 
-                  ? "Environment variables as JSON object, or a simple API key (will be mapped to GEMINI_API_KEY for Nano-Banana)"
-                  : "API key or credentials as JSON object. Credentials are securely stored."}
-              </p>
-            </div>
+            {serverType === "http" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="httpHeaders">HTTP Headers (Required for Google Maps, etc.)</Label>
+                  <Textarea
+                    id="httpHeaders"
+                    placeholder='{"X-Goog-Api-Key": "your-api-key-here"} or just paste API key (will auto-wrap)'
+                    value={formData.httpHeaders}
+                    onChange={(e) => {
+                      let value = e.target.value.trim()
+                      // Auto-wrap plain API key in JSON format if it's not already JSON
+                      if (value && !value.startsWith('{') && !value.startsWith('[')) {
+                        // Try to detect if it's a Google Maps API key (starts with AIza)
+                        if (value.startsWith('AIza')) {
+                          value = JSON.stringify({ "X-Goog-Api-Key": value }, null, 2)
+                        }
+                      }
+                      setFormData((prev) => ({ ...prev, httpHeaders: value }))
+                    }}
+                    className="font-mono text-xs min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    HTTP headers to send with requests. For Google Maps, paste your API key here (it will auto-format).
+                    Or enter as JSON: {"{"}"X-Goog-Api-Key": "your-key"{"}"}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="credentials">Environment Variables (Optional, for STDIO servers only)</Label>
+                  <Textarea
+                    id="credentials"
+                    placeholder='{"API_KEY": "value"} JSON format'
+                    value={formData.credentials}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
+                    className="font-mono text-xs min-h-[80px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Environment variables for STDIO servers. Not used for HTTP servers (use HTTP Headers above instead).
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="credentials">Credentials (Optional)</Label>
+                <Textarea
+                  id="credentials"
+                  placeholder='{"GEMINI_API_KEY": "your-key-here"} or just paste API key'
+                  value={formData.credentials}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
+                  className="font-mono text-xs min-h-[80px]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Environment variables as JSON object, or a simple API key (will be mapped to GEMINI_API_KEY for Nano-Banana)
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
