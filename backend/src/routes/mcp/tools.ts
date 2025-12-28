@@ -17,6 +17,8 @@ const generateSVGSchema = z.object({
     })
     .optional(),
   serverId: z.string().optional(),
+  // Optional override: allow image generation even if heuristics don't match
+  allowImageGeneration: z.boolean().optional(),
 })
 
 const refineDesignSchema = z.object({
@@ -39,6 +41,10 @@ router.get('/test', (req, res) => {
 /**
  * POST /api/mcp/tools/generate
  * Generate an SVG from a natural language description
+ *
+ * Heuristic: only proceed with image generation when the user explicitly
+ * requests an image (keywords like image, poster, photo, flyer, poster, banner, thumbnail)
+ * unless a specific serverId is provided or `allowImageGeneration` is set to true.
  */
 router.post('/generate', async (req, res) => {
   // Always return a response - never call next() or let errors propagate
@@ -46,6 +52,57 @@ router.post('/generate', async (req, res) => {
     console.log('[Design Generate] Received request:', JSON.stringify(req.body))
     const validated = generateSVGSchema.parse(req.body)
     console.log('[Design Generate] Validated:', JSON.stringify(validated))
+
+    // Heuristic: require explicit image keywords unless override is present
+    function isExplicitImageRequest(text: string) {
+      if (!text) return false
+      const t = text.toLowerCase()
+      const keywords = [
+        'image', 'img', 'poster', 'flyer', 'photo', 'picture', 'thumbnail', 'banner', 'logo', 'cover art', 'album art', 'create poster', 'create a poster', 'make a poster', 'show me a photo', 'generate image', 'design a', 'create image', 'create flyer', 'make a flyer'
+      ]
+      return keywords.some(k => t.includes(k))
+    }
+
+    // CRITICAL: Block search queries from triggering image generation
+    function normalizeSearchTextForTools(text: string): string {
+      if (!text) return ''
+      return text
+        .replace(/\bwhen'?s\b/gi, 'when is')
+        .replace(/\bwhere'?s\b/gi, 'where is')
+        .replace(/\bwhat'?s\b/gi, 'what is')
+        .replace(/\bwho'?s\b/gi, 'who is')
+        .replace(/\bhow'?s\b/gi, 'how is')
+    }
+
+    function isSearchQuery(text: string) {
+      if (!text) return false
+      const normalized = normalizeSearchTextForTools(text)
+      const t = normalized.toLowerCase()
+      const searchIndicators = [
+        'look for', 'search for', 'find', 'when is', 'where is', 'playing', 'concert', 'ticket',
+        'location', 'address', 'venue', 'schedule', 'tour', 'event', 'show', 'gig'
+      ]
+      return searchIndicators.some(indicator => t.includes(indicator))
+    }
+
+    // Block search queries even if they somehow got here
+    if (isSearchQuery(validated.description) && !validated.allowImageGeneration) {
+      console.log('[Design Generate] Blocked search query from triggering image generation:', validated.description)
+      return res.status(400).json({
+        success: false,
+        error: 'Search query detected',
+        message: 'This appears to be a search query, not an image generation request. Please use a search tool instead of the image generation endpoint.'
+      })
+    }
+
+    if (!validated.serverId && !validated.allowImageGeneration && !isExplicitImageRequest(validated.description)) {
+      console.log('[Design Generate] Request does not explicitly ask for image generation; refusing to auto-generate to avoid accidental quota usage')
+      return res.status(400).json({
+        success: false,
+        error: 'Image generation not requested',
+        message: 'The request does not explicitly ask for image generation. Include keywords like "image", "poster", or set "allowImageGeneration": true to proceed.'
+      })
+    }
 
     // Strategy 1: Try to route to a registered MCP server with design generation capabilities
     let mcpServerUsed = false

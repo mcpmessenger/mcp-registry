@@ -5,7 +5,6 @@
   "scripts": {
     "fix-playwright": "ts-node src/scripts/fix-playwright-tools.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prestart": "node scripts/start-kafka.js || powershell -ExecutionPolicy Bypass -File scripts/start-kafka.ps1 || bash scripts/start-kafka.sh || echo 'Kafka startup skipped - start manually if needed'",
     "start": "ts-node src/server.ts",
     "start:no-kafka": "ts-node src/server.ts",
     "build": "tsc",
@@ -21,7 +20,9 @@
     "register-official": "ts-node src/scripts/register-official-servers.ts",
     "register-valuation": "ts-node src/scripts/register-valuation-server.ts",
     "restore-stock-servers": "ts-node src/scripts/seed-mcp-server.ts",
-    "update-playwright-http": "ts-node src/scripts/update-playwright-to-http.ts"
+    "update-playwright-http": "ts-node src/scripts/update-playwright-to-http.ts",
+    "test-mcp-invoke-headers": "ts-node src/scripts/test-mcp-invoke-headers.ts",
+    "test-generate-guard": "ts-node src/scripts/test-generate-guard.ts"
   },
   "keywords": [],
   "author": "",

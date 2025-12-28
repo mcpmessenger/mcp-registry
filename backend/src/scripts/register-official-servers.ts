@@ -340,6 +340,7 @@ const exaServer = {
     endpoint: 'https://mcp.exa.ai/mcp',
     npmPackage: 'exa-mcp-server',
     verified: true,
+    apiFormat: 'jsonrpc', // Exa uses standard MCP JSON-RPC format
     // Optional: include EXA API key from env var for authenticated requests
     httpHeaders: process.env.EXA_API_KEY ? { Authorization: `Bearer ${process.env.EXA_API_KEY}` } : undefined,
   },
@@ -409,6 +410,11 @@ if (require.main === module) {
 }
 
 export { registerOfficialServers }
+
+
+
+
+
 
 
 
