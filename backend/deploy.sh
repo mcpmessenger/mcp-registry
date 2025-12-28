@@ -10,12 +10,12 @@
 set -e
 
 PROJECT_ID="554655392699"
-# Get project name (slug) for Artifact Registry path - repository was created with project name
-PROJECT_NAME=$(gcloud projects describe ${PROJECT_ID} --format="value(name)" 2>/dev/null || echo "slashmcp")
+# Use project name "slashmcp" for Artifact Registry (repository was created with this name)
+PROJECT_NAME="slashmcp"
 SERVICE_NAME="mcp-registry-backend"
 REGION="us-central1"
 REPOSITORY="mcp-registry"
-# Use project name in image path (matches how repository was created)
+# Use project name in image path (matches how repository was created: us-central1-docker.pkg.dev/slashmcp/mcp-registry)
 IMAGE_NAME="${REGION}-docker.pkg.dev/${PROJECT_NAME}/${REPOSITORY}/${SERVICE_NAME}"
 
 SET_ENV_VARS=false
