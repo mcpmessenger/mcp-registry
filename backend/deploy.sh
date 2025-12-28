@@ -147,7 +147,13 @@ if [ "$HAS_ENV_FILE" = true ] && [ "$SKIP_BUILD" = false ]; then
                 # Skip empty CORS_ORIGIN (will be set to allow all)
                 :
             else
-                ENV_VARS+=("${KEY}=${VALUE}")
+                # Quote values that contain commas for gcloud
+                if [[ "$VALUE" == *","* ]] || [[ "$VALUE" == *" "* ]]; then
+                    # Value contains comma or space - quote it
+                    ENV_VARS+=("${KEY}=\"${VALUE}\"")
+                else
+                    ENV_VARS+=("${KEY}=${VALUE}")
+                fi
                 echo "   ✓ Added env var: ${KEY}"
             fi
         fi
@@ -169,13 +175,10 @@ DEPLOY_CMD="gcloud run deploy ${SERVICE_NAME} \
     --min-instances 0"
 
 # Add environment variables if any
-# Properly handle values with commas by using --update-env-vars with individual key=value pairs
 if [ ${#ENV_VARS[@]} -gt 0 ]; then
-    # For values with commas, we need to pass them separately or use env-vars-file
-    # Use --update-env-vars which can handle quoted values better
-    for env_var in "${ENV_VARS[@]}"; do
-        DEPLOY_CMD="${DEPLOY_CMD} --update-env-vars ${env_var}"
-    done
+    # Join env vars with commas, properly handling quoted values
+    ENV_VAR_STRING=$(IFS=,; printf '%s' "${ENV_VARS[*]}")
+    DEPLOY_CMD="${DEPLOY_CMD} --update-env-vars ${ENV_VAR_STRING}"
 fi
 
 # Add secrets if any
