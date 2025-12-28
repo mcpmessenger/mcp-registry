@@ -141,9 +141,14 @@ export class InstallConfigService {
    */
   private generateCLIConfig(server: MCPServer): InstallConfig {
     // For CLI, we'll generate an npx command that can be run directly
-    const command = server.command || 'npx'
-    const args = server.args || []
+    let command = server.command || 'npx'
+    let args = server.args || []
     const envVars = server.env || {}
+
+    // If server provides an npm package name in metadata, prefer an `npx -y <pkg>` invocation
+    if ((!server.command || server.command === 'npx') && (!args || args.length === 0) && server.metadata && (server.metadata as any).npmPackage) {
+      args = ['-y', (server.metadata as any).npmPackage]
+    }
 
     // Build the command
     let cliCommand = `${command} ${args.join(' ')}`

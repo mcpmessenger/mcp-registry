@@ -1011,10 +1011,27 @@ export async function formatResponseWithLLM(
       }
       
       if (foundDates.length > 0) {
-        // We found dates - create a response even without perfect venue matching
-        let response = `I found ${foundDates.length} ${foundDates.length === 1 ? 'upcoming event' : 'upcoming events'} for **${entities.artist}**${entities.location ? ` in ${entities.location}` : ''}:\n\n`
+        // We found dates - validate artist entity and fall back to snapshot scanning if necessary
+        let artist = entities.artist && entities.artist.trim() ? entities.artist.trim() : undefined
+        // Reject suspicious UI labels
+        if (artist && /^(favorite|see tickets|get tickets|buy|button|link|get notified)$/i.test(artist)) {
+          artist = undefined
+        }
+
+        // If artist missing or suspicious, try to find the artist name directly in the snapshot (e.g., 'Iration')
+        if (!artist) {
+          const artistFromSnapshot = snapshot.match(/\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*)\b/i)
+          if (artistFromSnapshot && !/^(favorite|see|tickets?|button|link)$/i.test(artistFromSnapshot[1])) {
+            artist = artistFromSnapshot[1]
+          }
+        }
+
+        // Fallback to a generic term if still missing
+        const displayArtist = artist || 'events'
+
+        let response = `I found ${foundDates.length} ${foundDates.length === 1 ? 'upcoming event' : 'upcoming events'} for **${displayArtist}**${entities.location ? ` in ${entities.location}` : ''}:\n\n`
         foundDates.forEach((event, index) => {
-          response += `${index + 1}. **${entities.artist}**\n`
+          response += `${index + 1}. **${displayArtist}**\n`
           response += `   - Date: ${event.date}\n`
           response += `\n`
         })

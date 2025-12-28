@@ -6,7 +6,82 @@
  */
 
 import type { MCPServer } from './api'
-import { TOOL_CONTEXTS, getToolContext, findToolsByOutputContext, findToolsByResponsibility } from '@/types/tool-context'
+import { getToolContext, findToolsByOutputContext, findToolsByResponsibility } from '@/types/tool-context'
+
+const HIGH_SIGNAL_SEARCH_KEYWORDS = [
+  'when',
+  'where',
+  'date',
+  'time',
+  'show',
+  'ticket',
+  'tickets',
+  'concert',
+  'event',
+  'tour',
+  'gig',
+  'playing',
+  'performing',
+  'venue',
+  'schedule',
+  'price',
+  'cost',
+  'availability',
+  'on sale',
+  'booking',
+  'lineup',
+  'how to get',
+  'closest',
+  'find'
+]
+
+const DESIGN_SIGNAL_KEYWORDS = [
+  'design',
+  'layout',
+  'present',
+  'showcase',
+  'display',
+  'story',
+  'narrative',
+  'plan',
+  'strategy',
+  'concept',
+  'proposal',
+  'mockup',
+  'visual',
+  'creative',
+  'aesthetic',
+  'illustrate',
+  'diagram',
+  'prototype'
+]
+
+const KEYWORD_SCORE_NORMALIZER = 4
+const MIN_HIGH_SIGNAL_SEARCH_CONFIDENCE = 0.6
+
+function calculateKeywordConfidence(content: string, keywords: string[]): number {
+  if (!content) return 0
+  const matches = new Set(
+    keywords.filter(keyword => content.includes(keyword))
+  )
+  if (matches.size === 0) return 0
+  return Math.min(matches.size / KEYWORD_SCORE_NORMALIZER, 1)
+}
+
+function isHighSignalSearchIntent(
+  lowerContent: string,
+  searchConfidence: number,
+  designConfidence: number,
+  hasMultiStep: boolean
+): boolean {
+  if (hasMultiStep) return false
+  if (designConfidence >= 0.5) return false
+  if (searchConfidence < MIN_HIGH_SIGNAL_SEARCH_CONFIDENCE) return false
+
+  // Require at least one hard-signal keyword to avoid false positives
+  const hardSignalRegex = /\b(when|where|date|ticket|tickets|show|concert|event|tour|gig|venue|playing)\b/
+  return hardSignalRegex.test(lowerContent)
+}
 
 export function normalizeSearchText(text: string): string {
   if (!text) return ''
@@ -40,6 +115,9 @@ export interface RoutingIntent {
   needs: string[]
   preferredTool?: string
   requiresOrchestration?: boolean
+  searchConfidence?: number
+  designConfidence?: number
+  forceSearch?: boolean
 }
 
 /**
@@ -51,6 +129,10 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
   const needs: string[] = []
   let preferredTool: string | undefined
   let requiresOrchestration = false
+
+  const searchConfidence = calculateKeywordConfidence(lowerContent, HIGH_SIGNAL_SEARCH_KEYWORDS)
+  const designConfidence = calculateKeywordConfidence(lowerContent, DESIGN_SIGNAL_KEYWORDS)
+
 
   // Check for location-related needs
   if (
@@ -156,14 +238,22 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
   // Don't require orchestration for simple website checks - those should use Playwright directly
   const isSimpleWebsiteCheck = (hasWebsiteCheck || hasUsingDomain || hasFindUsing) && !hasMultiStep && needs.length === 1
   
+  const forceSearch = isHighSignalSearchIntent(lowerContent, searchConfidence, designConfidence, hasMultiStep)
+  if (forceSearch) {
+    preferredTool = 'search'
+  }
+
   if (
-    (needs.length > 1 || hasMultiStep) && !isSimpleWebsiteCheck ||
-    lowerContent.includes('synthesize') ||
-    lowerContent.includes('combine') ||
-    lowerContent.includes('report') ||
-    lowerContent.includes('calculate') ||
-    lowerContent.includes('analyze') ||
-    lowerContent.includes('compare')
+    !forceSearch &&
+    (
+      (needs.length > 1 || hasMultiStep) && !isSimpleWebsiteCheck ||
+      lowerContent.includes('synthesize') ||
+      lowerContent.includes('combine') ||
+      lowerContent.includes('report') ||
+      lowerContent.includes('calculate') ||
+      lowerContent.includes('analyze') ||
+      lowerContent.includes('compare')
+    )
   ) {
     requiresOrchestration = true
     // Only prefer LangChain if it's truly a multi-step query, not a simple website check
@@ -172,7 +262,14 @@ export function analyzeRoutingIntent(content: string): RoutingIntent {
     }
   }
 
-  return { needs, preferredTool, requiresOrchestration }
+  return {
+    needs,
+    preferredTool,
+    requiresOrchestration,
+    searchConfidence,
+    designConfidence,
+    forceSearch,
+  }
 }
 
 /**
@@ -256,12 +353,19 @@ export function routeRequest(
   orchestrationNeeded: boolean
   toolContext?: ReturnType<typeof getToolContext>
 } {
-  const intent = analyzeRoutingIntent(content)
+  const cleanedContent = extractFollowUpQuery(content)
+  const intent = analyzeRoutingIntent(cleanedContent)
+  const normalizedContent = normalizeSearchText(cleanedContent)
+
+  if (intent.forceSearch) {
+    intent.requiresOrchestration = false
+    intent.preferredTool = 'search'
+  }
+
   let primaryServer = findBestServerForIntent(intent, availableServers)
 
   // If this is a concert/ticket search (e.g., "when is X playing in Y" or "find X concerts"),
   // prefer Exa (search provider) when available unless the user explicitly requested a specific site.
-  const normalizedContent = normalizeSearchText(content)
   const isConcertQuery = /\b(concert|concerts|playing|when\s+is|tickets?)\b/i.test(normalizedContent)
   const explicitSite = /\busing\s+\w+\.com|ticketmaster|stubhub|see tickets|get tickets|on\s+\w+\.com\b/i.test(content)
   if (isConcertQuery && !explicitSite) {

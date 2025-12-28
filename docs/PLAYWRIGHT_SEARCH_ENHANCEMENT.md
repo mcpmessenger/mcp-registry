@@ -100,3 +100,13 @@ Currently, when a user says "go to stubhub.com and look for iration tickets in i
 4. System clicks search button ✅
 5. System captures and displays search results ✅
 
+
+
+
+
+
+
+
+
+
+
