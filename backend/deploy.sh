@@ -212,7 +212,7 @@ else
     echo "☁️  Deploying to Cloud Run..."
     eval $DEPLOY_CMD
     
-    if [ $? -ne 0 ]; then
+    if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
         echo "❌ Deployment failed!"
         exit 1
     fi
