@@ -176,9 +176,12 @@ DEPLOY_CMD="gcloud run deploy ${SERVICE_NAME} \
 
 # Add environment variables if any
 if [ ${#ENV_VARS[@]} -gt 0 ]; then
-    # Join env vars with commas, properly handling quoted values
-    ENV_VAR_STRING=$(IFS=,; printf '%s' "${ENV_VARS[*]}")
-    DEPLOY_CMD="${DEPLOY_CMD} --update-env-vars ${ENV_VAR_STRING}"
+    # Create temporary env vars file to handle commas in values properly
+    ENV_VARS_FILE=$(mktemp)
+    for env_var in "${ENV_VARS[@]}"; do
+        echo "${env_var}" >> "$ENV_VARS_FILE"
+    done
+    DEPLOY_CMD="${DEPLOY_CMD} --env-vars-file ${ENV_VARS_FILE}"
 fi
 
 # Add secrets if any
@@ -211,6 +214,12 @@ else
     # Step 6: Deploy to Cloud Run
     echo "☁️  Deploying to Cloud Run..."
     eval $DEPLOY_CMD
+    DEPLOY_EXIT_CODE=$?
+    
+    # Clean up temp env vars file if it was created
+    if [ -n "$ENV_VARS_FILE" ] && [ -f "$ENV_VARS_FILE" ]; then
+        rm -f "$ENV_VARS_FILE"
+    fi
     
     if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
         echo "❌ Deployment failed!"
