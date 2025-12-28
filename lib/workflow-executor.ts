@@ -444,7 +444,24 @@ export async function executeWorkflow(
       } else {
         step.error = toolResult.error || 'Tool invocation failed'
         console.error(`[Workflow] Step ${step.step} failed:`, step.error)
-        
+
+        // If the failure is due to API quota / Gemini limits, gracefully fallback
+        const errText = String(toolResult.error || '').toLowerCase()
+        if (errText.includes('quota') || errText.includes('gemini') || errText.includes('api quota') || errText.includes('429') || errText.includes('rate limit')) {
+          console.warn(`[Workflow] Detected quota/rate-limit error for step ${step.step}; returning text-only fallback and continuing.`)
+          // Provide a user-friendly formatted result explaining the limitation
+          const friendlyMessage = 'Image generation is temporarily unavailable (API quota or rate limit). Returning text-only results.'
+          step.result = {
+            raw: { message: friendlyMessage },
+            formatted: friendlyMessage,
+          }
+          step.error = undefined
+          finalResult = friendlyMessage
+          // Continue with the workflow; do not break or attempt playwight fallback for quota errors
+          executedSteps.push(step)
+          continue
+        }
+
         // Error handling: If LangChain fails (500 error), try Playwright as fallback for concert searches
         if (step.step === 1 && 
             (step.selectedServer?.serverId.includes('langchain') || step.selectedServer?.serverId.includes('agent')) &&

@@ -1,0 +1,26 @@
+# Ignore backend directory (deployed separately)
+backend/
+tmp-playwright-mcp/
+mcp-registry-backend-scaffolding/
+
+# Ignore test files
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Ignore docs (unless needed)
+docs/
+
+# Ignore deployment scripts
+deploy*.sh
+deploy*.ps1
+*.md
+
+# Ignore database files
+*.db
+*.db-journal
+
+# Ignore node_modules (handled by Vercel)
+node_modules/
+

@@ -12,22 +12,32 @@ const getApiBaseUrl = () => {
   // Explicitly check for production environment (Vercel sets VERCEL=1, Amplify sets AWS_APP_ID)
   const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1' || !!process.env.AWS_APP_ID
   
-  // Get the env var value if set
+  // Get the env var value if set (highest priority)
+  // NEXT_PUBLIC_* vars are exposed to the browser in Next.js
   const envUrl = process.env.NEXT_PUBLIC_API_URL
   
   // If NEXT_PUBLIC_API_URL is explicitly set, use it (with safety checks)
-  if (envUrl) {
+  if (envUrl && envUrl.trim()) {
+    const trimmedUrl = envUrl.trim()
+    
     // If we're in production and the env var points to localhost, ignore it and use production URL
     // This prevents accidentally using localhost in production deployments
-    if (isProduction && envUrl.includes('localhost')) {
-      console.warn('NEXT_PUBLIC_API_URL points to localhost in production, using production URL instead')
+    if (isProduction && (trimmedUrl.includes('localhost') || trimmedUrl.includes('127.0.0.1'))) {
+      console.warn('[API Client] NEXT_PUBLIC_API_URL points to localhost in production, using production URL instead')
       return PROD_BACKEND_URL
     }
-    return envUrl
+    
+    // Ensure URL has protocol
+    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+      console.warn('[API Client] NEXT_PUBLIC_API_URL missing protocol, defaulting to https')
+      return `https://${trimmedUrl}`
+    }
+    
+    return trimmedUrl
   }
   
-  // Client-side: Auto-detect backend URL based on current hostname
-  if (typeof window !== 'undefined') {
+  // Client-side: Auto-detect backend URL based on current hostname (development only)
+  if (typeof window !== 'undefined' && !isProduction) {
     const hostname = window.location.hostname
     const protocol = window.location.protocol
     
@@ -44,14 +54,11 @@ const getApiBaseUrl = () => {
       return `${protocol}//${hostname}:${backendPort}`
     }
     
-    // For other hostnames (like domain names), assume production unless in dev mode
-    if (!isProduction) {
-      // In development but accessed via domain/IP, try to use same host with backend port
-      return `${protocol}//${hostname}:3001`
-    }
+    // For other hostnames in development, try to use same host with backend port
+    return `${protocol}//${hostname}:3001`
   }
   
-  // Server-side or fallback: use production URL for production, localhost for development
+  // Server-side or production fallback: use production URL for production, localhost for development
   return isProduction ? PROD_BACKEND_URL : DEV_BACKEND_URL
 }
 

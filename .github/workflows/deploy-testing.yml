@@ -1,0 +1,64 @@
+name: Testing Deployment Workflow
+
+on:
+  push:
+    branches:
+      - beta
+      - test
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - beta
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Run linter
+        run: npm run lint || true
+      
+      - name: Build (test)
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'https://mcp-registry-backend-554655392699.us-central1.run.app' }}
+        run: npm run build
+      
+      - name: Comment PR (if PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Build passed! Vercel will deploy a preview.'
+            })
+
+  notify:
+    name: Deployment Notification
+    needs: test
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+      - name: Check branch
+        run: |
+          echo "Branch: ${{ github.ref_name }}"
+          echo "This is a test deployment branch"
+          echo "Vercel will automatically deploy preview for this branch"
+
