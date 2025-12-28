@@ -169,9 +169,13 @@ DEPLOY_CMD="gcloud run deploy ${SERVICE_NAME} \
     --min-instances 0"
 
 # Add environment variables if any
+# Properly handle values with commas by using --update-env-vars with individual key=value pairs
 if [ ${#ENV_VARS[@]} -gt 0 ]; then
-    ENV_VAR_STRING=$(IFS=,; echo "${ENV_VARS[*]}")
-    DEPLOY_CMD="${DEPLOY_CMD} --set-env-vars \"${ENV_VAR_STRING}\""
+    # For values with commas, we need to pass them separately or use env-vars-file
+    # Use --update-env-vars which can handle quoted values better
+    for env_var in "${ENV_VARS[@]}"; do
+        DEPLOY_CMD="${DEPLOY_CMD} --update-env-vars ${env_var}"
+    done
 fi
 
 # Add secrets if any
