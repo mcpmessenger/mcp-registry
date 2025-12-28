@@ -40,11 +40,18 @@ const corsOptions = {
     
     // Use configured CORS origin or allow all if not set
     const allowedOrigin = env.server.corsOrigin || '*'
-    if (allowedOrigin === '*' || origin === allowedOrigin) {
+    if (allowedOrigin === '*') {
       return callback(null, true)
     }
     
-    callback(new Error('Not allowed by CORS'))
+    // Support comma-separated list of allowed origins
+    const allowedOrigins = allowedOrigin.split(',').map(o => o.trim())
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true)
+    }
+    
+    // Deny request (cors will handle 403 response)
+    callback(null, false)
   },
   credentials: true,
 }

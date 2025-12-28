@@ -14,7 +14,8 @@ param(
 $PROJECT_ID = "554655392699"
 $SERVICE_NAME = "mcp-registry-backend"
 $REGION = "us-central1"
-$IMAGE_NAME = "gcr.io/$PROJECT_ID/$SERVICE_NAME"
+$REPOSITORY = "mcp-registry"
+$IMAGE_NAME = "$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_NAME"
 
 Write-Host "Deploying MCP Registry Backend to Cloud Run" -ForegroundColor Green
 Write-Host "Project ID: $PROJECT_ID" -ForegroundColor Yellow
@@ -32,7 +33,29 @@ if ($SetEnvVars -and !$hasEnvFile) {
     Write-Host ""
 }
 
-# Step 1: Build and push container image (skip if flag is set)
+# Step 1: Ensure Artifact Registry repository exists
+if (!$SkipBuild -and !$SetEnvVars) {
+    Write-Host "Checking Artifact Registry repository..." -ForegroundColor Yellow
+    $repoExists = gcloud artifacts repositories describe $REPOSITORY --location=$REGION --format="value(name)" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Creating Artifact Registry repository..." -ForegroundColor Yellow
+        gcloud artifacts repositories create $REPOSITORY `
+            --repository-format=docker `
+            --location=$REGION `
+            --description="Docker repository for MCP Registry Backend"
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Failed to create repository!" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "Repository created successfully" -ForegroundColor Green
+    } else {
+        Write-Host "Repository already exists" -ForegroundColor Green
+    }
+    Write-Host ""
+}
+
+# Step 2: Build and push container image (skip if flag is set)
 if (!$SkipBuild -and !$SetEnvVars) {
     Write-Host "Building and pushing container image..." -ForegroundColor Yellow
     gcloud builds submit --tag $IMAGE_NAME --region $REGION .
@@ -46,7 +69,7 @@ if (!$SkipBuild -and !$SetEnvVars) {
     Write-Host ""
 }
 
-# Step 2: Prepare environment variables
+# Step 3: Prepare environment variables
 $envVars = @()
 $secrets = @()
 
@@ -88,7 +111,7 @@ if ($hasEnvFile -and !$SkipBuild) {
     Write-Host ""
 }
 
-# Step 3: Build deployment command
+# Step 4: Build deployment command
 $deployCmd = "gcloud run deploy $SERVICE_NAME " +
     "--image $IMAGE_NAME " +
     "--platform managed " +
@@ -131,7 +154,7 @@ if ($SetEnvVars) {
     Write-Host "Environment variables updated!" -ForegroundColor Green
     Write-Host ""
 } else {
-    # Step 4: Deploy to Cloud Run
+    # Step 5: Deploy to Cloud Run
     Write-Host "Deploying to Cloud Run..." -ForegroundColor Yellow
     Invoke-Expression $deployCmd
 

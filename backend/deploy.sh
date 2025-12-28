@@ -12,7 +12,8 @@ set -e
 PROJECT_ID="554655392699"
 SERVICE_NAME="mcp-registry-backend"
 REGION="us-central1"
-IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+REPOSITORY="mcp-registry"
+IMAGE_NAME="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE_NAME}"
 
 SET_ENV_VARS=false
 SKIP_BUILD=false
@@ -55,7 +56,28 @@ if [ "$SET_ENV_VARS" = true ] && [ "$HAS_ENV_FILE" = false ]; then
     echo ""
 fi
 
-# Step 1: Build and push container image (skip if flag is set)
+# Step 1: Ensure Artifact Registry repository exists
+if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
+    echo "🔍 Checking Artifact Registry repository..."
+    if ! gcloud artifacts repositories describe ${REPOSITORY} --location=${REGION} &>/dev/null; then
+        echo "📦 Creating Artifact Registry repository..."
+        gcloud artifacts repositories create ${REPOSITORY} \
+            --repository-format=docker \
+            --location=${REGION} \
+            --description="Docker repository for MCP Registry Backend"
+        
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to create repository!"
+            exit 1
+        fi
+        echo "✅ Repository created successfully"
+    else
+        echo "✅ Repository already exists"
+    fi
+    echo ""
+fi
+
+# Step 2: Build and push container image (skip if flag is set)
 if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
     echo "📦 Building and pushing container image..."
     gcloud builds submit --tag ${IMAGE_NAME} --region ${REGION} .
@@ -69,7 +91,7 @@ if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
     echo ""
 fi
 
-# Step 2: Prepare environment variables
+# Step 3: Prepare environment variables
 ENV_VARS=()
 SECRETS=()
 
@@ -114,7 +136,7 @@ if [ "$HAS_ENV_FILE" = true ] && [ "$SKIP_BUILD" = false ]; then
     echo ""
 fi
 
-# Step 3: Build deployment command
+# Step 4: Build deployment command
 DEPLOY_CMD="gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_NAME} \
     --platform managed \
@@ -159,7 +181,7 @@ if [ "$SET_ENV_VARS" = true ]; then
     echo "✅ Environment variables updated!"
     echo ""
 else
-    # Step 4: Deploy to Cloud Run
+    # Step 5: Deploy to Cloud Run
     echo "☁️  Deploying to Cloud Run..."
     eval $DEPLOY_CMD
     

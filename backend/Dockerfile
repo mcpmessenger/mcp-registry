@@ -24,11 +24,15 @@ RUN mkdir -p ./prisma && \
     fi
 
 # Install dependencies (including dev dependencies for build)
-# Use npm install since package-lock.json may not exist
-RUN npm install
+# Skip postinstall to avoid permission issues, we'll run it manually
+RUN npm install --ignore-scripts
+
+# Ensure node_modules/.bin has execute permissions
+RUN chmod +x node_modules/.bin/* 2>/dev/null || true
 
 # Generate Prisma Client (needed for TypeScript build)
-RUN npx prisma generate || echo "Warning: Prisma generate failed, continuing..."
+# Use the direct binary path to avoid npx permission issues
+RUN ./node_modules/.bin/prisma generate || npm run prisma:generate || echo "Warning: Prisma generate failed, continuing..."
 
 # Build TypeScript
 RUN npm run build
@@ -93,7 +97,11 @@ COPY package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
 # Install production dependencies only
-RUN npm install --only=production
+# Skip postinstall to avoid permission issues, we'll run it manually
+RUN npm install --only=production --ignore-scripts
+
+# Ensure node_modules/.bin has execute permissions
+RUN chmod +x node_modules/.bin/* 2>/dev/null || true
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
@@ -106,9 +114,9 @@ RUN npm install -g playwright
 # This speeds up tool discovery from 30+ seconds to <5 seconds
 RUN npx --yes nano-banana-mcp --version || echo "nano-banana-mcp pre-install skipped"
 
-# Prisma Client should already be generated from postinstall script
-# But ensure it exists, regenerate if needed
-RUN npx prisma generate || echo "Prisma generate completed or skipped"
+# Generate Prisma Client explicitly (postinstall was skipped)
+# Use the direct binary path to avoid npx permission issues
+RUN ./node_modules/.bin/prisma generate || npm run prisma:generate || echo "Prisma generate completed or skipped"
 
 # Create non-root user with home directory
 RUN groupadd -r nodejs && useradd -r -g nodejs -m -d /home/nodejs nodejs

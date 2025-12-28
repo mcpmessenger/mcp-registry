@@ -6,8 +6,8 @@
  */
 
 import { registryService } from './registry.service'
-import type { MCPServer } from '../types/mcp'
-import { getToolContext } from '../../types/tool-context'
+import type { MCPServer, MCPTool } from '../types/mcp'
+import { getToolContext } from '../types/tool-context'
 
 export interface EnhancedMCPServer extends MCPServer {
   toolContext?: {
@@ -20,7 +20,7 @@ export interface EnhancedMCPServer extends MCPServer {
     healthStatus?: 'healthy' | 'degraded' | 'unhealthy'
     lastChecked?: string
   }
-  tools?: Array<MCPServer['tools'][0] & {
+  tools?: Array<MCPTool & {
     toolContext?: {
       coreResponsibility: string
       outputContext: string
@@ -110,7 +110,7 @@ export function createDiscoveryEvent(
   server: MCPServer | { serverId: string }
 ): MCPServerDiscoveryEvent {
   const toolContext = 'serverId' in server 
-    ? (getToolContext(server.serverId) || getToolContext(server.name))
+    ? (getToolContext(server.serverId) || ('name' in server && server.name ? getToolContext(server.name) : undefined))
     : undefined
   
   return {
