@@ -195,10 +195,15 @@ if [ "$SET_ENV_VARS" = true ]; then
     echo "🔧 Updating environment variables only..."
     
     if [ ${#ENV_VARS[@]} -gt 0 ]; then
-        ENV_VAR_STRING=$(IFS=,; echo "${ENV_VARS[*]}")
+        # Create temporary env vars file to handle commas properly
+        ENV_VARS_FILE=$(mktemp)
+        for env_var in "${ENV_VARS[@]}"; do
+            echo "${env_var}" >> "$ENV_VARS_FILE"
+        done
         gcloud run services update ${SERVICE_NAME} \
             --region ${REGION} \
-            --update-env-vars "${ENV_VAR_STRING}"
+            --env-vars-file "${ENV_VARS_FILE}"
+        rm -f "$ENV_VARS_FILE"
     fi
     
     if [ ${#SECRETS[@]} -gt 0 ]; then
