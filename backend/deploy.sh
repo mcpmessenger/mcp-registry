@@ -56,7 +56,24 @@ if [ "$SET_ENV_VARS" = true ] && [ "$HAS_ENV_FILE" = false ]; then
     echo ""
 fi
 
-# Step 1: Ensure Artifact Registry repository exists
+# Step 1: Grant Cloud Build permissions (if needed)
+if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
+    echo "🔐 Checking Cloud Build permissions..."
+    PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format="value(projectNumber)" 2>/dev/null)
+    if [ -n "$PROJECT_NUMBER" ]; then
+        SERVICE_ACCOUNT="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
+        echo "   Service Account: ${SERVICE_ACCOUNT}"
+        
+        # Grant Artifact Registry Writer role (idempotent - safe to run multiple times)
+        gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+            --member="serviceAccount:${SERVICE_ACCOUNT}" \
+            --role="roles/artifactregistry.writer" \
+            --condition=None 2>/dev/null || echo "   (Permissions may already be set)"
+    fi
+    echo ""
+fi
+
+# Step 2: Ensure Artifact Registry repository exists
 if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
     echo "🔍 Checking Artifact Registry repository..."
     if ! gcloud artifacts repositories describe ${REPOSITORY} --location=${REGION} &>/dev/null; then
@@ -77,7 +94,7 @@ if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
     echo ""
 fi
 
-# Step 2: Build and push container image (skip if flag is set)
+# Step 3: Build and push container image (skip if flag is set)
 if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
     echo "📦 Building and pushing container image..."
     gcloud builds submit --tag ${IMAGE_NAME} --region ${REGION} .
@@ -91,7 +108,7 @@ if [ "$SKIP_BUILD" = false ] && [ "$SET_ENV_VARS" = false ]; then
     echo ""
 fi
 
-# Step 3: Prepare environment variables
+# Step 4: Prepare environment variables
 ENV_VARS=()
 SECRETS=()
 
@@ -136,7 +153,7 @@ if [ "$HAS_ENV_FILE" = true ] && [ "$SKIP_BUILD" = false ]; then
     echo ""
 fi
 
-# Step 4: Build deployment command
+# Step 5: Build deployment command
 DEPLOY_CMD="gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_NAME} \
     --platform managed \
@@ -181,7 +198,7 @@ if [ "$SET_ENV_VARS" = true ]; then
     echo "✅ Environment variables updated!"
     echo ""
 else
-    # Step 5: Deploy to Cloud Run
+    # Step 6: Deploy to Cloud Run
     echo "☁️  Deploying to Cloud Run..."
     eval $DEPLOY_CMD
     
