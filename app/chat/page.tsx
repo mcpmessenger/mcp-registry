@@ -1362,11 +1362,11 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="flex flex-col min-h-screen">
       <AgentSelector agents={agentOptions} selectedAgentId={selectedAgentId} onAgentChange={setSelectedAgentId} />
 
-      <ScrollArea className="flex-1 px-6 overflow-y-auto gradient-grid-bg" ref={scrollAreaRef}>
-        <div className="max-w-4xl mx-auto py-4">
+      <ScrollArea className="flex-1 px-2 sm:px-6 pb-8 overflow-y-auto gradient-grid-bg" ref={scrollAreaRef}>
+        <div className="max-w-4xl mx-auto py-4 px-1 sm:px-0">
           {messages.map((message) => (
             <ChatMessageComponent key={message.id} message={message} />
           ))}
