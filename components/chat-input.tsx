@@ -188,7 +188,7 @@ export function ChatInput({
     <div className="border-t border-border bg-card/50 p-4 sticky bottom-0 z-40 backdrop-blur-sm w-full gradient-chat-bg">
       <div className="flex items-end gap-2 max-w-full w-full relative">
         {/* Left side buttons - microphone first, shifted right to avoid logo */}
-        <div className="flex gap-2 shrink-0 relative z-50 ml-12">
+        <div className="flex gap-2 shrink-0 relative z-50 ml-4 sm:ml-12">
           <Button
             type="button"
             variant="outline"
@@ -227,7 +227,7 @@ export function ChatInput({
           value={message}
           onChange={handleTextareaChange}
           onKeyDown={handleKeyDown}
-            placeholder="Type your message... (Shift+Enter for new line, / for commands)"
+            placeholder="Try / commands"
           className="min-h-[44px] max-h-[200px] resize-none"
           disabled={isLoading}
         />

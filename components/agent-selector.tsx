@@ -12,10 +12,10 @@ interface AgentSelectorProps {
 
 export function AgentSelector({ agents, selectedAgentId, onAgentChange }: AgentSelectorProps) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card/50">
+    <div className="flex flex-col gap-2 px-4 py-3 border-b border-border bg-card/50 sm:flex-row sm:items-center sm:gap-3">
       <span className="text-sm text-muted-foreground">Agent:</span>
-      <Select value={selectedAgentId} onValueChange={onAgentChange}>
-        <SelectTrigger className="w-[240px] h-9">
+      <Select value={selectedAgentId} onValueChange={onAgentChange} className="w-full sm:w-auto">
+        <SelectTrigger className="w-full min-w-0 sm:w-[240px] h-9">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

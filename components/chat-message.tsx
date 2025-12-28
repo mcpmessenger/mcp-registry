@@ -109,7 +109,7 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
         </Avatar>
       )}
 
-      <div className={cn("flex flex-col gap-2 max-w-[70%]", isUser && "items-end")}>
+      <div className={cn("flex flex-col gap-2 max-w-[85%] sm:max-w-[70%] w-full", isUser && "items-end")}>
         {message.agentName && (
           <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
