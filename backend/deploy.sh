@@ -9,11 +9,15 @@
 
 set -e
 
+# Use project ID (numeric) - can also use project name if preferred
 PROJECT_ID="554655392699"
+# Get project name to use in image path (Artifact Registry can use either)
+PROJECT_NAME=$(gcloud projects describe ${PROJECT_ID} --format="value(projectId)" 2>/dev/null || echo "${PROJECT_ID}")
 SERVICE_NAME="mcp-registry-backend"
 REGION="us-central1"
 REPOSITORY="mcp-registry"
-IMAGE_NAME="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE_NAME}"
+# Use project name in image path to match repository location
+IMAGE_NAME="${REGION}-docker.pkg.dev/${PROJECT_NAME}/${REPOSITORY}/${SERVICE_NAME}"
 
 SET_ENV_VARS=false
 SKIP_BUILD=false
