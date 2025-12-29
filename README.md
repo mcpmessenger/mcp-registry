@@ -27,6 +27,8 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 - **Search & Filter**: Find services by name, endpoint, or status
 - **Service Management**: Create, update, and delete service entries
 - **Service Details**: View comprehensive information about each service
+- **Integration Status System**: Three-tier status tracking (Active, Pre-Integration, Offline)
+- **Automated Integration**: Bulk registration and integration scripts for MCP servers
 - **One-Click Installation**: Install STDIO servers directly to Cursor or Claude Desktop with a single click
 - **Chat Interface**: Interact with MCP agents through a chat interface (default landing page)
 - **Voice Transcription**: Real-time voice-to-text using OpenAI Whisper API
@@ -90,6 +92,20 @@ See [Kafka Setup Guide](docs/KAFKA_SETUP.md) and [Orchestrator Architecture](doc
 - **API Key Management**: Easy API key configuration via UI or API
 - **Quota Error Handling**: User-friendly error messages for API quota issues
   - New: Heuristic guard prevents accidental image generation unless explicitly requested or overridden (backend route `POST /api/mcp/tools/generate`).
+
+#### MCP Server Integration System (NEW - December 2024)
+- **Three-Tier Status System**: Active, Pre-Integration, and Offline status tracking
+- **Automated Integration**: Bulk registration scripts for top 20 MCP servers
+- **Package Verification**: Automatic npm package verification for STDIO servers
+- **Health Checks**: HTTP endpoint health monitoring for HTTP servers
+- **Integration Status Service**: Intelligent status determination based on tools, packages, and health
+- **Integration Scripts**: 
+  - `register-top-20`: Bulk register servers from manifest
+  - `integrate-top-20`: Verify packages and discover tools
+  - `verify-integration`: Check all server integration status
+  - `test-mcp-servers`: Test active servers with tool invocation
+
+See [MCP Integration Guide](docs/MCP_INTEGRATION_GUIDE.md) for details.
 
 #### STDIO Server Support
 - **Full STDIO Protocol**: Complete support for STDIO-based MCP servers using JSON-RPC
