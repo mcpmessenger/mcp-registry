@@ -37,3 +37,4 @@ Write-Host "3. Check backend logs for the messages above" -ForegroundColor Yello
 Write-Host "4. If services aren't starting, check backend/src/server.ts for orchestrator startup" -ForegroundColor Yellow
 
 
+
