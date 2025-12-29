@@ -240,18 +240,29 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       setFormData(extracted)
       setLogoPreview(extracted.logoUrl || null)
       
-      // Update server type based on agent
-      if (agent.endpoint?.startsWith('stdio://')) {
-        setServerType("stdio")
-      } else if (agent.endpoint && !agent.endpoint.startsWith('stdio://')) {
+      // Update server type based on agent - prioritize endpoint detection
+      // Check endpoint first (most reliable indicator)
+      if (agent.endpoint && !agent.endpoint.startsWith('stdio://')) {
         setServerType("http")
+      } else if (agent.endpoint?.startsWith('stdio://')) {
+        setServerType("stdio")
       } else if (agent.metadata && typeof agent.metadata === 'object') {
         const metadata = agent.metadata as Record<string, unknown>
-        if (metadata.endpoint && typeof metadata.endpoint === 'string') {
+        // If metadata has endpoint, it's HTTP
+        if (metadata.endpoint && typeof metadata.endpoint === 'string' && metadata.endpoint.trim() !== '') {
           setServerType("http")
-        } else if (extracted.command) {
+        } else if (extracted.command && extracted.args) {
+          // If we have command/args but no endpoint, it's STDIO
           setServerType("stdio")
+        } else {
+          // Default to HTTP if we can't determine (for existing HTTP servers)
+          setServerType("http")
         }
+      } else if (extracted.command && extracted.args) {
+        setServerType("stdio")
+      } else {
+        // Default to HTTP for existing servers without clear indicators
+        setServerType("http")
       }
     } else {
       // Reset form when no agent (creating new)
