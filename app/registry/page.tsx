@@ -288,19 +288,34 @@ export default function RegistryPage() {
           serverId: serverId,
           ...(isStdioServer ? {} : { endpoint: data.endpoint?.trim() }),
         },
-        metadata: {
-          ...(isStdioServer ? {} : { endpoint: data.endpoint?.trim() }),
-          apiKey: credentials ? '***' : undefined,
-          httpHeaders: httpHeaders,
-          // Include logoUrl from form data or existing metadata
-          ...(data.metadata && typeof data.metadata === 'object' && (data.metadata as Record<string, unknown>).logoUrl
-            ? { logoUrl: (data.metadata as Record<string, unknown>).logoUrl }
-            : data.logoUrl
-            ? { logoUrl: data.logoUrl }
-            : editingAgent?.metadata && typeof editingAgent.metadata === 'object' && (editingAgent.metadata as Record<string, unknown>).logoUrl
-            ? { logoUrl: (editingAgent.metadata as Record<string, unknown>).logoUrl }
-            : {}),
-        },
+        metadata: (() => {
+          // Start with existing metadata to preserve integration status and other fields
+          let existingMetadata: Record<string, unknown> = {}
+          if (editingAgent?.metadata && typeof editingAgent.metadata === 'object') {
+            existingMetadata = editingAgent.metadata as Record<string, unknown>
+          }
+          
+          // Build new metadata, preserving important fields
+          return {
+            ...existingMetadata, // Preserve all existing metadata first
+            ...(isStdioServer ? {} : { endpoint: data.endpoint?.trim() }),
+            apiKey: credentials ? '***' : undefined,
+            httpHeaders: httpHeaders,
+            // Include logoUrl from form data or existing metadata
+            ...(data.metadata && typeof data.metadata === 'object' && (data.metadata as Record<string, unknown>).logoUrl
+              ? { logoUrl: (data.metadata as Record<string, unknown>).logoUrl }
+              : data.logoUrl
+              ? { logoUrl: data.logoUrl }
+              : existingMetadata.logoUrl
+              ? { logoUrl: existingMetadata.logoUrl }
+              : {}),
+            // Preserve integration status - don't reset it when updating
+            ...(existingMetadata.integrationStatus ? { integrationStatus: existingMetadata.integrationStatus } : {}),
+            ...(existingMetadata.integrationReason ? { integrationReason: existingMetadata.integrationReason } : {}),
+            ...(existingMetadata.integrationDetails ? { integrationDetails: existingMetadata.integrationDetails } : {}),
+            ...(existingMetadata.integrationCheckedAt ? { integrationCheckedAt: existingMetadata.integrationCheckedAt } : {}),
+          }
+        })(),
       }
       
       console.log('[Save Agent] Server type:', isStdioServer ? 'STDIO' : 'HTTP')
