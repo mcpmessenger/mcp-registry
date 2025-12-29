@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2 } from "lucide-react"
+import { Loader2, ExternalLink } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertDialog,
@@ -27,6 +27,76 @@ interface AgentFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSave: (data: Partial<MCPAgent>) => void
+}
+
+// Provider-specific configuration
+interface ProviderConfig {
+  name: string
+  httpHeaderKey?: string
+  httpHeaderPlaceholder?: string
+  httpHeaderInstructions?: string
+  envVarKey?: string
+  envVarInstructions?: string
+  docsUrl?: string
+  serverUrl?: string
+}
+
+function getProviderConfig(agent: MCPAgent | null | undefined): ProviderConfig | null {
+  if (!agent?.metadata || typeof agent.metadata !== 'object') {
+    return null
+  }
+  
+  const metadata = agent.metadata as Record<string, unknown>
+  const serverId = agent.id.toLowerCase()
+  const name = agent.name.toLowerCase()
+  
+  // Google Maps
+  if (serverId.includes('google') || serverId.includes('maps') || name.includes('google maps')) {
+    return {
+      name: 'Google Maps',
+      httpHeaderKey: 'X-Goog-Api-Key',
+      httpHeaderPlaceholder: 'AIza... (your Google Maps API key)',
+      httpHeaderInstructions: 'Get your API key from Google Cloud Console. Enable Maps Grounding Lite API.',
+      docsUrl: metadata.documentation as string || 'https://developers.google.com/maps/ai/grounding-lite',
+      serverUrl: metadata.endpoint as string || 'https://mapstools.googleapis.com/mcp',
+    }
+  }
+  
+  // Exa
+  if (serverId.includes('exa') || name.includes('exa')) {
+    return {
+      name: 'Exa',
+      httpHeaderKey: 'Authorization',
+      httpHeaderPlaceholder: 'Bearer YOUR_EXA_API_KEY (optional)',
+      httpHeaderInstructions: 'Optional: Exa API key for authenticated requests. Get from https://dashboard.exa.ai',
+      envVarKey: 'EXA_API_KEY',
+      docsUrl: metadata.documentation as string || 'https://github.com/exa-labs/exa-mcp-server',
+      serverUrl: metadata.endpoint as string || 'https://mcp.exa.ai/mcp',
+    }
+  }
+  
+  // GitHub
+  if (serverId.includes('github') || name.includes('github')) {
+    return {
+      name: 'GitHub',
+      envVarKey: 'GITHUB_PERSONAL_ACCESS_TOKEN',
+      envVarInstructions: 'Create a personal access token with repo permissions at https://github.com/settings/tokens',
+      docsUrl: metadata.documentation as string || 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
+      serverUrl: metadata.npmPackage ? `https://www.npmjs.com/package/${metadata.npmPackage}` : undefined,
+    }
+  }
+  
+  // Generic - extract from metadata
+  return {
+    name: (metadata.publisher as string) || 'MCP Server',
+    httpHeaderKey: undefined,
+    httpHeaderPlaceholder: '{"Header-Name": "value"}',
+    httpHeaderInstructions: 'Enter HTTP headers as JSON object',
+    envVarKey: undefined,
+    envVarInstructions: 'Enter environment variables as JSON object',
+    docsUrl: metadata.documentation as string,
+    serverUrl: metadata.endpoint as string || (metadata.npmPackage ? `https://www.npmjs.com/package/${metadata.npmPackage}` : undefined),
+  }
 }
 
 export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentFormDialogProps) {
@@ -50,6 +120,8 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       }
     }
   }
+  
+  const providerConfig = getProviderConfig(agent)
   
   const [serverType, setServerType] = useState<"http" | "stdio">(initialServerType)
   
@@ -143,6 +215,32 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                 ? "Update the configuration for this MCP server."
                 : "Register a new Model Context Protocol server to the registry."}
             </DialogDescription>
+            {providerConfig && (providerConfig.docsUrl || providerConfig.serverUrl) && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {providerConfig.docsUrl && (
+                  <a
+                    href={providerConfig.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Documentation
+                  </a>
+                )}
+                {providerConfig.serverUrl && (
+                  <a
+                    href={providerConfig.serverUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {providerConfig.serverUrl.includes('npmjs.com') ? 'npm Package' : 'Server URL'}
+                  </a>
+                )}
+              </div>
+            )}
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -218,18 +316,33 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
             {serverType === "http" ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="httpHeaders">HTTP Headers (Required for Google Maps, etc.)</Label>
+                  <Label htmlFor="httpHeaders">
+                    HTTP Headers
+                    {providerConfig?.httpHeaderKey && ` (${providerConfig.name})`}
+                    {!providerConfig?.httpHeaderKey && " (Optional)"}
+                  </Label>
                   <Textarea
                     id="httpHeaders"
-                    placeholder='{"X-Goog-Api-Key": "your-api-key-here"} or just paste API key (will auto-wrap)'
+                    placeholder={
+                      providerConfig?.httpHeaderPlaceholder || 
+                      '{"Header-Name": "value"} or paste API key (will auto-format)'
+                    }
                     value={formData.httpHeaders}
                     onChange={(e) => {
                       let value = e.target.value.trim()
                       // Auto-wrap plain API key in JSON format if it's not already JSON
                       if (value && !value.startsWith('{') && !value.startsWith('[')) {
-                        // Try to detect if it's a Google Maps API key (starts with AIza)
-                        if (value.startsWith('AIza')) {
+                        // Auto-detect provider-specific API keys
+                        if (providerConfig?.httpHeaderKey) {
+                          const headerObj: Record<string, string> = {}
+                          headerObj[providerConfig.httpHeaderKey] = value
+                          value = JSON.stringify(headerObj, null, 2)
+                        } else if (value.startsWith('AIza')) {
+                          // Google Maps API key
                           value = JSON.stringify({ "X-Goog-Api-Key": value }, null, 2)
+                        } else if (value.startsWith('Bearer ') || value.startsWith('bearer ')) {
+                          // Bearer token
+                          value = JSON.stringify({ "Authorization": value }, null, 2)
                         }
                       }
                       setFormData((prev) => ({ ...prev, httpHeaders: value }))
@@ -237,36 +350,86 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                     className="font-mono text-xs min-h-[80px]"
                   />
                   <p className="text-xs text-muted-foreground">
-                    HTTP headers to send with requests. For Google Maps, paste your API key here (it will auto-format).
-                    Or enter as JSON: {"{"}"X-Goog-Api-Key": "your-key"{"}"}
+                    {providerConfig?.httpHeaderInstructions || 
+                      "HTTP headers to send with requests. Enter as JSON object or paste API key (will auto-format)."}
+                    {providerConfig?.docsUrl && (
+                      <span className="block mt-1">
+                        <a href={providerConfig.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                          View {providerConfig.name} documentation →
+                        </a>
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="credentials">Environment Variables (Optional, for STDIO servers only)</Label>
+                  <Label htmlFor="credentials">
+                    Environment Variables
+                    {providerConfig?.envVarKey && ` (${providerConfig.name})`}
+                    {!providerConfig?.envVarKey && " (Optional, for STDIO servers only)"}
+                  </Label>
                   <Textarea
                     id="credentials"
-                    placeholder='{"API_KEY": "value"} JSON format'
+                    placeholder={
+                      providerConfig?.envVarKey 
+                        ? `{"${providerConfig.envVarKey}": "your-key-here"}`
+                        : '{"API_KEY": "value"} JSON format'
+                    }
                     value={formData.credentials}
                     onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
                     className="font-mono text-xs min-h-[80px]"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Environment variables for STDIO servers. Not used for HTTP servers (use HTTP Headers above instead).
+                    {providerConfig?.envVarInstructions || 
+                      "Environment variables for STDIO servers. Not used for HTTP servers (use HTTP Headers above instead)."}
+                    {providerConfig?.docsUrl && !providerConfig.httpHeaderKey && (
+                      <span className="block mt-1">
+                        <a href={providerConfig.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                          View {providerConfig.name} documentation →
+                        </a>
+                      </span>
+                    )}
                   </p>
                 </div>
               </>
             ) : (
               <div className="space-y-2">
-                <Label htmlFor="credentials">Credentials (Optional)</Label>
+                <Label htmlFor="credentials">
+                  Environment Variables
+                  {providerConfig?.envVarKey && ` (${providerConfig.name})`}
+                  {!providerConfig?.envVarKey && " (Optional)"}
+                </Label>
                 <Textarea
                   id="credentials"
-                  placeholder='{"GEMINI_API_KEY": "your-key-here"} or just paste API key'
+                  placeholder={
+                    providerConfig?.envVarKey 
+                      ? `{"${providerConfig.envVarKey}": "your-key-here"} or just paste API key`
+                      : '{"API_KEY": "your-key-here"} or just paste API key'
+                  }
                   value={formData.credentials}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, credentials: e.target.value }))}
+                  onChange={(e) => {
+                    let value = e.target.value.trim()
+                    // Auto-wrap plain API key if provider config specifies a key
+                    if (value && !value.startsWith('{') && !value.startsWith('[') && providerConfig?.envVarKey) {
+                      const envObj: Record<string, string> = {}
+                      envObj[providerConfig.envVarKey] = value
+                      value = JSON.stringify(envObj, null, 2)
+                      setFormData((prev) => ({ ...prev, credentials: value }))
+                    } else {
+                      setFormData((prev) => ({ ...prev, credentials: value }))
+                    }
+                  }}
                   className="font-mono text-xs min-h-[80px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Environment variables as JSON object, or a simple API key (will be mapped to GEMINI_API_KEY for Nano-Banana)
+                  {providerConfig?.envVarInstructions || 
+                    "Environment variables as JSON object, or a simple API key (will be auto-formatted)."}
+                  {providerConfig?.docsUrl && (
+                    <span className="block mt-1">
+                      <a href={providerConfig.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        View {providerConfig.name} documentation →
+                      </a>
+                    </span>
+                  )}
                 </p>
               </div>
             )}

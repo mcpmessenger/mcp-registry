@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { StatusBadge } from "@/components/status-badge"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Activity, Code, TrendingUp } from "lucide-react"
+import { Activity, Code, TrendingUp, ExternalLink, Globe } from "lucide-react"
 
 interface AgentDetailsDialogProps {
   agent: MCPAgent | null
@@ -25,6 +25,16 @@ export function AgentDetailsDialog({ agent, open, onOpenChange }: AgentDetailsDi
     }).format(date)
   }
 
+  // Extract documentation and server URLs from metadata
+  const metadata = agent.metadata && typeof agent.metadata === 'object' 
+    ? agent.metadata as Record<string, unknown>
+    : null
+  
+  const docsUrl = metadata?.documentation as string | undefined
+  const serverUrl = metadata?.endpoint as string | undefined
+  const npmPackage = metadata?.npmPackage as string | undefined
+  const npmUrl = npmPackage ? `https://www.npmjs.com/package/${npmPackage}` : undefined
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh]">
@@ -34,6 +44,43 @@ export function AgentDetailsDialog({ agent, open, onOpenChange }: AgentDetailsDi
             <StatusBadge status={agent.status} />
           </div>
           <DialogDescription className="font-mono text-xs pt-1">{agent.endpoint}</DialogDescription>
+          {(docsUrl || serverUrl || npmUrl) && (
+            <div className="flex flex-wrap gap-3 pt-2">
+              {docsUrl && (
+                <a
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline flex items-center gap-1.5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Documentation
+                </a>
+              )}
+              {serverUrl && !agent.endpoint.startsWith('stdio://') && (
+                <a
+                  href={serverUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline flex items-center gap-1.5"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  Server URL
+                </a>
+              )}
+              {npmUrl && (
+                <a
+                  href={npmUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline flex items-center gap-1.5"
+                >
+                  <Code className="h-3.5 w-3.5" />
+                  npm Package
+                </a>
+              )}
+            </div>
+          )}
         </DialogHeader>
 
         <ScrollArea className="max-h-[calc(85vh-120px)]">

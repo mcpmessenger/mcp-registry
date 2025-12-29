@@ -45,6 +45,90 @@ function isPlaceholderResponse(content: string): boolean {
 }
 
 /**
+ * Handle simple queries that don't require MCP servers
+ * Returns a response string if the query can be answered directly, null otherwise
+ */
+function handleSimpleQuery(content: string): string | null {
+  const lowerContent = content.toLowerCase().trim()
+  
+  // Day of week queries (check first, more specific)
+  if (/what day/i.test(content) && !content.toLowerCase().includes('concert') && !content.toLowerCase().includes('show')) {
+    const now = new Date()
+    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' })
+    const dateString = now.toLocaleDateString('en-US', { 
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+    return `Today is **${dayName}, ${dateString}**.`
+  }
+  
+  // Date/time queries
+  const dateTimePatterns = [
+    /what (date|time) (is it|today)/i,
+    /what's (the )?(date|time)( today)?/i,
+    /what (date) (are we|is today)/i,
+    /current (date|time)/i,
+    /today's (date)/i,
+    /what time (is it|now)/i,
+    /time now/i,
+  ]
+  
+  if (dateTimePatterns.some(pattern => pattern.test(content))) {
+    const now = new Date()
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      timeZoneName: 'short',
+    }
+    const formatted = now.toLocaleDateString('en-US', options)
+    return `Today is **${formatted}**.`
+  }
+  
+  // Time queries
+  if (/what time/i.test(content) && !content.toLowerCase().includes('concert') && !content.toLowerCase().includes('show')) {
+    const now = new Date()
+    const timeString = now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      timeZoneName: 'short',
+    })
+    return `The current time is **${timeString}**.`
+  }
+  
+  // Simple greetings
+  if (/^(hi|hello|hey|greetings)$/i.test(lowerContent)) {
+    return "Hello! I'm your MCP assistant. How can I help you today?"
+  }
+  
+  // Simple math (very basic)
+  const mathMatch = content.match(/what is (\d+)\s*([+\-*/])\s*(\d+)/i)
+  if (mathMatch) {
+    const [, num1, op, num2] = mathMatch
+    const a = parseInt(num1)
+    const b = parseInt(num2)
+    let result: number
+    switch (op) {
+      case '+': result = a + b; break
+      case '-': result = a - b; break
+      case '*': result = a * b; break
+      case '/': result = b !== 0 ? a / b : NaN; break
+      default: return null
+    }
+    if (!isNaN(result)) {
+      return `**${a} ${op} ${b} = ${result}**`
+    }
+  }
+  
+  return null
+}
+
+/**
  * Detect if a message is requesting design/generation work
  * Excludes search queries, concert queries, and other non-design requests
  */
@@ -89,18 +173,28 @@ export default function ChatPage() {
     async function loadAgents() {
       try {
         const servers = await getServers()
-        setAvailableServers(servers)
         
-        // Register servers with native orchestrator for workflow execution
-        const orchestrator = getNativeOrchestrator()
-        orchestrator.registerServers(servers)
-        console.log('[Native Orchestrator] Registered', servers.length, 'servers')
-        
-        // Transform servers to agent options
+        // Transform servers to agents to check status
         const transformedAgents = transformServersToAgents(servers)
+        
+        // Filter to only active servers
+        const activeAgents = transformedAgents.filter((a) => a.status === "active")
+        const activeServers = servers.filter((server) => {
+          const agent = transformedAgents.find((a) => a.id === server.serverId)
+          return agent?.status === "active"
+        })
+        
+        setAvailableServers(activeServers)
+        
+        // Register only active servers with native orchestrator for workflow execution
+        const orchestrator = getNativeOrchestrator()
+        orchestrator.registerServers(activeServers)
+        console.log('[Native Orchestrator] Registered', activeServers.length, 'active servers (filtered from', servers.length, 'total)')
+        
+        // Transform only active servers to agent options
         const options: AgentOption[] = [
           { id: "router", name: "Auto-Route (Recommended)", type: "router" },
-          ...transformedAgents.map((a) => ({
+          ...activeAgents.map((a) => ({
             id: a.id,
             name: a.name,
             type: "agent" as const,
@@ -151,6 +245,23 @@ export default function ChatPage() {
       let responseContent = ""
       let agentName: string | undefined = undefined
       let generateResponse: any = null // Declare at function scope so it's accessible when creating message
+
+      // Check for simple queries that don't need MCP servers
+      const simpleResponse = handleSimpleQuery(content)
+      if (simpleResponse) {
+        responseContent = simpleResponse
+        agentName = "Assistant"
+        setIsLoading(false)
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: responseContent,
+          timestamp: new Date(),
+          agentName: agentName,
+        }
+        setMessages((prev) => [...prev, assistantMessage])
+        return
+      }
 
       const isRouter = selectedAgentId === "router"
       
@@ -1362,10 +1473,14 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <AgentSelector agents={agentOptions} selectedAgentId={selectedAgentId} onAgentChange={setSelectedAgentId} />
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-background via-background to-background/95">
+      <div className="relative">
+        {/* Subtle background glow */}
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 via-transparent to-green-500/5 pointer-events-none" />
+        <AgentSelector agents={agentOptions} selectedAgentId={selectedAgentId} onAgentChange={setSelectedAgentId} />
+      </div>
 
-      <ScrollArea className="flex-1 px-2 sm:px-6 pb-8 overflow-y-auto gradient-grid-bg" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 px-2 sm:px-6 pb-8 overflow-y-auto" ref={scrollAreaRef}>
         <div className="max-w-4xl mx-auto py-4 px-1 sm:px-0">
           {messages.map((message) => (
             <ChatMessageComponent key={message.id} message={message} />
@@ -1373,10 +1488,10 @@ export default function ChatPage() {
 
           {isLoading && (
             <div className="flex gap-3 py-4">
-              <div className="h-8 w-8 rounded-full bg-primary animate-pulse" />
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-green-500/30 to-emerald-500/20 border border-white/20 backdrop-blur-sm animate-pulse" />
               <div className="flex flex-col gap-2">
-                <div className="h-4 w-32 bg-muted animate-pulse rounded" />
-                <div className="h-16 w-64 bg-muted animate-pulse rounded-2xl" />
+                <div className="h-4 w-32 bg-white/10 backdrop-blur-md border border-white/20 animate-pulse rounded-lg" />
+                <div className="h-16 w-64 bg-white/10 backdrop-blur-md border border-white/20 animate-pulse rounded-2xl" />
               </div>
             </div>
           )}

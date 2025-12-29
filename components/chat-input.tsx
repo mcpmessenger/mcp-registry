@@ -185,8 +185,14 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-border bg-card/50 p-4 sticky bottom-0 z-40 backdrop-blur-sm w-full gradient-chat-bg">
-      <div className="flex items-end gap-2 max-w-full w-full relative">
+    <div className="relative sticky bottom-0 z-40 w-full p-4 sm:p-6">
+      {/* Backlight effect - ATM style glow */}
+      <div className="absolute inset-0 bg-gradient-to-t from-blue-500/40 via-cyan-500/30 to-blue-400/20 opacity-70 blur-3xl -z-10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/20 via-blue-500/15 to-transparent opacity-50 blur-2xl -z-10" />
+      
+      {/* Glassmorphic container */}
+      <div className="relative rounded-2xl border border-white/20 backdrop-blur-xl bg-gradient-to-br from-white/15 to-white/5 p-4 shadow-2xl hover:shadow-[0_0_40px_rgba(59,130,246,0.3)] transition-shadow duration-500">
+        <div className="flex items-end gap-2 max-w-full w-full relative">
         {/* Left side buttons - microphone first, shifted right to avoid logo */}
         <div className="flex gap-2 shrink-0 relative z-50 ml-4 sm:ml-12">
           <Button
@@ -194,7 +200,7 @@ export function ChatInput({
             variant="outline"
             size="icon"
             onClick={onVoiceInput}
-            className={cn("shrink-0 bg-transparent")}
+            className={cn("shrink-0 bg-white/10 border-white/20 hover:bg-white/20 hover:border-white/30 backdrop-blur-sm")}
             title="Voice input"
           >
             <Mic className={cn("h-4 w-4")} />
@@ -204,7 +210,7 @@ export function ChatInput({
             variant="outline"
             size="icon"
             onClick={onFileUpload}
-            className="shrink-0 bg-transparent"
+            className="shrink-0 bg-white/10 border-white/20 hover:bg-white/20 hover:border-white/30 backdrop-blur-sm"
             title="Upload file"
           >
             <Paperclip className="h-4 w-4" />
@@ -214,7 +220,7 @@ export function ChatInput({
             variant="outline"
             size="icon"
             onClick={onGlazyrCapture}
-            className="shrink-0 bg-transparent"
+            className="shrink-0 bg-white/10 border-white/20 hover:bg-white/20 hover:border-white/30 backdrop-blur-sm"
             title="Capture screen (Glazyr)"
           >
             <Monitor className="h-4 w-4" />
@@ -228,7 +234,7 @@ export function ChatInput({
           onChange={handleTextareaChange}
           onKeyDown={handleKeyDown}
             placeholder="Try / commands"
-          className="min-h-[44px] max-h-[200px] resize-none"
+          className="min-h-[44px] max-h-[200px] resize-none bg-white/10 border-white/20 backdrop-blur-sm focus:bg-white/15 focus:border-white/30 transition-all"
           disabled={isLoading}
         />
 
@@ -248,9 +254,14 @@ export function ChatInput({
           )}
         </div>
 
-        <Button onClick={handleSubmit} disabled={!message.trim() || isLoading} className="shrink-0 h-[44px]">
+        <Button 
+          onClick={handleSubmit} 
+          disabled={!message.trim() || isLoading} 
+          className="shrink-0 h-[44px] bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all"
+        >
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
+        </div>
       </div>
     </div>
   )

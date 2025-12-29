@@ -30,9 +30,41 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete }: AgentCardP
     return `${minutes}m ago`
   }
 
+  // Get backglow color based on status
+  const getBackglowColor = () => {
+    switch (agent.status) {
+      case 'active':
+        return 'from-green-500/20 via-emerald-500/15 to-green-400/10'
+      case 'pre-integration':
+        return 'from-yellow-500/20 via-amber-500/15 to-yellow-400/10'
+      case 'offline':
+        return 'from-red-500/20 via-rose-500/15 to-red-400/10'
+      default:
+        return 'from-blue-500/20 via-purple-500/15 to-blue-400/10'
+    }
+  }
+
   return (
-    <Card className="hover:border-primary/50 transition-colors">
-      <CardHeader className="pb-3">
+    <div className={`
+      relative rounded-xl border border-white/20 p-0
+      backdrop-blur-md bg-gradient-to-br from-white/10 to-white/5
+      transition-all duration-300 cursor-pointer
+      hover:scale-[1.02] hover:border-white/30
+      active:scale-[0.98] sm:hover:scale-[1.02]
+      shadow-lg hover:shadow-xl
+      overflow-hidden group
+      touch-manipulation
+    `}>
+      {/* Backglow effect - status-based */}
+      <div className={`
+        absolute -inset-0.5 sm:-inset-1 bg-gradient-to-br ${getBackglowColor()}
+        opacity-0 group-hover:opacity-100
+        transition-opacity duration-500 blur-xl sm:blur-2xl
+      `} />
+      
+      <div className="relative z-10">
+        <Card className="border-0 bg-transparent shadow-none p-0">
+      <CardHeader className="pb-3 px-5 pt-5">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <CardTitle className="text-lg">{agent.name}</CardTitle>
@@ -41,7 +73,7 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete }: AgentCardP
           <StatusBadge status={agent.status} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 px-5 pb-5">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Activity className="h-4 w-4" />
           <span>Last active: {formatLastActive(agent.lastActive)}</span>
@@ -99,5 +131,7 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete }: AgentCardP
         </div>
       </CardContent>
     </Card>
+      </div>
+    </div>
   )
 }

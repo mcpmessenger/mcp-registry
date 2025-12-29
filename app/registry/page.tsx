@@ -379,49 +379,156 @@ export default function RegistryPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">MCP Registry</h1>
-          <p className="text-muted-foreground mt-1">Manage and monitor your Model Context Protocol servers on SlashMCP.com</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">MCP Registry</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage and monitor your Model Context Protocol servers on SlashMCP.com</p>
         </div>
-        <Button className="gap-2" onClick={handleAddNew}>
+        <Button className="gap-2 w-full sm:w-auto" onClick={handleAddNew}>
           <Plus className="h-4 w-4" />
           Add New MCP
         </Button>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Total MCP Servers</p>
-          <p className="text-2xl font-bold mt-1">{statusCounts.all}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Active</p>
-          <p className="text-2xl font-bold mt-1 text-success">{statusCounts.active}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Pre-Integration</p>
-          <p className="text-2xl font-bold mt-1 text-warning">{statusCounts.preIntegration}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Offline</p>
-          <p className="text-2xl font-bold mt-1 text-destructive">{statusCounts.offline}</p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Total MCP Servers */}
+        <button
+          onClick={() => setStatusFilter("all")}
+          className={`
+            relative rounded-xl border border-white/20 p-4 sm:p-5
+            backdrop-blur-md bg-gradient-to-br from-white/10 to-white/5
+            transition-all duration-300 cursor-pointer
+            active:scale-[0.98] sm:hover:scale-[1.02] sm:hover:border-white/30
+            touch-manipulation
+            ${statusFilter === "all" 
+              ? "ring-2 ring-primary/50 ring-offset-1 sm:ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(59,130,246,0.5)] sm:shadow-[0_0_30px_rgba(59,130,246,0.6)]" 
+              : "shadow-lg sm:hover:shadow-xl"
+            }
+            overflow-hidden group w-full
+          `}
+        >
+          {/* Backglow effect - ATM style */}
+          <div className={`
+            absolute -inset-0.5 sm:-inset-1 bg-gradient-to-br from-blue-500/40 via-purple-500/30 to-blue-400/20 
+            ${statusFilter === "all" ? "opacity-100" : "opacity-0 sm:group-hover:opacity-60"} 
+            transition-opacity duration-500 blur-xl sm:blur-2xl
+          `} />
+          
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm text-muted-foreground/80 font-medium">Total MCP Servers</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-1 sm:mt-2 bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
+              {statusCounts.all}
+            </p>
+          </div>
+        </button>
+
+        {/* Active */}
+        <button
+          onClick={() => setStatusFilter("active")}
+          className={`
+            relative rounded-xl border border-white/20 p-4 sm:p-5
+            backdrop-blur-md bg-gradient-to-br from-green-500/10 to-emerald-500/5
+            transition-all duration-300 cursor-pointer
+            active:scale-[0.98] sm:hover:scale-[1.02] sm:hover:border-green-400/40
+            touch-manipulation
+            ${statusFilter === "active" 
+              ? "ring-2 ring-green-500/50 ring-offset-1 sm:ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(34,197,94,0.5)] sm:shadow-[0_0_30px_rgba(34,197,94,0.6)]" 
+              : "shadow-lg sm:hover:shadow-xl"
+            }
+            overflow-hidden group w-full
+          `}
+        >
+          {/* Backglow effect - green ATM style */}
+          <div className={`
+            absolute -inset-0.5 sm:-inset-1 bg-gradient-to-br from-green-500/50 via-emerald-500/40 to-green-400/30 
+            ${statusFilter === "active" ? "opacity-100" : "opacity-0 sm:group-hover:opacity-60"} 
+            transition-opacity duration-500 blur-xl sm:blur-2xl
+          `} />
+          
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm text-muted-foreground/80 font-medium">Active</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-1 sm:mt-2 text-success drop-shadow-[0_0_8px_rgba(34,197,94,0.3)] sm:drop-shadow-[0_0_12px_rgba(34,197,94,0.4)]">
+              {statusCounts.active}
+            </p>
+          </div>
+        </button>
+
+        {/* Pre-Integration */}
+        <button
+          onClick={() => setStatusFilter("pre-integration")}
+          className={`
+            relative rounded-xl border border-white/20 p-4 sm:p-5
+            backdrop-blur-md bg-gradient-to-br from-yellow-500/10 to-amber-500/5
+            transition-all duration-300 cursor-pointer
+            active:scale-[0.98] sm:hover:scale-[1.02] sm:hover:border-yellow-400/40
+            touch-manipulation
+            ${statusFilter === "pre-integration" 
+              ? "ring-2 ring-yellow-500/50 ring-offset-1 sm:ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(234,179,8,0.5)] sm:shadow-[0_0_30px_rgba(234,179,8,0.6)]" 
+              : "shadow-lg sm:hover:shadow-xl"
+            }
+            overflow-hidden group w-full
+          `}
+        >
+          {/* Backglow effect - yellow ATM style */}
+          <div className={`
+            absolute -inset-0.5 sm:-inset-1 bg-gradient-to-br from-yellow-500/50 via-amber-500/40 to-yellow-400/30 
+            ${statusFilter === "pre-integration" ? "opacity-100" : "opacity-0 sm:group-hover:opacity-60"} 
+            transition-opacity duration-500 blur-xl sm:blur-2xl
+          `} />
+          
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm text-muted-foreground/80 font-medium">Pre-Integration</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-1 sm:mt-2 text-warning drop-shadow-[0_0_8px_rgba(234,179,8,0.3)] sm:drop-shadow-[0_0_12px_rgba(234,179,8,0.4)]">
+              {statusCounts.preIntegration}
+            </p>
+          </div>
+        </button>
+
+        {/* Offline */}
+        <button
+          onClick={() => setStatusFilter("offline")}
+          className={`
+            relative rounded-xl border border-white/20 p-4 sm:p-5
+            backdrop-blur-md bg-gradient-to-br from-red-500/10 to-rose-500/5
+            transition-all duration-300 cursor-pointer
+            active:scale-[0.98] sm:hover:scale-[1.02] sm:hover:border-red-400/40
+            touch-manipulation
+            ${statusFilter === "offline" 
+              ? "ring-2 ring-red-500/50 ring-offset-1 sm:ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(239,68,68,0.5)] sm:shadow-[0_0_30px_rgba(239,68,68,0.6)]" 
+              : "shadow-lg sm:hover:shadow-xl"
+            }
+            overflow-hidden group w-full
+          `}
+        >
+          {/* Backglow effect - red ATM style */}
+          <div className={`
+            absolute -inset-0.5 sm:-inset-1 bg-gradient-to-br from-red-500/50 via-rose-500/40 to-red-400/30 
+            ${statusFilter === "offline" ? "opacity-100" : "opacity-0 sm:group-hover:opacity-60"} 
+            transition-opacity duration-500 blur-xl sm:blur-2xl
+          `} />
+          
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm text-muted-foreground/80 font-medium">Offline</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-1 sm:mt-2 text-destructive drop-shadow-[0_0_8px_rgba(239,68,68,0.3)] sm:drop-shadow-[0_0_12px_rgba(239,68,68,0.4)]">
+              {statusCounts.offline}
+            </p>
+          </div>
+        </button>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search MCP servers by name or endpoint..."
+            placeholder="Search MCP servers..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 text-sm sm:text-base"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>

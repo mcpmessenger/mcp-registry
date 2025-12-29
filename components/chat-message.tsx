@@ -104,36 +104,46 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
   return (
     <div className={cn("flex gap-3 py-4", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs">AI</AvatarFallback>
+        <Avatar className="h-8 w-8 shrink-0 ring-2 ring-white/20 backdrop-blur-sm">
+          <AvatarFallback className="bg-gradient-to-br from-green-500/20 to-emerald-500/10 text-foreground text-xs border border-white/20">AI</AvatarFallback>
         </Avatar>
       )}
 
       <div className={cn("flex flex-col gap-2 max-w-[85%] sm:max-w-[70%] w-full", isUser && "items-end")}>
         {message.agentName && (
-          <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
+          <div className="flex items-center gap-2 px-3 py-1 rounded-lg backdrop-blur-md bg-white/10 border border-white/20 text-xs text-foreground/80">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
             Routed to {message.agentName}
           </div>
         )}
 
         {message.contextAttachment && (
-          <div className="rounded-lg border border-border bg-muted/30 p-2 flex items-center gap-2 text-xs">
+          <div className="rounded-lg border border-white/20 backdrop-blur-md bg-white/10 p-2 flex items-center gap-2 text-xs">
             {message.contextAttachment.type === "image" ? (
-              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+              <ImageIcon className="h-4 w-4 text-foreground/70" />
             ) : (
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <FileText className="h-4 w-4 text-foreground/70" />
             )}
-            <span className="text-muted-foreground">{message.contextAttachment.name || "Attachment"}</span>
+            <span className="text-foreground/70">{message.contextAttachment.name || "Attachment"}</span>
           </div>
         )}
 
-        <div
-          className={cn(
-            "rounded-2xl px-4 py-3 text-sm leading-relaxed",
-            isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+        <div className="relative group">
+          {/* Backglow effect - different colors for user vs assistant */}
+          {isUser ? (
+            <div className="absolute -inset-0.5 bg-gradient-to-br from-blue-500/40 via-cyan-500/30 to-blue-400/20 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          ) : (
+            <div className="absolute -inset-0.5 bg-gradient-to-br from-green-500/30 via-emerald-500/20 to-green-400/15 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           )}
-        >
+          
+          <div
+            className={cn(
+              "relative rounded-2xl px-4 py-3 text-sm leading-relaxed backdrop-blur-md border border-white/20",
+              isUser 
+                ? "bg-gradient-to-br from-blue-500/20 to-cyan-500/10 text-foreground shadow-lg" 
+                : "bg-gradient-to-br from-white/15 to-white/5 text-foreground shadow-lg",
+            )}
+          >
           <div className="whitespace-pre-wrap break-words">
             {renderContentWithLinks(message.content)}
           </div>
@@ -152,6 +162,7 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
               />
             </div>
           )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 px-1">
@@ -165,8 +176,8 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
       </div>
 
       {isUser && (
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">U</AvatarFallback>
+        <Avatar className="h-8 w-8 shrink-0 ring-2 ring-white/20 backdrop-blur-sm">
+          <AvatarFallback className="bg-gradient-to-br from-blue-500/20 to-cyan-500/10 text-foreground text-xs border border-white/20">U</AvatarFallback>
         </Avatar>
       )}
     </div>
