@@ -1,366 +1,256 @@
 # Deployment Guide
 
-Complete guide for deploying the MCP Registry platform to production.
+This guide explains how to deploy the MCP Registry application:
+- **Backend**: Google Cloud Run
+- **Frontend**: Vercel
 
-## Deployment Architecture
+## Prerequisites
 
+### For Backend (GCP Cloud Run)
+- Google Cloud SDK (`gcloud`) installed and configured
+- A GCP project with billing enabled
+- Cloud Build API enabled
+- Cloud Run API enabled
+- Artifact Registry API enabled (for container images)
+
+### For Frontend (Vercel)
+- Vercel account (free tier works)
+- Vercel CLI installed (optional, can use web interface)
+
+## Backend Deployment (Google Cloud Run)
+
+### 1. Initial Setup
+
+```powershell
+# Navigate to backend directory
+cd backend
+
+# Authenticate with Google Cloud
+gcloud auth login
+
+# Set your project
+gcloud config set project 554655392699
+
+# Enable required APIs
+gcloud services enable cloudbuild.googleapis.com
+gcloud services enable run.googleapis.com
+gcloud services enable artifactregistry.googleapis.com
 ```
-┌─────────────────────────────────────────┐
-│  Vercel (Frontend)                      │
-│  https://mcp-registry.vercel.app       │
-└────────────────────┬────────────────────┘
-                     │ HTTPS
-┌────────────────────▼────────────────────┐
-│  GCP Cloud Run (Backend API)            │
-│  - Auto-scaling                         │
-│  - Pay-per-use                          │
-│  - HTTPS by default                     │
-└────────────────────┬────────────────────┘
-                     │
-┌────────────────────▼────────────────────┐
-│  Cloud SQL (PostgreSQL)                 │
-│  - Managed database                     │
-│  - Automated backups                    │
-└────────────────────┬────────────────────┘
-                     │
-┌────────────────────▼────────────────────┐
-│  Kafka/Cloud Pub/Sub (Event Bus)        │
-│  - Message queue                        │
-└─────────────────────────────────────────┘
+
+### 2. Configure Environment Variables
+
+Create a `.env` file in the `backend/` directory based on `env.example.txt`:
+
+```bash
+# Database - Use Cloud SQL connection string or keep SQLite for testing
+DATABASE_URL="postgresql://user:password@/database?host=/cloudsql/project:region:instance"
+
+# Server
+PORT=8080
+NODE_ENV=production
+CORS_ORIGIN="https://your-vercel-app.vercel.app"
+
+# Google APIs (store in Secret Manager for production)
+GOOGLE_GEMINI_API_KEY=your_gemini_key
+GOOGLE_VISION_API_KEY=your_vision_key
+
+# OpenAI (for Whisper transcription)
+OPENAI_API_KEY=your_openai_key
+
+# Kafka (optional - leave empty to disable)
+KAFKA_BROKERS=
+ENABLE_KAFKA=false
+
+# Encryption keys
+ENCRYPTION_SECRET=your_secret
+ENCRYPTION_SALT=your_salt
+```
+
+**Important Security Notes:**
+- For production, store sensitive values (API keys, secrets) in [Secret Manager](https://cloud.google.com/secret-manager)
+- Format in `.env` for secrets: `GOOGLE_GEMINI_API_KEY=gemini-api-key:latest`
+- The deployment script will automatically use Secret Manager if values end with `:latest`
+
+### 3. Deploy Backend
+
+```powershell
+# From the backend/ directory
+.\deploy.ps1
+```
+
+Or using bash:
+```bash
+cd backend
+bash deploy.sh
+```
+
+The script will:
+1. Build the Docker image
+2. Push it to Artifact Registry
+3. Deploy to Cloud Run with environment variables
+4. Output the service URL
+
+### 4. Update Environment Variables Only
+
+If you only need to update environment variables without rebuilding:
+
+```powershell
+.\deploy.ps1 -SetEnvVars
+```
+
+### 5. Verify Deployment
+
+```powershell
+# Get the service URL
+$url = (gcloud run services describe mcp-registry-backend --region us-central1 --format 'value(status.url)')
+
+# Test health endpoint
+curl "$url/health"
 ```
 
 ## Frontend Deployment (Vercel)
 
-The frontend is already configured for Vercel deployment.
-
-### Deploy to Vercel
-
-1. **Connect Repository**:
-   - Go to [Vercel Dashboard](https://vercel.com/dashboard)
-   - Import your GitHub repository
-   - Set root directory to `mcp-registry-main/`
-
-2. **Configure Build Settings**:
-   - Framework Preset: Next.js
-   - Build Command: `pnpm build`
-   - Output Directory: `.next`
-   - Install Command: `pnpm install`
-
-3. **Environment Variables**:
-   ```
-   NEXT_PUBLIC_API_URL=https://your-backend-url.run.app
-   ```
-
-4. **Deploy**: Vercel will automatically deploy on every push to main.
-
-See [Vercel Documentation](https://vercel.com/docs) for more details.
-
-## Backend Deployment (GCP Cloud Run)
-
-### Prerequisites
-
-- GCP account with billing enabled
-- `gcloud` CLI installed and configured
-- Docker installed (for local testing)
-
-### Step 1: Set Up GCP Project
+### Option 1: Deploy via Vercel CLI
 
 ```bash
-# Login
-gcloud auth login
+# Install Vercel CLI if not already installed
+npm i -g vercel
 
-# Create/select project
-gcloud projects create mcp-registry-prod
-gcloud config set project mcp-registry-prod
+# Login to Vercel
+vercel login
 
-# Enable billing (required)
-# Do this in GCP Console: https://console.cloud.google.com/billing
+# Deploy (from project root)
+vercel
+
+# For production deployment
+vercel --prod
 ```
 
-### Step 2: Enable Required APIs
+### Option 2: Deploy via Vercel Dashboard
 
-```bash
-gcloud services enable \
-  run.googleapis.com \
-  sqladmin.googleapis.com \
-  cloudbuild.googleapis.com \
-  secretmanager.googleapis.com \
-  pubsub.googleapis.com \
-  containerregistry.googleapis.com
+1. Go to [vercel.com](https://vercel.com)
+2. Click "Add New Project"
+3. Import your Git repository
+4. Configure project:
+   - **Framework Preset**: Next.js
+   - **Root Directory**: `.` (root)
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `.next`
+   - **Install Command**: `npm install`
+
+### 3. Configure Environment Variables in Vercel
+
+In the Vercel dashboard:
+1. Go to your project → Settings → Environment Variables
+2. Add the following:
+
+```
+NEXT_PUBLIC_API_URL=https://mcp-registry-backend-554655392699.us-central1.run.app
 ```
 
-### Step 3: Create Cloud SQL Database
+**Replace with your actual Cloud Run service URL from step 5 above.**
 
-```bash
-# Create PostgreSQL instance
-gcloud sql instances create mcp-registry-db \
-  --database-version=POSTGRES_15 \
-  --tier=db-n1-standard-1 \
-  --region=us-central1 \
-  --root-password=YOUR_SECURE_PASSWORD
+### 4. Update Backend CORS
 
-# Create database
-gcloud sql databases create mcp_registry \
-  --instance=mcp-registry-db
+After deploying the frontend, update the backend CORS to allow your Vercel domain:
 
-# Get connection name (needed later)
-export DB_CONNECTION_NAME=$(gcloud sql instances describe mcp-registry-db \
-  --format="value(connectionName)")
+```powershell
+cd backend
+
+# Update CORS_ORIGIN in .env
+# CORS_ORIGIN="https://your-app.vercel.app"
+
+# Redeploy with updated env vars
+.\deploy.ps1 -SetEnvVars
 ```
 
-### Step 4: Store Secrets
-
-```bash
-# Store API keys securely
-echo -n "your-gemini-key" | gcloud secrets create google-gemini-api-key --data-file=-
-echo -n "your-vision-key" | gcloud secrets create google-vision-api-key --data-file=-
-echo -n "your-openai-key" | gcloud secrets create openai-api-key --data-file=-
-echo -n "your-encryption-secret" | gcloud secrets create encryption-secret --data-file=-
-echo -n "your-encryption-salt" | gcloud secrets create encryption-salt --data-file=-
-echo -n "YOUR_SECURE_PASSWORD" | gcloud secrets create db-password --data-file=-
+Or set it directly:
+```powershell
+gcloud run services update mcp-registry-backend `
+    --region us-central1 `
+    --update-env-vars CORS_ORIGIN="https://your-app.vercel.app"
 ```
 
-### Step 5: Build and Deploy
+### 5. Verify Frontend Deployment
 
-```bash
-export PROJECT_ID=$(gcloud config get-value project)
-export FRONTEND_URL="https://your-app.vercel.app"
+1. Visit your Vercel deployment URL
+2. Check browser console for API connection
+3. Test the health endpoint via the frontend
 
-# Build container
-gcloud builds submit --tag gcr.io/$PROJECT_ID/mcp-registry-backend ./backend
+## Post-Deployment Checklist
 
-# Deploy to Cloud Run
-gcloud run deploy mcp-registry-backend \
-  --image gcr.io/$PROJECT_ID/mcp-registry-backend \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --add-cloudsql-instances $DB_CONNECTION_NAME \
-  --set-env-vars "NODE_ENV=production,PORT=3001,CORS_ORIGIN=$FRONTEND_URL" \
-  --set-secrets "GOOGLE_GEMINI_API_KEY=google-gemini-api-key:latest,GOOGLE_VISION_API_KEY=google-vision-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ENCRYPTION_SECRET=encryption-secret:latest,ENCRYPTION_SALT=encryption-salt:latest" \
-  --set-env-vars "DATABASE_URL=postgresql://postgres:$(gcloud secrets versions access latest --secret=db-password)@/$DB_CONNECTION_NAME/mcp_registry?host=/cloudsql/$DB_CONNECTION_NAME" \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 300 \
-  --max-instances 10 \
-  --min-instances 1
-
-# Get service URL
-export SERVICE_URL=$(gcloud run services describe mcp-registry-backend \
-  --platform managed \
-  --region us-central1 \
-  --format="value(status.url)")
-echo "✅ Backend deployed to: $SERVICE_URL"
-```
-
-### Step 6: Run Database Migrations
-
-```bash
-# Create migration job
-gcloud run jobs create migrate-db \
-  --image gcr.io/$PROJECT_ID/mcp-registry-backend \
-  --region us-central1 \
-  --add-cloudsql-instances $DB_CONNECTION_NAME \
-  --set-env-vars "NODE_ENV=production" \
-  --set-secrets "GOOGLE_GEMINI_API_KEY=google-gemini-api-key:latest" \
-  --set-env-vars "DATABASE_URL=postgresql://postgres:$(gcloud secrets versions access latest --secret=db-password)@/$DB_CONNECTION_NAME/mcp_registry?host=/cloudsql/$DB_CONNECTION_NAME" \
-  --command npm \
-  --args "run,migrate:deploy"
-
-# Execute migration
-gcloud run jobs execute migrate-db --region us-central1
-```
-
-### Step 6.5: Seed Stock MCP Servers
-
-After migrations, seed the default stock servers (Playwright, LangChain, Google Maps, Valuation):
-
-```bash
-# Create seed job
-gcloud run jobs create seed-stock-servers \
-  --image gcr.io/$PROJECT_ID/mcp-registry-backend \
-  --region us-central1 \
-  --add-cloudsql-instances $DB_CONNECTION_NAME \
-  --set-env-vars "NODE_ENV=production" \
-  --set-secrets "GOOGLE_GEMINI_API_KEY=google-gemini-api-key:latest" \
-  --set-env-vars "DATABASE_URL=postgresql://postgres:$(gcloud secrets versions access latest --secret=db-password)@/$DB_CONNECTION_NAME/mcp_registry?host=/cloudsql/$DB_CONNECTION_NAME" \
-  --command npm \
-  --args "run,seed"
-
-# Execute seed job
-gcloud run jobs execute seed-stock-servers --region us-central1
-```
-
-See [Seed Stock Servers Guide](SEED_STOCK_SERVERS.md) for detailed instructions.
-
-### Step 7: Update Frontend Environment
-
-In Vercel dashboard, update:
-```
-NEXT_PUBLIC_API_URL=$SERVICE_URL
-```
-
-## Event Bus Setup (Kafka)
-
-### Option A: Confluent Cloud (Recommended)
-
-1. Sign up at [Confluent Cloud](https://www.confluent.io/confluent-cloud/)
-2. Create cluster in same region (us-central1)
-3. Get broker endpoints
-4. Update Cloud Run:
-
-```bash
-gcloud run services update mcp-registry-backend \
-  --region us-central1 \
-  --update-env-vars "KAFKA_BROKERS=pkc-xxxxx.us-central1.gcp.confluent.cloud:9092"
-```
-
-### Option B: Cloud Pub/Sub
-
-Cloud Pub/Sub can replace Kafka. Update event-bus service to use Pub/Sub client.
-
-## CI/CD Setup
-
-### Cloud Build Trigger
-
-Create `.cloudbuild.yaml` in repository root:
-
-```yaml
-steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mcp-registry-backend', './backend']
-  
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/mcp-registry-backend']
-  
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'mcp-registry-backend'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/mcp-registry-backend'
-      - '--region'
-      - 'us-central1'
-      - '--platform'
-      - 'managed'
-
-images:
-  - 'gcr.io/$PROJECT_ID/mcp-registry-backend'
-```
-
-Create trigger:
-```bash
-gcloud builds triggers create github \
-  --repo-name=mcp-registry \
-  --repo-owner=YOUR_GITHUB_USERNAME \
-  --branch-pattern="^main$" \
-  --build-config=backend/cloudbuild.yaml
-```
-
-## Monitoring & Logging
-
-### View Logs
-
-```bash
-# Stream logs
-gcloud run services logs read mcp-registry-backend \
-  --region us-central1 \
-  --follow
-```
-
-### Set Up Alerts
-
-In [Cloud Monitoring](https://console.cloud.google.com/monitoring):
-- High error rate
-- High latency
-- Low availability
-- Database connection errors
-
-## Security Best Practices
-
-1. ✅ Use Secret Manager for all API keys
-2. ✅ Enable VPC Connector for private Cloud SQL access
-3. ✅ Set up IAM with least privilege
-4. ✅ Enable Cloud Armor for DDoS protection
-5. ✅ Use Cloud SQL Private IP
-6. ✅ Enable audit logs
-
-## Cost Estimation
-
-**Monthly estimates** (varies by usage):
-- Cloud Run: ~$20-50 (2Gi memory, 2 CPU)
-- Cloud SQL (db-n1-standard-1): ~$50
-- Confluent Cloud: ~$20-100 (based on data volume)
-- **Total: ~$90-200/month**
+- [ ] Backend is accessible at Cloud Run URL
+- [ ] Frontend is accessible at Vercel URL
+- [ ] Frontend environment variable `NEXT_PUBLIC_API_URL` is set
+- [ ] Backend `CORS_ORIGIN` includes your Vercel domain
+- [ ] Health check endpoint responds: `https://your-backend-url/health`
+- [ ] Database migrations have been run (if using PostgreSQL)
+- [ ] API keys are stored securely (Secret Manager for GCP)
+- [ ] SSL certificates are working (automatic for both platforms)
 
 ## Troubleshooting
 
-### Database Connection Issues
+### Backend Issues
 
-```bash
-# Check instance status
-gcloud sql instances describe mcp-registry-db
+**Build fails:**
+- Check Dockerfile syntax
+- Verify all dependencies in package.json
+- Check Cloud Build logs: `gcloud builds list`
 
-# Verify Cloud SQL connection
-gcloud run services update mcp-registry-backend \
-  --region us-central1 \
-  --add-cloudsql-instances $DB_CONNECTION_NAME
-```
+**Deployment fails:**
+- Verify gcloud authentication: `gcloud auth list`
+- Check Cloud Run quotas
+- Review Cloud Run logs: `gcloud run services logs read mcp-registry-backend --region us-central1`
 
-### Service Not Starting
+**CORS errors:**
+- Verify `CORS_ORIGIN` environment variable matches your frontend URL exactly
+- Check Cloud Run service logs for CORS error details
 
-```bash
-# Check logs
-gcloud run services logs read mcp-registry-backend \
-  --region us-central1 \
-  --limit 50
-```
+### Frontend Issues
 
-### Build Failures
+**API connection fails:**
+- Verify `NEXT_PUBLIC_API_URL` is set correctly in Vercel
+- Check browser console for exact error
+- Verify backend URL is accessible from browser
+- Check CORS configuration in backend
 
-```bash
-# Test build locally
-cd backend
-docker build -t mcp-registry-backend .
-docker run -p 3001:3001 mcp-registry-backend
+**Build fails:**
+- Check Vercel build logs
+- Verify all dependencies in package.json
+- Check for TypeScript errors (if not ignored)
 
-# Check Cloud Build logs
-gcloud builds list --limit=5
-gcloud builds log BUILD_ID
-```
+## Continuous Deployment
 
-## Testing Deployment
+Both platforms support automatic deployments:
 
-```bash
-# Health check
-curl $SERVICE_URL/health
+- **Vercel**: Automatically deploys on push to main branch
+- **Cloud Run**: Set up Cloud Build triggers for automatic deployments on push
 
-# Test registry
-curl $SERVICE_URL/v0.1/servers
+## Cost Estimates
 
-# Test from frontend
-# Navigate to your Vercel app and verify it can connect
-```
+### Google Cloud Run
+- **Free tier**: 2 million requests/month, 360,000 GB-seconds memory
+- **Pricing**: Pay-per-use, scales to zero when idle
+- Estimated cost: $5-20/month for moderate traffic
 
-## Next Steps
+### Vercel
+- **Free tier**: 100 GB bandwidth/month, unlimited builds
+- **Pricing**: Free for hobby projects, Pro starts at $20/month
+- Estimated cost: $0-20/month depending on traffic
 
-1. Set up custom domain (optional)
-2. Enable Cloud CDN
-3. Configure monitoring dashboards
-4. Set up automated backups for Cloud SQL
-5. Configure auto-scaling policies
+## Security Best Practices
 
-## Additional Resources
+1. **Never commit `.env` files** - Use `.gitignore`
+2. **Use Secret Manager** for sensitive values in production
+3. **Enable authentication** on Cloud Run for internal services (optional)
+4. **Set up monitoring** with Cloud Monitoring and Vercel Analytics
+5. **Regularly update dependencies** and scan for vulnerabilities
 
-- [Cloud Run Documentation](https://cloud.google.com/run/docs)
-- [Cloud SQL Documentation](https://cloud.google.com/sql/docs/postgres)
-- [Secret Manager Documentation](https://cloud.google.com/secret-manager/docs)
-- [Vercel Documentation](https://vercel.com/docs)
+## Support
 
-
-
-
-
+For issues or questions:
+- Check Cloud Run logs: `gcloud run services logs read mcp-registry-backend --region us-central1`
+- Check Vercel logs in the dashboard
+- Review this deployment guide
+- Check backend and frontend logs in their respective platforms
 
