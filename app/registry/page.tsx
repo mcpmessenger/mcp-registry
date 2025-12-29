@@ -403,10 +403,10 @@ export default function RegistryPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">MCP Registry</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage and monitor your Model Context Protocol servers on SlashMCP.com</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
+        <div className="space-y-2">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">MCP Registry</h1>
+          <p className="text-sm sm:text-base text-muted-foreground/80">Manage and monitor your Model Context Protocol servers on SlashMCP.com</p>
         </div>
         <Button className="gap-2 w-full sm:w-auto" onClick={handleAddNew}>
           <Plus className="h-4 w-4" />
