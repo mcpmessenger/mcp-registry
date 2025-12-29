@@ -26,7 +26,7 @@ export function DeleteAgentDialog({ agent, open, onOpenChange, onConfirm }: Dele
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+          <AlertDialogTitle>Delete MCP Server</AlertDialogTitle>
           <AlertDialogDescription className="space-y-2">
             <p>
               Are you sure you want to de-register <span className="font-semibold text-foreground">{agent.name}</span>?
@@ -40,7 +40,7 @@ export function DeleteAgentDialog({ agent, open, onOpenChange, onConfirm }: Dele
             onClick={onConfirm}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Delete Agent
+            Delete MCP Server
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

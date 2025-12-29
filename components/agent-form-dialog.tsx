@@ -137,20 +137,20 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{isEditing ? "Edit MCP Agent" : "Add New MCP Agent"}</DialogTitle>
+            <DialogTitle>{isEditing ? "Edit MCP Server" : "Add New MCP Server"}</DialogTitle>
             <DialogDescription>
               {isEditing
-                ? "Update the configuration for this MCP agent."
-                : "Register a new Model Context Protocol agent to the registry."}
+                ? "Update the configuration for this MCP server."
+                : "Register a new Model Context Protocol server to the registry."}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="name">Agent Name *</Label>
+              <Label htmlFor="name">Server Name *</Label>
               <Input
                 id="name"
-                placeholder="e.g., Vision Agent"
+                placeholder="e.g., GitHub MCP Server"
                 value={formData.name}
                 onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 required
@@ -181,7 +181,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                 <Input
                   id="endpoint"
                   type="url"
-                  placeholder="https://agent.example.com/api"
+                  placeholder="https://mcp.example.com/api"
                   value={formData.endpoint}
                   onChange={(e) => setFormData((prev) => ({ ...prev, endpoint: e.target.value }))}
                   required
@@ -276,7 +276,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                 Cancel
               </Button>
               <Button type="submit" disabled={!isFormValid}>
-                {isEditing ? "Save Changes" : "Register Agent"}
+                {isEditing ? "Save Changes" : "Register MCP Server"}
               </Button>
             </div>
           </form>

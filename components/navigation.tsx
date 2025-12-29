@@ -32,8 +32,8 @@ export function Navigation() {
     <nav className="border-b border-border bg-card">
       <div className="flex h-16 items-center px-6">
         <div className="flex items-center gap-3">
-          <Image src="/logo.png" alt="SlashMCP.com" width={32} height={32} />
-          <h1 className="text-lg font-semibold">SlashMCP.com</h1>
+          <Image src="/logo.png" alt="Slash MCP" width={32} height={32} />
+          <h1 className="text-lg font-semibold">Slash MCP</h1>
         </div>
         <div className="ml-12 flex items-center gap-1">
           {navItems.map((item) => {

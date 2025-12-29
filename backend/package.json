@@ -18,6 +18,7 @@
     "seed": "ts-node src/scripts/seed-mcp-server.ts",
     "seed:all": "ts-node src/scripts/seed-mcp-server.ts",
     "register-official": "ts-node src/scripts/register-official-servers.ts",
+    "register-top-20": "ts-node src/scripts/register-top-20-servers.ts",
     "register-valuation": "ts-node src/scripts/register-valuation-server.ts",
     "restore-stock-servers": "ts-node src/scripts/seed-mcp-server.ts",
     "update-playwright-http": "ts-node src/scripts/update-playwright-to-http.ts",

@@ -12,7 +12,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "SlashMCP.com - Mission Control",
-  description: "Model Context Protocol Agent Registry and Management Platform",
+  description: "Model Context Protocol Server Registry and Management Platform",
   generator: "v0.app",
   icons: {
     icon: [

@@ -1,0 +1,164 @@
+[
+  {
+    "id": "playwright",
+    "name": "Playwright",
+    "description": "Browser automation and web scraping.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-playwright"],
+    "env": []
+  },
+  {
+    "id": "github",
+    "name": "GitHub",
+    "description": "Manage repositories, issues, and PRs.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+  },
+  {
+    "id": "google-maps",
+    "name": "Google Maps",
+    "description": "Location services and place details.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-google-maps"],
+    "env": ["GOOGLE_MAPS_API_KEY"]
+  },
+  {
+    "id": "postgres",
+    "name": "Postgres",
+    "description": "Read-only and write access to PostgreSQL databases.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-postgres"],
+    "env": ["DATABASE_URL"]
+  },
+  {
+    "id": "slack",
+    "name": "Slack",
+    "description": "Channel management and messaging.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-slack"],
+    "env": ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]
+  },
+  {
+    "id": "filesystem",
+    "name": "Filesystem",
+    "description": "Local file system access.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+    "env": [],
+    "requires_args": true
+  },
+  {
+    "id": "brave-search",
+    "name": "Brave Search",
+    "description": "Web search via Brave API.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+    "env": ["BRAVE_API_KEY"]
+  },
+  {
+    "id": "memory",
+    "name": "Memory",
+    "description": "Graph-based memory for context persistence.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-memory"],
+    "env": []
+  },
+  {
+    "id": "exa",
+    "name": "Exa Search",
+    "description": "Neural search engine integration.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-exa"],
+    "env": ["EXA_API_KEY"]
+  },
+  {
+    "id": "aws",
+    "name": "AWS",
+    "description": "AWS Resource management.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-aws"],
+    "env": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]
+  },
+  {
+    "id": "stripe",
+    "name": "Stripe",
+    "description": "Payment and subscription management.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-stripe"],
+    "env": ["STRIPE_API_KEY"]
+  },
+  {
+    "id": "redis",
+    "name": "Redis",
+    "description": "Key-value store interaction.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-redis"],
+    "env": ["REDIS_URL"]
+  },
+  {
+    "id": "docker",
+    "name": "Docker",
+    "description": "Container and image orchestration.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-docker"],
+    "env": []
+  },
+  {
+    "id": "kubernetes",
+    "name": "Kubernetes",
+    "description": "K8s cluster inspection.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-kubernetes"],
+    "env": []
+  },
+  {
+    "id": "gitlab",
+    "name": "GitLab",
+    "description": "GitLab DevOps platform integration.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-gitlab"],
+    "env": ["GITLAB_PERSONAL_ACCESS_TOKEN"]
+  },
+  {
+    "id": "supabase",
+    "name": "Supabase",
+    "description": "Supabase project management.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-supabase"],
+    "env": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]
+  },
+  {
+    "id": "snowflake",
+    "name": "Snowflake",
+    "description": "Data warehouse querying.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-snowflake"],
+    "env": ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"]
+  },
+  {
+    "id": "zapier",
+    "name": "Zapier",
+    "description": "Workflow automation via Zapier NLA.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-zapier"],
+    "env": ["ZAPIER_NLA_API_KEY"]
+  },
+  {
+    "id": "shopify",
+    "name": "Shopify",
+    "description": "E-commerce store management.",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-shopify"],
+    "env": ["SHOPIFY_SHOP_NAME", "SHOPIFY_API_PASSWORD"]
+  },
+  {
+    "id": "context7",
+    "name": "Context7",
+    "description": "Real-time documentation and code context.",
+    "command": "npx",
+    "args": ["-y", "@context7/mcp-server"],
+    "env": ["CONTEXT7_API_KEY"]
+  }
+]
+
