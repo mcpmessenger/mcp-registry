@@ -277,7 +277,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       })
       setServerType("http")
     }
-  }, [agent?.id, agent?.name, agent?.endpoint, agent?.manifest, agent?.httpHeaders])
+  }, [agent?.id, agent?.name, agent?.endpoint, agent?.manifest, agent?.httpHeaders, agent?.metadata])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
