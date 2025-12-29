@@ -151,7 +151,7 @@ export default function RegistryPage() {
       if (!isStdioServer && (!data.endpoint || data.endpoint.trim() === '')) {
         toast({
           title: "Endpoint required",
-          description: "Please provide an endpoint URL for HTTP-based MCP agents.",
+          description: "Please provide an endpoint URL for HTTP-based MCP servers.",
           variant: "destructive",
         })
         return
@@ -160,7 +160,7 @@ export default function RegistryPage() {
       if (isStdioServer && (!(data as any).command || !(data as any).args)) {
         toast({
           title: "Command and Args required",
-          description: "Please provide command and arguments for STDIO-based MCP agents.",
+          description: "Please provide command and arguments for STDIO-based MCP servers.",
           variant: "destructive",
         })
         return
@@ -315,14 +315,14 @@ export default function RegistryPage() {
         // Update existing server
         await updateServer(editingAgent.id, publishData)
         toast({
-          title: "Agent updated",
+          title: "MCP server updated",
           description: `${name} has been successfully updated.`,
         })
       } else {
         // Create new server
         await publishServer(publishData)
         toast({
-          title: "Agent registered",
+          title: "MCP server registered",
           description: `${name} has been successfully registered.`,
         })
       }
@@ -348,7 +348,7 @@ export default function RegistryPage() {
     try {
       await deleteServer(deletingAgent.id)
       toast({
-        title: "Agent deleted",
+        title: "MCP server deleted",
         description: `${deletingAgent.name} has been removed from the registry.`,
         variant: "destructive",
       })
@@ -382,18 +382,18 @@ export default function RegistryPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">MCP Agent Registry</h1>
-          <p className="text-muted-foreground mt-1">Manage and monitor your Model Context Protocol agents on SlashMCP.com</p>
+          <h1 className="text-3xl font-bold tracking-tight">MCP Registry</h1>
+          <p className="text-muted-foreground mt-1">Manage and monitor your Model Context Protocol servers on SlashMCP.com</p>
         </div>
         <Button className="gap-2" onClick={handleAddNew}>
           <Plus className="h-4 w-4" />
-          Add New Agent
+          Add New MCP
         </Button>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Total Agents</p>
+          <p className="text-sm text-muted-foreground">Total MCP Servers</p>
           <p className="text-2xl font-bold mt-1">{statusCounts.all}</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
@@ -414,7 +414,7 @@ export default function RegistryPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search agents by name or endpoint..."
+            placeholder="Search MCP servers by name or endpoint..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -469,7 +469,7 @@ export default function RegistryPage() {
 
           {filteredAgents.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">No agents found matching your filters.</p>
+              <p className="text-muted-foreground">No MCP servers found matching your filters.</p>
             </div>
           )}
         </>

@@ -446,8 +446,33 @@ export class RegistryService {
               return this.transformToMCPFormat(updatedServer)
             }
           }
-        } catch (error) {
-          console.error(`[Registry] Failed to discover tools for ${serverData.serverId}:`, error)
+        } catch (error: any) {
+          // Check if it's an expected error (package not found, missing env var, etc.)
+          const errorMessage = error?.message || String(error) || ''
+          const stderrMessage = error?.stderr || ''
+          const fullError = `${errorMessage} ${stderrMessage}`.toLowerCase()
+          
+          const isExpectedError = 
+            fullError.includes('404') || 
+            fullError.includes('not found') ||
+            fullError.includes('is not in this registry') ||
+            fullError.includes('e404') ||
+            fullError.includes('environment variable is not set') ||
+            fullError.includes('missing required') ||
+            fullError.includes('exited with code 1')
+          
+          if (isExpectedError) {
+            // Provide more specific error message
+            if (fullError.includes('environment variable') || fullError.includes('not set')) {
+              console.log(`[Registry] Tool discovery skipped for ${serverData.serverId}: requires environment variables (tools will be discovered when env vars are configured)`)
+            } else if (fullError.includes('404') || fullError.includes('not found')) {
+              console.log(`[Registry] Tool discovery skipped for ${serverData.serverId}: npm package not found (this is expected if package doesn't exist yet)`)
+            } else {
+              console.log(`[Registry] Tool discovery skipped for ${serverData.serverId}: ${errorMessage.substring(0, 100)}`)
+            }
+          } else {
+            console.error(`[Registry] Failed to discover tools for ${serverData.serverId}:`, error)
+          }
           // Continue even if tool discovery fails - server is still registered
         }
       }
@@ -586,10 +611,12 @@ export class RegistryService {
         }
       })
 
-      // Handle stderr
+      // Handle stderr - collect it for error messages
+      let stderrBuffer = ''
       proc.stderr?.on('data', (data: Buffer) => {
         const message = data.toString()
-        if (!message.includes('Downloading') && !message.includes('Installing')) {
+        stderrBuffer += message
+        if (!message.includes('Downloading') && !message.includes('Installing') && !message.includes('npm notice')) {
           console.log(`[Tool Discovery stderr]:`, message.trim())
         }
       })
@@ -603,7 +630,9 @@ export class RegistryService {
       proc.on('exit', (code) => {
         clearTimeout(timeoutId)
         if (code !== 0 && code !== null && !initialized) {
-          console.warn(`[Tool Discovery] Process exited with code ${code}`)
+          // Process exited before initialization - likely due to missing env vars or other startup error
+          const errorMsg = stderrBuffer || `Process exited with code ${code}`
+          reject(new Error(`Tool discovery failed: ${errorMsg.substring(0, 200)}`))
         }
       })
 
