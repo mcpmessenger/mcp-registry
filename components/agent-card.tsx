@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { InstallButton } from "@/components/install-button"
 import { transformAgentToServer } from "@/lib/server-utils"
 import type { MCPServer } from "@/lib/api"
+import { getLogoUrl } from "@/lib/logo-mapping"
+import Image from "next/image"
 
 interface AgentCardProps {
   agent: MCPAgent
@@ -65,10 +67,36 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete }: AgentCardP
       <div className="relative z-10">
         <Card className="border-0 bg-transparent shadow-none p-0">
       <CardHeader className="pb-3 px-5 pt-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">{agent.name}</CardTitle>
-            <CardDescription className="text-xs font-mono">{agent.endpoint}</CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Logo */}
+            {(() => {
+              const logoUrl = agent.logoUrl || getLogoUrl(agent.id, agent.name, agent.metadata)
+              if (logoUrl) {
+                return (
+                  <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 rounded-lg overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm">
+                    <Image
+                      src={logoUrl}
+                      alt={agent.name}
+                      fill
+                      className="object-contain p-1.5"
+                      sizes="(max-width: 640px) 48px, 56px"
+                    />
+                  </div>
+                )
+              }
+              return (
+                <div className="w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 border border-white/10 flex items-center justify-center">
+                  <span className="text-lg sm:text-xl font-bold text-primary">
+                    {agent.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )
+            })()}
+            <div className="space-y-1 flex-1 min-w-0">
+              <CardTitle className="text-lg truncate">{agent.name}</CardTitle>
+              <CardDescription className="text-xs font-mono truncate">{agent.endpoint}</CardDescription>
+            </div>
           </div>
           <StatusBadge status={agent.status} />
         </div>
