@@ -5,16 +5,15 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Send, Mic, Paperclip, Monitor, Loader2 } from "lucide-react"
+import { Send, Mic, Paperclip, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SlashCommandMenu } from "@/components/slash-command-menu"
 import type { AgentOption } from "@/types/chat"
 
 interface ChatInputProps {
-  onSendMessage: (message: string) => void
+  onSendMessage: (message: string, attachment?: { type: "image" | "document"; name?: string; preview?: string }) => void
   onVoiceInput: () => void
   onFileUpload: () => void
-  onGlazyrCapture: () => void
   onAgentSelect?: (agentId: string) => void
   agentOptions?: AgentOption[]
   isLoading?: boolean
@@ -24,7 +23,6 @@ export function ChatInput({
   onSendMessage,
   onVoiceInput,
   onFileUpload,
-  onGlazyrCapture,
   onAgentSelect,
   agentOptions = [],
   isLoading = false,
@@ -33,8 +31,10 @@ export function ChatInput({
   const [showSlashMenu, setShowSlashMenu] = useState(false)
   const [slashQuery, setSlashQuery] = useState("")
   const [selectedMenuIndex, setSelectedMenuIndex] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const menuContainerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Detect slash command
   useEffect(() => {
@@ -169,6 +169,45 @@ export function ChatInput({
     }, 0)
   }
 
+  // Handle drag and drop for images
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    const imageFiles = files.filter(file => file.type.startsWith('image/'))
+
+    if (imageFiles.length > 0) {
+      // Process the first image file
+      const file = imageFiles[0]
+      const reader = new FileReader()
+      
+      reader.onload = (event) => {
+        const preview = event.target?.result as string
+        onSendMessage("Can you analyze this image?", {
+          type: "image" as const,
+          name: file.name,
+          preview: preview,
+        })
+      }
+      
+      reader.readAsDataURL(file)
+    }
+  }
+
   // Calculate menu position
   const getMenuPosition = () => {
     if (!textareaRef.current) return {}
@@ -185,13 +224,26 @@ export function ChatInput({
   }
 
   return (
-    <div className="relative sticky bottom-0 z-40 w-full p-4 sm:p-6">
+    <div 
+      ref={containerRef}
+      className="relative sticky bottom-0 z-40 w-full p-4 sm:p-6"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Backlight effect - ATM style glow */}
       <div className="absolute inset-0 bg-gradient-to-t from-blue-500/40 via-cyan-500/30 to-blue-400/20 opacity-70 blur-3xl -z-10" />
       <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/20 via-blue-500/15 to-transparent opacity-50 blur-2xl -z-10" />
       
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 rounded-2xl bg-blue-500/20 border-2 border-dashed border-blue-400/50 backdrop-blur-sm flex items-center justify-center">
+          <p className="text-sm font-medium text-foreground">Drop image here to analyze</p>
+        </div>
+      )}
+      
       {/* Glassmorphic container */}
-      <div className="relative rounded-2xl border border-white/20 backdrop-blur-xl bg-gradient-to-br from-white/15 to-white/5 p-4 shadow-2xl hover:shadow-[0_0_40px_rgba(59,130,246,0.3)] transition-shadow duration-500">
+      <div className={`relative rounded-2xl border border-white/20 backdrop-blur-xl bg-gradient-to-br from-white/15 to-white/5 p-4 shadow-2xl hover:shadow-[0_0_40px_rgba(59,130,246,0.3)] transition-shadow duration-500 ${isDragging ? 'border-blue-400/50' : ''}`}>
         <div className="flex items-end gap-2 max-w-full w-full relative">
         {/* Left side buttons - microphone first, shifted right to avoid logo */}
         <div className="flex gap-2 shrink-0 relative z-50 ml-4 sm:ml-12">
@@ -214,16 +266,6 @@ export function ChatInput({
             title="Upload file"
           >
             <Paperclip className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={onGlazyrCapture}
-            className="shrink-0 bg-white/10 border-white/20 hover:bg-white/20 hover:border-white/30 backdrop-blur-sm"
-            title="Capture screen (Glazyr)"
-          >
-            <Monitor className="h-4 w-4" />
           </Button>
         </div>
 

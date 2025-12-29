@@ -7,7 +7,6 @@ import { AgentSelector } from "@/components/agent-selector"
 import { ChatInput } from "@/components/chat-input"
 import { VoiceInputDialog } from "@/components/voice-input-dialog"
 import { FileUploadDialog } from "@/components/file-upload-dialog"
-import { GlazyrCaptureDialog } from "@/components/glazyr-capture-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { getServers, generateSVG, getJobStatus, createJobProgressStream, queryOrchestrator } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
@@ -161,7 +160,6 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [voiceDialogOpen, setVoiceDialogOpen] = useState(false)
   const [fileDialogOpen, setFileDialogOpen] = useState(false)
-  const [glazyrDialogOpen, setGlazyrDialogOpen] = useState(false)
   const [agentOptions, setAgentOptions] = useState<AgentOption[]>([
     { id: "router", name: "Auto-Route (Recommended)", type: "router" },
   ])
@@ -535,7 +533,7 @@ export default function ChatPage() {
             }
             // Don't throw - use the responseContent we set above
           }
-        } else if (attachment?.type === "image" || attachment?.type === "glazyr") {
+        } else if (attachment?.type === "image") {
           // Route to Vision MCP or document analysis
           targetServer = availableServers.find(s => 
             s.serverId.includes('vision') || 
@@ -1459,18 +1457,6 @@ export default function ChatPage() {
     handleSendMessage(`Can you analyze this ${attachment.type}?`, attachment)
   }
 
-  const handleGlazyrCapture = () => {
-    setGlazyrDialogOpen(true)
-  }
-
-  const handleGlazyrCaptured = () => {
-    const attachment: ChatMessage["contextAttachment"] = {
-      type: "glazyr",
-      name: "Screen capture",
-    }
-
-    handleSendMessage("What do you see in this screenshot?", attachment)
-  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-background via-background to-background/95">
@@ -1499,10 +1485,9 @@ export default function ChatPage() {
       </ScrollArea>
 
       <ChatInput
-        onSendMessage={(msg) => handleSendMessage(msg)}
+        onSendMessage={(msg, attachment) => handleSendMessage(msg, attachment)}
         onVoiceInput={handleVoiceInput}
         onFileUpload={handleFileUpload}
-        onGlazyrCapture={handleGlazyrCapture}
         onAgentSelect={setSelectedAgentId}
         agentOptions={agentOptions}
         isLoading={isLoading}
@@ -1510,11 +1495,6 @@ export default function ChatPage() {
 
       <VoiceInputDialog open={voiceDialogOpen} onOpenChange={setVoiceDialogOpen} onTranscript={handleVoiceTranscript} />
       <FileUploadDialog open={fileDialogOpen} onOpenChange={setFileDialogOpen} onUpload={handleFileSelected} />
-      <GlazyrCaptureDialog
-        open={glazyrDialogOpen}
-        onOpenChange={setGlazyrDialogOpen}
-        onCapture={handleGlazyrCaptured}
-      />
     </div>
   )
 }
