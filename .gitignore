@@ -24,13 +24,17 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Local env files
+# Local env files (ignore all .env files except .env.example)
 .env*.local
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+# Allow .env.example files to be committed
+!.env.example
+!**/.env.example
+!**/*.env.example
 
 # Vercel
 .vercel
@@ -42,6 +46,8 @@ next-env.d.ts
 # Backend
 backend/.env
 backend/.env.local
+# Allow backend/env.example.txt to be committed
+!backend/env.example.txt
 backend/dev.db
 backend/dev.db-journal
 backend/data/
