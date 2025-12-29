@@ -31,10 +31,15 @@ export function Navigation() {
   return (
     <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="flex h-14 sm:h-16 items-center px-3 sm:px-6 gap-2 sm:gap-4">
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <Link 
+          href="https://slashmcp.com/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 sm:gap-3 shrink-0 hover:opacity-80 transition-opacity"
+        >
           <Image src="/logo.png" alt="Slash MCP" width={28} height={28} className="sm:w-8 sm:h-8" />
           <h1 className="text-base sm:text-lg font-semibold hidden sm:block">Slash MCP</h1>
-        </div>
+        </Link>
         <div className="flex-1 flex items-center gap-0.5 sm:gap-1 sm:ml-8 overflow-x-auto scrollbar-hide">
           {navItems.map((item) => {
             const Icon = item.icon
