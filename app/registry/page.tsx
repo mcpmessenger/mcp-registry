@@ -373,8 +373,8 @@ export default function RegistryPage() {
 
   const statusCounts = {
     all: agents.length,
-    online: agents.filter((a) => a.status === "online").length,
-    warning: agents.filter((a) => a.status === "warning").length,
+    active: agents.filter((a) => a.status === "active").length,
+    preIntegration: agents.filter((a) => a.status === "pre-integration").length,
     offline: agents.filter((a) => a.status === "offline").length,
   }
 
@@ -397,12 +397,12 @@ export default function RegistryPage() {
           <p className="text-2xl font-bold mt-1">{statusCounts.all}</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Online</p>
-          <p className="text-2xl font-bold mt-1 text-success">{statusCounts.online}</p>
+          <p className="text-sm text-muted-foreground">Active</p>
+          <p className="text-2xl font-bold mt-1 text-success">{statusCounts.active}</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Warning</p>
-          <p className="text-2xl font-bold mt-1 text-warning">{statusCounts.warning}</p>
+          <p className="text-sm text-muted-foreground">Pre-Integration</p>
+          <p className="text-2xl font-bold mt-1 text-warning">{statusCounts.preIntegration}</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Offline</p>
@@ -426,8 +426,8 @@ export default function RegistryPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="online">Online</SelectItem>
-            <SelectItem value="warning">Warning</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="pre-integration">Pre-Integration</SelectItem>
             <SelectItem value="offline">Offline</SelectItem>
           </SelectContent>
         </Select>

@@ -63,11 +63,32 @@ export function transformServerToAgent(server: MCPServer, index: number): MCPAge
     ...(server.manifest && typeof server.manifest === 'object' ? server.manifest : {}),
   }
   
+  // Determine integration status based on available data
+  // Priority: metadata.integrationStatus > hasTools > default to pre-integration
+  let status: 'active' | 'pre-integration' | 'offline' = 'pre-integration'
+  
+  // Check metadata for stored integration status
+  if (server.metadata && typeof server.metadata === 'object') {
+    const metadata = server.metadata as Record<string, unknown>
+    if (metadata.integrationStatus && 
+        (metadata.integrationStatus === 'active' || 
+         metadata.integrationStatus === 'pre-integration' || 
+         metadata.integrationStatus === 'offline')) {
+      status = metadata.integrationStatus as 'active' | 'pre-integration' | 'offline'
+    }
+  }
+  
+  // Fallback: if no metadata status, determine from tools
+  if (status === 'pre-integration') {
+    const hasTools = server.tools && Array.isArray(server.tools) && server.tools.length > 0
+    status = hasTools ? 'active' : 'pre-integration'
+  }
+  
   return {
     id: server.serverId || index.toString(),
     name: server.name,
     endpoint: endpoint,
-    status: 'online' as const, // Default to online, could check health in future
+    status: status,
     lastActive: new Date(),
     capabilities: server.capabilities || server.tools?.map(t => t.name) || [],
     manifest: JSON.stringify(manifestData, null, 2),

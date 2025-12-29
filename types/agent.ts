@@ -2,7 +2,7 @@ export interface MCPAgent {
   id: string
   name: string
   endpoint: string
-  status: "online" | "offline" | "warning"
+  status: "active" | "pre-integration" | "offline"
   lastActive: Date
   capabilities: string[]
   manifest: string
