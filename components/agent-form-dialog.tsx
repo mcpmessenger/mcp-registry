@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { MCPAgent } from "@/types/agent"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -125,17 +125,121 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
   
   const [serverType, setServerType] = useState<"http" | "stdio">(initialServerType)
   
-  const [formData, setFormData] = useState({
-    name: agent?.name || "",
-    endpoint: initialEndpoint,
-    command: "",
-    args: "",
-    credentials: "", // Unified credentials field (JSON or simple key)
-    httpHeaders: agent?.httpHeaders || "", // HTTP headers for HTTP servers (JSON object)
-  })
+  // Extract existing values from agent when editing
+  const extractFormData = () => {
+    if (!agent) {
+      return {
+        name: "",
+        endpoint: "",
+        command: "",
+        args: "",
+        credentials: "",
+        httpHeaders: "",
+      }
+    }
+
+    let command = ""
+    let args = ""
+    let credentials = ""
+    let endpoint = initialEndpoint
+
+    // Try to parse manifest to extract command, args, and env
+    try {
+      const manifest = JSON.parse(agent.manifest || "{}")
+      
+      if (manifest.command) {
+        command = manifest.command
+      }
+      
+      if (manifest.args && Array.isArray(manifest.args)) {
+        args = JSON.stringify(manifest.args)
+      }
+      
+      if (manifest.env && typeof manifest.env === 'object') {
+        credentials = JSON.stringify(manifest.env, null, 2)
+      }
+      
+      if (manifest.endpoint && typeof manifest.endpoint === 'string') {
+        endpoint = manifest.endpoint
+      }
+    } catch (e) {
+      // If manifest parsing fails, try metadata
+      if (agent.metadata && typeof agent.metadata === 'object') {
+        const metadata = agent.metadata as Record<string, unknown>
+        if (metadata.command && typeof metadata.command === 'string') {
+          command = metadata.command
+        }
+        if (metadata.args && Array.isArray(metadata.args)) {
+          args = JSON.stringify(metadata.args)
+        }
+        if (metadata.env && typeof metadata.env === 'object') {
+          credentials = JSON.stringify(metadata.env, null, 2)
+        }
+      }
+    }
+
+    // Extract HTTP headers
+    let httpHeaders = agent.httpHeaders || ""
+    
+    // If httpHeaders is not set but we have metadata with httpHeaders
+    if (!httpHeaders && agent.metadata && typeof agent.metadata === 'object') {
+      const metadata = agent.metadata as Record<string, unknown>
+      if (metadata.httpHeaders) {
+        if (typeof metadata.httpHeaders === 'string') {
+          httpHeaders = metadata.httpHeaders
+        } else {
+          httpHeaders = JSON.stringify(metadata.httpHeaders, null, 2)
+        }
+      }
+    }
+
+    return {
+      name: agent.name || "",
+      endpoint: endpoint,
+      command: command,
+      args: args,
+      credentials: credentials,
+      httpHeaders: httpHeaders,
+    }
+  }
+  
+  const [formData, setFormData] = useState(extractFormData())
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
   const isEditing = !!agent
+
+  // Update form data when agent changes
+  useEffect(() => {
+    if (agent) {
+      const extracted = extractFormData()
+      setFormData(extracted)
+      
+      // Update server type based on agent
+      if (agent.endpoint?.startsWith('stdio://')) {
+        setServerType("stdio")
+      } else if (agent.endpoint && !agent.endpoint.startsWith('stdio://')) {
+        setServerType("http")
+      } else if (agent.metadata && typeof agent.metadata === 'object') {
+        const metadata = agent.metadata as Record<string, unknown>
+        if (metadata.endpoint && typeof metadata.endpoint === 'string') {
+          setServerType("http")
+        } else if (extracted.command) {
+          setServerType("stdio")
+        }
+      }
+    } else {
+      // Reset form when no agent (creating new)
+      setFormData({
+        name: "",
+        endpoint: "",
+        command: "",
+        args: "",
+        credentials: "",
+        httpHeaders: "",
+      })
+      setServerType("http")
+    }
+  }, [agent?.id, agent?.name, agent?.endpoint, agent?.manifest, agent?.httpHeaders])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
