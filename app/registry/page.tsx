@@ -292,6 +292,14 @@ export default function RegistryPage() {
           ...(isStdioServer ? {} : { endpoint: data.endpoint?.trim() }),
           apiKey: credentials ? '***' : undefined,
           httpHeaders: httpHeaders,
+          // Include logoUrl from form data or existing metadata
+          ...(data.metadata && typeof data.metadata === 'object' && (data.metadata as Record<string, unknown>).logoUrl
+            ? { logoUrl: (data.metadata as Record<string, unknown>).logoUrl }
+            : data.logoUrl
+            ? { logoUrl: data.logoUrl }
+            : editingAgent?.metadata && typeof editingAgent.metadata === 'object' && (editingAgent.metadata as Record<string, unknown>).logoUrl
+            ? { logoUrl: (editingAgent.metadata as Record<string, unknown>).logoUrl }
+            : {}),
         },
       }
       

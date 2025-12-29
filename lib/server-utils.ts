@@ -4,6 +4,7 @@
 
 import type { MCPServer } from './api'
 import type { MCPAgent } from '@/types/agent'
+import { getLogoUrl } from './logo-mapping'
 
 /**
  * Transform backend MCPServer to frontend MCPAgent format
@@ -84,6 +85,12 @@ export function transformServerToAgent(server: MCPServer, index: number): MCPAge
     status = hasTools ? 'active' : 'pre-integration'
   }
   
+  // Get logo URL from metadata or logo mapping
+  const metadataObj = server.metadata && typeof server.metadata === 'object' 
+    ? server.metadata as Record<string, unknown>
+    : undefined
+  const logoUrl = getLogoUrl(server.serverId, server.name, metadataObj)
+
   return {
     id: server.serverId || index.toString(),
     name: server.name,
@@ -93,9 +100,10 @@ export function transformServerToAgent(server: MCPServer, index: number): MCPAge
     capabilities: server.capabilities || server.tools?.map(t => t.name) || [],
     manifest: JSON.stringify(manifestData, null, 2),
     metadata: server.metadata,
-    httpHeaders: server.metadata && typeof server.metadata === 'object' && (server.metadata as Record<string, unknown>).httpHeaders
-      ? JSON.stringify((server.metadata as Record<string, unknown>).httpHeaders, null, 2)
+    httpHeaders: metadataObj?.httpHeaders
+      ? JSON.stringify(metadataObj.httpHeaders, null, 2)
       : undefined,
+    logoUrl: logoUrl,
     metrics: {
       avgLatency: 0,
       p95Latency: 0,

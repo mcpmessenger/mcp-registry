@@ -8,6 +8,7 @@ export interface MCPAgent {
   manifest: string
   metadata?: Record<string, unknown>
   httpHeaders?: string // JSON string of HTTP headers
+  logoUrl?: string // Logo URL for the MCP server
   metrics?: {
     avgLatency: number
     p95Latency: number

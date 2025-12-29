@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, ExternalLink } from "lucide-react"
+import { Loader2, ExternalLink, Upload, X } from "lucide-react"
+import Image from "next/image"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertDialog,
@@ -126,7 +127,15 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
   const [serverType, setServerType] = useState<"http" | "stdio">(initialServerType)
   
   // Extract existing values from agent when editing
-  const extractFormData = () => {
+  const extractFormData = (): {
+    name: string
+    endpoint: string
+    command: string
+    args: string
+    credentials: string
+    httpHeaders: string
+    logoUrl: string
+  } => {
     if (!agent) {
       return {
         name: "",
@@ -135,6 +144,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
         args: "",
         credentials: "",
         httpHeaders: "",
+        logoUrl: "",
       }
     }
 
@@ -193,6 +203,19 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       }
     }
 
+    // Extract logo URL from metadata
+    let logoUrl = ""
+    if (agent.metadata && typeof agent.metadata === 'object') {
+      const metadata = agent.metadata as Record<string, unknown>
+      if (metadata.logoUrl && typeof metadata.logoUrl === 'string') {
+        logoUrl = metadata.logoUrl
+      }
+    }
+    // Fallback to agent.logoUrl if available
+    if (!logoUrl && agent.logoUrl) {
+      logoUrl = agent.logoUrl
+    }
+
     return {
       name: agent.name || "",
       endpoint: endpoint,
@@ -200,11 +223,13 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       args: args,
       credentials: credentials,
       httpHeaders: httpHeaders,
+      logoUrl: logoUrl,
     }
   }
   
   const [formData, setFormData] = useState(extractFormData())
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
   const isEditing = !!agent
 
@@ -213,6 +238,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     if (agent) {
       const extracted = extractFormData()
       setFormData(extracted)
+      setLogoPreview(extracted.logoUrl || null)
       
       // Update server type based on agent
       if (agent.endpoint?.startsWith('stdio://')) {
@@ -236,6 +262,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
         args: "",
         credentials: "",
         httpHeaders: "",
+        logoUrl: "",
       })
       setServerType("http")
     }
@@ -246,10 +273,51 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     setShowConfirmDialog(true)
   }
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file')
+        return
+      }
+      // Validate file size (max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Image size must be less than 2MB')
+        return
+      }
+      // Convert to base64 data URL
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const result = reader.result as string
+        setLogoPreview(result)
+        setFormData((prev) => ({ ...prev, logoUrl: result }))
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleLogoUrlChange = (url: string) => {
+    setFormData((prev) => ({ ...prev, logoUrl: url }))
+    setLogoPreview(url || null)
+  }
+
+  const handleRemoveLogo = () => {
+    setFormData((prev) => ({ ...prev, logoUrl: "" }))
+    setLogoPreview(null)
+  }
+
   const handleConfirmedSave = () => {
+    // Prepare metadata with logoUrl
+    const metadata: Record<string, unknown> = {}
+    if (formData.logoUrl) {
+      metadata.logoUrl = formData.logoUrl
+    }
+
     // Pass all form data including server type-specific fields
     onSave({
       ...formData,
+      metadata: metadata,
       // Add server type indicator
       ...(serverType === "stdio" ? { 
         command: formData.command,
@@ -268,15 +336,17 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     setShowConfirmDialog(false)
     onOpenChange(false)
     // Reset form
-    setFormData({
-      name: "",
-      endpoint: "",
-      command: "",
-      args: "",
-      credentials: "",
-      httpHeaders: "",
-    })
-    setServerType("http")
+      setFormData({
+        name: "",
+        endpoint: "",
+        command: "",
+        args: "",
+        credentials: "",
+        httpHeaders: "",
+        logoUrl: "",
+      })
+      setLogoPreview(null)
+      setServerType("http")
   }
 
 
@@ -357,6 +427,61 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                 onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="logo">Logo (Optional)</Label>
+              <div className="space-y-3">
+                {/* Logo Preview */}
+                {logoPreview && (
+                  <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-white/20 bg-white/5 backdrop-blur-sm">
+                    <Image
+                      src={logoPreview}
+                      alt="Logo preview"
+                      fill
+                      className="object-contain p-2"
+                      sizes="96px"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-destructive/80 hover:bg-destructive text-white backdrop-blur-sm"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                
+                {/* Upload Button */}
+                <div className="flex gap-2">
+                  <label
+                    htmlFor="logo-upload"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/20 bg-white/5 hover:bg-white/10 cursor-pointer transition-colors text-sm"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload Image
+                  </label>
+                  <input
+                    id="logo-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* Logo URL Input */}
+                <Input
+                  id="logo-url"
+                  type="url"
+                  placeholder="Or enter logo URL (e.g., https://example.com/logo.png)"
+                  value={formData.logoUrl || ""}
+                  onChange={(e) => handleLogoUrlChange(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Upload an image file or provide a URL to the logo. Recommended size: 128x128px or larger.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-2">
