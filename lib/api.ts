@@ -1000,6 +1000,46 @@ export async function getInstallConfig(
 }
 
 /**
+ * Verify integration status for a server
+ * Checks package/health, discovers tools if needed, and updates status
+ */
+export async function verifyServerIntegration(
+  serverId: string,
+  options?: { discoverTools?: boolean }
+): Promise<{
+  success: boolean
+  serverId: string
+  status: 'active' | 'pre-integration' | 'offline'
+  reason: string
+  details: {
+    hasTools: boolean
+    toolsCount: number
+    packageVerified?: boolean
+    healthCheckPassed?: boolean
+    lastChecked?: Date
+  }
+  message: string
+}> {
+  const encodedId = encodeURIComponent(serverId)
+  const response = await fetch(`${API_BASE_URL}/v0.1/servers/${encodedId}/verify-integration`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      discoverTools: options?.discoverTools ?? false,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+    throw new Error(error.error || `Failed to verify integration: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
  * Get server permissions and security analysis
  */
 export async function getServerPermissions(serverId: string): Promise<ServerPermissionsResponse['permissions']> {

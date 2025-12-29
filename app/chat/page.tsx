@@ -8,7 +8,7 @@ import { ChatInput } from "@/components/chat-input"
 import { VoiceInputDialog } from "@/components/voice-input-dialog"
 import { FileUploadDialog } from "@/components/file-upload-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { getServers, generateSVG, getJobStatus, createJobProgressStream, queryOrchestrator } from "@/lib/api"
+import { getServers, generateSVG, getJobStatus, createJobProgressStream, queryOrchestrator, verifyServerIntegration } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPServer } from "@/lib/api"
 import { invokeMCPTool } from "@/lib/api"
@@ -259,6 +259,112 @@ export default function ChatPage() {
         }
         setMessages((prev) => [...prev, assistantMessage])
         return
+      }
+
+      // Check for integration verification queries
+      const integrationMatch = content.match(/(?:verify|check|integrate|test|validate).*?(?:integration|status|server).*?([a-zA-Z0-9._/-]+)/i)
+      if (integrationMatch) {
+        const serverNameOrId = integrationMatch[1]
+        // Try to find server by name or ID
+        const targetServer = availableServers.find(s => 
+          s.serverId.toLowerCase().includes(serverNameOrId.toLowerCase()) ||
+          s.name.toLowerCase().includes(serverNameOrId.toLowerCase())
+        )
+
+        if (targetServer) {
+          try {
+            setIsLoading(true)
+            const statusMessage: ChatMessage = {
+              id: `status-${Date.now()}`,
+              role: "assistant",
+              content: `🔍 Verifying integration status for **${targetServer.name}**...`,
+              timestamp: new Date(),
+              agentName: "Integration Service",
+            }
+            setMessages((prev) => [...prev, statusMessage])
+
+            const result = await verifyServerIntegration(targetServer.serverId, { discoverTools: true })
+            
+            // Remove status message
+            setMessages((prev) => prev.filter(m => m.id !== statusMessage.id))
+
+            const statusIcon = result.status === 'active' ? '✅' : result.status === 'pre-integration' ? '⚠️' : '❌'
+            const statusColor = result.status === 'active' ? 'green' : result.status === 'pre-integration' ? 'yellow' : 'red'
+            
+            let detailsText = `**Status:** ${statusIcon} ${result.status.toUpperCase()}\n`
+            detailsText += `**Reason:** ${result.reason}\n\n`
+            detailsText += `**Details:**\n`
+            detailsText += `- Tools Discovered: ${result.details.hasTools ? '✅' : '❌'} (${result.details.toolsCount} tools)\n`
+            if (result.details.packageVerified !== undefined) {
+              detailsText += `- Package Verified: ${result.details.packageVerified ? '✅' : '❌'}\n`
+            }
+            if (result.details.healthCheckPassed !== undefined) {
+              detailsText += `- Health Check: ${result.details.healthCheckPassed ? '✅' : '❌'}\n`
+            }
+
+            responseContent = `## Integration Status for ${targetServer.name}\n\n${detailsText}\n\n**Next Steps:**\n`
+            if (result.status === 'pre-integration') {
+              if (!result.details.hasTools) {
+                responseContent += `- Tool discovery may be needed. Try running integration again.\n`
+              }
+              if (result.details.packageVerified === false) {
+                responseContent += `- Package not found on npm. Verify the package name is correct.\n`
+              }
+              if (result.details.healthCheckPassed === false) {
+                responseContent += `- Health check failed. Verify the endpoint URL and API keys.\n`
+              }
+            } else if (result.status === 'active') {
+              responseContent += `- Server is fully integrated and ready to use! 🎉\n`
+            } else {
+              responseContent += `- Server is offline. Check endpoint connectivity and configuration.\n`
+            }
+
+            agentName = "Integration Service"
+            setIsLoading(false)
+            const assistantMessage: ChatMessage = {
+              id: `assistant-${Date.now()}`,
+              role: "assistant",
+              content: responseContent,
+              timestamp: new Date(),
+              agentName: agentName,
+            }
+            setMessages((prev) => [...prev, assistantMessage])
+            return
+          } catch (error) {
+            setIsLoading(false)
+            responseContent = `❌ Failed to verify integration: ${error instanceof Error ? error.message : 'Unknown error'}`
+            agentName = "Integration Service"
+            const errorMessage: ChatMessage = {
+              id: `assistant-${Date.now()}`,
+              role: "assistant",
+              content: responseContent,
+              timestamp: new Date(),
+              agentName: agentName,
+            }
+            setMessages((prev) => [...prev, errorMessage])
+            return
+          }
+        } else {
+          // Server not found, show available servers
+          responseContent = `I couldn't find a server matching "${serverNameOrId}".\n\n**Available servers:**\n`
+          availableServers.slice(0, 10).forEach(s => {
+            responseContent += `- ${s.name} (${s.serverId})\n`
+          })
+          if (availableServers.length > 10) {
+            responseContent += `\n... and ${availableServers.length - 10} more. Use "verify integration for [server name]" to check a specific server.`
+          }
+          agentName = "Integration Service"
+          setIsLoading(false)
+          const assistantMessage: ChatMessage = {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: responseContent,
+            timestamp: new Date(),
+            agentName: agentName,
+          }
+          setMessages((prev) => [...prev, assistantMessage])
+          return
+        }
       }
 
       const isRouter = selectedAgentId === "router"

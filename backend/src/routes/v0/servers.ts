@@ -4,6 +4,8 @@ import { registryService } from '../../services/registry.service'
 import { authenticateUser } from '../../middleware/auth.middleware'
 import { installConfigService, type InstallClient } from '../../services/install-config.service'
 import { mcpInvokeService } from '../../services/mcp-invoke.service'
+import { getIntegrationStatus } from '../../services/integration-status.service'
+import { prisma } from '../../config/database'
 import type { MCPServer, MCPTool, MCPToolInputProperty } from '../../types/mcp'
 
 const router = Router()
@@ -564,6 +566,87 @@ router.post('/invoke', async (req, res, next) => {
       })
     }
 
+    next(error)
+  }
+})
+
+/**
+ * POST /v0.1/servers/:serverId/verify-integration
+ * Verify and update integration status for a server
+ * Runs the full integration pipeline: package/health check → tool discovery → status update
+ */
+router.post('/servers/:serverId/verify-integration', async (req, res, next) => {
+  try {
+    const { serverId } = req.params
+    const decodedServerId = decodeURIComponent(serverId)
+    const { discoverTools = false } = req.body || {}
+
+    // Get server from registry
+    const server = await registryService.getServerById(decodedServerId)
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        error: `Server ${decodedServerId} not found`,
+      })
+    }
+
+    // Get current integration status
+    const statusResult = await getIntegrationStatus(server)
+
+    // If discoverTools is true and server doesn't have tools, attempt discovery
+    if (discoverTools && !statusResult.details.hasTools) {
+      try {
+        await registryService.discoverToolsForServer(decodedServerId)
+        // Re-check status after discovery
+        const updatedServer = await registryService.getServerById(decodedServerId)
+        if (updatedServer) {
+          const updatedStatus = await getIntegrationStatus(updatedServer)
+          statusResult.status = updatedStatus.status
+          statusResult.reason = updatedStatus.reason
+          statusResult.details = updatedStatus.details
+        }
+      } catch (error) {
+        console.error(`[Verify Integration] Tool discovery failed for ${decodedServerId}:`, error)
+        // Continue with status check even if discovery fails
+      }
+    }
+
+    // Update metadata with integration status
+    const currentMetadata = server.metadata && typeof server.metadata === 'object'
+      ? server.metadata as Record<string, unknown>
+      : {}
+    
+    const updatedMetadata = {
+      ...currentMetadata,
+      integrationStatus: statusResult.status,
+      integrationReason: statusResult.reason,
+      integrationDetails: statusResult.details,
+      integrationCheckedAt: new Date().toISOString(),
+    }
+
+    await prisma.mcpServer.update({
+      where: { serverId: decodedServerId },
+      data: {
+        metadata: JSON.stringify(updatedMetadata),
+      },
+    })
+
+    res.json({
+      success: true,
+      serverId: decodedServerId,
+      status: statusResult.status,
+      reason: statusResult.reason,
+      details: statusResult.details,
+      message: `Integration status: ${statusResult.status}`,
+    })
+  } catch (error) {
+    console.error('[Verify Integration] Error:', error)
+    if (error instanceof Error) {
+      return res.status(500).json({
+        success: false,
+        error: error.message,
+      })
+    }
     next(error)
   }
 })
