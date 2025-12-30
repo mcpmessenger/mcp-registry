@@ -756,6 +756,30 @@ export async function healthCheck(): Promise<{ status: string; timestamp: string
 }
 
 /**
+ * Get orchestrator status
+ */
+export async function getOrchestratorStatus(): Promise<{
+  kafka: {
+    enabled: boolean
+    brokers: string[]
+  }
+  services: {
+    matcher: boolean
+    coordinator: boolean
+    resultConsumer: boolean
+  }
+  topics: Record<string, string>
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/orchestrator/status`)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to get orchestrator status: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+/**
  * Durable Tasks API (SEP-1686)
  */
 export interface DurableTask {
