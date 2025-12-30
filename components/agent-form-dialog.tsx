@@ -100,6 +100,38 @@ function getProviderConfig(agent: MCPAgent | null | undefined): ProviderConfig |
   }
 }
 
+function maskSensitiveValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return '***'
+  }
+  if (Array.isArray(value)) {
+    return value.map(maskSensitiveValue)
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, maskSensitiveValue(item)])
+    )
+  }
+  return value
+}
+
+function maskHttpHeadersForDisplay(value: string): string {
+  if (!value || !value.trim()) {
+    return value
+  }
+
+  try {
+    const parsed = JSON.parse(value)
+    const masked = maskSensitiveValue(parsed)
+    if (typeof masked === 'string') {
+      return masked
+    }
+    return JSON.stringify(masked, null, 2)
+  } catch {
+    return '***'
+  }
+}
+
 export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentFormDialogProps) {
   // Determine server type from agent
   // Check if endpoint starts with stdio:// (STDIO) OR if metadata has endpoint (HTTP)
@@ -227,45 +259,52 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
     }
   }
   
-  const [formData, setFormData] = useState(extractFormData())
+  const [formData, setFormData] = useState(() => {
+    const extracted = extractFormData()
+    const maskedHeaders = agent && extracted.httpHeaders ? maskHttpHeadersForDisplay(extracted.httpHeaders) : extracted.httpHeaders
+    return {
+      ...extracted,
+      httpHeaders: maskedHeaders,
+    }
+  })
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [httpHeadersChanged, setHttpHeadersChanged] = useState(false)
 
   const isEditing = !!agent
 
   // Update form data when agent changes
   useEffect(() => {
+    setHttpHeadersChanged(false)
     if (agent) {
       const extracted = extractFormData()
-      setFormData(extracted)
+      const maskedHeaders = extracted.httpHeaders ? maskHttpHeadersForDisplay(extracted.httpHeaders) : ""
+      setFormData({
+        ...extracted,
+        httpHeaders: maskedHeaders,
+      })
       setLogoPreview(extracted.logoUrl || null)
       
       // Update server type based on agent - prioritize endpoint detection
-      // Check endpoint first (most reliable indicator)
       if (agent.endpoint && !agent.endpoint.startsWith('stdio://')) {
         setServerType("http")
       } else if (agent.endpoint?.startsWith('stdio://')) {
         setServerType("stdio")
       } else if (agent.metadata && typeof agent.metadata === 'object') {
         const metadata = agent.metadata as Record<string, unknown>
-        // If metadata has endpoint, it's HTTP
         if (metadata.endpoint && typeof metadata.endpoint === 'string' && metadata.endpoint.trim() !== '') {
           setServerType("http")
         } else if (extracted.command && extracted.args) {
-          // If we have command/args but no endpoint, it's STDIO
           setServerType("stdio")
         } else {
-          // Default to HTTP if we can't determine (for existing HTTP servers)
           setServerType("http")
         }
       } else if (extracted.command && extracted.args) {
         setServerType("stdio")
       } else {
-        // Default to HTTP for existing servers without clear indicators
         setServerType("http")
       }
     } else {
-      // Reset form when no agent (creating new)
       setFormData({
         name: "",
         endpoint: "",
@@ -275,6 +314,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
         httpHeaders: "",
         logoUrl: "",
       })
+      setLogoPreview(null)
       setServerType("http")
     }
   }, [agent?.id, agent?.name, agent?.endpoint, agent?.manifest, agent?.httpHeaders, agent?.metadata])
@@ -325,6 +365,9 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       metadata.logoUrl = formData.logoUrl
     }
 
+    const httpHeadersForRequest =
+      serverType === "http" && httpHeadersChanged ? formData.httpHeaders : undefined
+
     // Pass all form data including server type-specific fields
     onSave({
       ...formData,
@@ -339,7 +382,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       } : {
         endpoint: formData.endpoint,
         credentials: formData.credentials,
-        httpHeaders: formData.httpHeaders, // Include httpHeaders for HTTP servers
+        httpHeaders: httpHeadersForRequest, // Include httpHeaders for HTTP servers only when changed
         command: undefined, // Clear command/args for HTTP
         args: undefined,
       }),
@@ -358,6 +401,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
       })
       setLogoPreview(null)
       setServerType("http")
+      setHttpHeadersChanged(false)
   }
 
 
@@ -586,6 +630,7 @@ export function AgentFormDialog({ agent, open, onOpenChange, onSave }: AgentForm
                         }
                       }
                       setFormData((prev) => ({ ...prev, httpHeaders: value }))
+                      setHttpHeadersChanged(true)
                     }}
                     className="font-mono text-xs min-h-[80px]"
                   />
