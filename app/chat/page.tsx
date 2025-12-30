@@ -164,43 +164,102 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
     let data: any
     try {
       data = JSON.parse(responseText)
+      console.log('[formatGoogleMapsResponse] Parsed JSON for', toolName, ':', Object.keys(data))
     } catch {
       // If not JSON, try to extract JSON from markdown code blocks
       const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/)
       if (jsonMatch) {
         data = JSON.parse(jsonMatch[1])
+        console.log('[formatGoogleMapsResponse] Extracted JSON from markdown for', toolName, ':', Object.keys(data))
       } else {
-        // Return as-is if we can't parse
+        // Return as-is if we can't parse (might already be formatted)
+        console.log('[formatGoogleMapsResponse] Response is not JSON, returning as-is')
         return responseText
       }
     }
 
     // Handle weather responses
-    if (toolName === 'lookup_weather' || data.weather || data.currentConditions) {
+    if (toolName === 'lookup_weather' || data.weather || data.currentConditions || data.temperature || data.condition) {
       let formatted = '## Weather Information\n\n'
+      let hasData = false
       
-      if (data.currentConditions) {
-        const conditions = data.currentConditions
-        if (conditions.temperature) {
-          formatted += `**Temperature:** ${conditions.temperature}${conditions.temperatureUnit || '°F'}\n`
-        }
-        if (conditions.condition) {
-          formatted += `**Condition:** ${conditions.condition}\n`
-        }
-        if (conditions.humidity) {
-          formatted += `**Humidity:** ${conditions.humidity}%\n`
-        }
-        if (conditions.windSpeed) {
-          formatted += `**Wind Speed:** ${conditions.windSpeed} ${conditions.windSpeedUnit || 'mph'}\n`
-        }
+      // Try multiple possible response structures
+      const conditions = data.currentConditions || data.weather || data
+      
+      if (conditions.temperature !== undefined) {
+        formatted += `**Temperature:** ${conditions.temperature}${conditions.temperatureUnit || conditions.unit || '°F'}\n`
+        hasData = true
+      }
+      
+      if (conditions.feelsLike !== undefined) {
+        formatted += `**Feels Like:** ${conditions.feelsLike}${conditions.temperatureUnit || conditions.unit || '°F'}\n`
+        hasData = true
+      }
+      
+      if (conditions.condition) {
+        formatted += `**Condition:** ${conditions.condition}\n`
+        hasData = true
+      }
+      
+      if (conditions.weatherCondition) {
+        formatted += `**Condition:** ${conditions.weatherCondition}\n`
+        hasData = true
+      }
+      
+      if (conditions.humidity !== undefined) {
+        formatted += `**Humidity:** ${conditions.humidity}%\n`
+        hasData = true
+      }
+      
+      if (conditions.windSpeed !== undefined) {
+        formatted += `**Wind Speed:** ${conditions.windSpeed} ${conditions.windSpeedUnit || conditions.windUnit || 'mph'}\n`
+        hasData = true
+      }
+      
+      if (conditions.windDirection) {
+        formatted += `**Wind Direction:** ${conditions.windDirection}\n`
+        hasData = true
+      }
+      
+      if (conditions.airPressure !== undefined) {
+        formatted += `**Air Pressure:** ${conditions.airPressure} ${conditions.pressureUnit || 'hPa'}\n`
+        hasData = true
+      }
+      
+      if (conditions.uvIndex !== undefined) {
+        formatted += `**UV Index:** ${conditions.uvIndex}\n`
+        hasData = true
+      }
+      
+      if (conditions.precipitationProbability !== undefined) {
+        formatted += `**Precipitation Probability:** ${conditions.precipitationProbability}%\n`
+        hasData = true
+      }
+      
+      if (conditions.cloudCover !== undefined) {
+        formatted += `**Cloud Cover:** ${conditions.cloudCover}%\n`
+        hasData = true
       }
       
       if (data.forecast) {
         formatted += `\n**Forecast:** ${data.forecast}\n`
+        hasData = true
       }
       
       if (data.location) {
         formatted += `\n**Location:** ${data.location}\n`
+        hasData = true
+      }
+      
+      if (data.address) {
+        formatted += `\n**Location:** ${data.address}\n`
+        hasData = true
+      }
+      
+      // If we didn't find any expected fields, show the raw data in a readable format
+      if (!hasData) {
+        formatted += '**Raw Response:**\n\n'
+        formatted += `\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``
       }
       
       return formatted
@@ -209,21 +268,55 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
     // Handle route responses
     if (toolName === 'compute_routes' || data.routes || data.route) {
       let formatted = '## Route Information\n\n'
+      let hasData = false
       
-      const route = data.routes?.[0] || data.route
-      if (route) {
-        if (route.distance) {
-          formatted += `**Distance:** ${route.distance}\n`
+      const route = data.routes?.[0] || data.route || data
+      
+      if (route.distance) {
+        formatted += `**Distance:** ${route.distance}\n`
+        hasData = true
+      }
+      
+      if (route.duration) {
+        formatted += `**Duration:** ${route.duration}\n`
+        hasData = true
+      }
+      
+      if (route.summary) {
+        formatted += `\n${route.summary}\n`
+        hasData = true
+      }
+      
+      // Generate route link from various possible sources
+      if (route.polyline) {
+        formatted += `\n[View Route on Google Maps](https://www.google.com/maps/dir/?api=1&waypoints=enc:${route.polyline})\n`
+        hasData = true
+      } else if (route.origin && route.destination) {
+        // Generate link from origin and destination
+        const origin = typeof route.origin === 'string' ? route.origin : route.origin.address || route.origin.location
+        const dest = typeof route.destination === 'string' ? route.destination : route.destination.address || route.destination.location
+        if (origin && dest) {
+          const originEncoded = encodeURIComponent(origin)
+          const destEncoded = encodeURIComponent(dest)
+          formatted += `\n[View Route on Google Maps](https://www.google.com/maps/dir/?api=1&origin=${originEncoded}&destination=${destEncoded})\n`
+          hasData = true
         }
-        if (route.duration) {
-          formatted += `**Duration:** ${route.duration}\n`
+      } else if (data.origin && data.destination) {
+        // Try top-level origin/destination
+        const origin = typeof data.origin === 'string' ? data.origin : data.origin.address || data.origin.location
+        const dest = typeof data.destination === 'string' ? data.destination : data.destination.address || data.destination.location
+        if (origin && dest) {
+          const originEncoded = encodeURIComponent(origin)
+          const destEncoded = encodeURIComponent(dest)
+          formatted += `\n[View Route on Google Maps](https://www.google.com/maps/dir/?api=1&origin=${originEncoded}&destination=${destEncoded})\n`
+          hasData = true
         }
-        if (route.summary) {
-          formatted += `\n${route.summary}\n`
-        }
-        if (route.polyline) {
-          formatted += `\n[View Route on Google Maps](https://www.google.com/maps/dir/?api=1&waypoints=enc:${route.polyline})\n`
-        }
+      }
+      
+      // If we didn't find any expected fields, show the raw data
+      if (!hasData) {
+        formatted += '**Raw Response:**\n\n'
+        formatted += `\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``
       }
       
       return formatted
@@ -254,37 +347,53 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
         const placeName = placeNames[index] || place.displayName?.text || place.name || `Place ${index + 1}`
         formatted += `**${placeName}**\n`
 
-        // Add coordinates
-        if (lat && lng) {
-          formatted += `   📍 Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`
-          
-          // Use place ID if available for better business name display, otherwise use coordinates
-          const placeId = place.id || place.place?.replace('places/', '')
-          let mapsUrl: string
-          let directionsUrl: string
-          
-          if (placeId) {
-            // Use place ID for better business name display
-            mapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`
-            directionsUrl = `https://www.google.com/maps/dir/?api=1&destination_place_id=${placeId}`
-          } else {
-            // Fallback to coordinates
-            mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`
-            directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-          }
-          
-          formatted += `   🔗 [View on Google Maps](${mapsUrl})\n`
-          formatted += `   🧭 [Get Directions](${directionsUrl})\n`
+        // Add coordinates and links
+        let mapsUrl: string | null = null
+        let directionsUrl: string | null = null
+        
+        // Try to get place ID from various possible locations
+        const placeId = place.id || 
+                       place.placeId || 
+                       place.place?.replace(/^places\//, '') ||
+                       place.place_id ||
+                       (typeof place.place === 'string' ? place.place.replace(/^places\//, '') : null)
+        
+        // Try to get coordinates from various possible locations
+        const placeLat = lat || place.location?.latitude || place.lat || place.coordinates?.latitude
+        const placeLng = lng || place.location?.longitude || place.lng || place.coordinates?.longitude
+        
+        if (placeLat && placeLng) {
+          formatted += `   📍 Coordinates: ${placeLat.toFixed(6)}, ${placeLng.toFixed(6)}\n`
+        }
+        
+        // Generate links - prefer place ID, fallback to coordinates, then to provided links
+        if (placeId) {
+          // Use place ID for better business name display
+          mapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`
+          directionsUrl = `https://www.google.com/maps/dir/?api=1&destination_place_id=${placeId}`
+        } else if (placeLat && placeLng) {
+          // Fallback to coordinates
+          mapsUrl = `https://www.google.com/maps?q=${placeLat},${placeLng}`
+          directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${placeLat},${placeLng}`
         } else {
-          // Fallback to provided links if coordinates not available
-          const placeUrl = place.googleMapsLinks?.placeUrl
-          const directionsUrl = place.googleMapsLinks?.directionsUrl
-          if (placeUrl) {
-            formatted += `   🔗 [View on Google Maps](${placeUrl})\n`
-          }
-          if (directionsUrl) {
-            formatted += `   🧭 [Get Directions](${directionsUrl})\n`
-          }
+          // Try provided links if available
+          mapsUrl = place.googleMapsLinks?.placeUrl || place.mapsUrl || place.url || null
+          directionsUrl = place.googleMapsLinks?.directionsUrl || place.directionsUrl || null
+        }
+        
+        // Add links if we have them
+        if (mapsUrl) {
+          formatted += `   🔗 [View on Google Maps](${mapsUrl})\n`
+        }
+        if (directionsUrl) {
+          formatted += `   🧭 [Get Directions](${directionsUrl})\n`
+        }
+        
+        // If we have a place name but no links, try to generate a search link
+        if (!mapsUrl && placeName && placeName !== `Place ${index + 1}`) {
+          const searchQuery = encodeURIComponent(placeName)
+          mapsUrl = `https://www.google.com/maps/search/?api=1&query=${searchQuery}`
+          formatted += `   🔗 [View on Google Maps](${mapsUrl})\n`
         }
 
         formatted += `\n`
