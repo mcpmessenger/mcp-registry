@@ -13,10 +13,20 @@ interface ServerManifest {
   id: string
   name: string
   description: string
-  command: string
-  args: string[]
+  command?: string // Optional for HTTP servers
+  args?: string[] // Optional for HTTP servers
+  endpoint?: string // For HTTP servers
   env: string[]
   requires_args?: boolean
+  tools?: Array<{
+    name: string
+    description: string
+    inputSchema: {
+      type: string
+      properties: Record<string, unknown>
+      required?: string[]
+    }
+  }>
 }
 
 async function registerTop20Servers() {
@@ -72,29 +82,46 @@ async function registerTop20Servers() {
       const metadata: any = {
         source: 'official',
         publisher: 'Model Context Protocol',
-        npmPackage: server.args[server.args.length - 1], // Last arg is usually the package
         verified: true,
         requiresEnv: server.env.length > 0,
         envVars: server.env,
       }
 
-      // Add npm package info
+      // Add npm package info for STDIO servers
       if (server.args && server.args.length > 0) {
         const npmPackage = server.args[server.args.length - 1]
         metadata.npmPackage = npmPackage
       }
+
+      // For HTTP servers, add endpoint to metadata
+      if (server.endpoint && !server.command) {
+        metadata.endpoint = server.endpoint
+        metadata.notes = 'HTTP server. Configure API keys in HTTP Headers field when editing.'
+      }
+
+      const tools = server.tools && server.tools.length > 0 ? server.tools : undefined
+      const manifest: Record<string, unknown> | undefined = server.endpoint
+        ? {
+            name: server.name,
+            version: 'v0.1',
+            endpoint: server.endpoint,
+            tools: tools,
+            capabilities: ['tools'],
+          }
+        : undefined
 
       const result = await registryService.publishServer({
         serverId: serverId,
         name: server.name,
         description: server.description,
         version: 'v0.1',
-        command: server.command,
-        args: server.args,
+        command: server.command || undefined, // undefined for HTTP servers
+        args: server.args || undefined, // undefined for HTTP servers
         env: Object.keys(envRecord).length > 0 ? envRecord : undefined,
-        tools: undefined, // Will be discovered automatically for STDIO servers (may fail if package doesn't exist yet)
+        tools: tools,
         capabilities: ['tools'],
         metadata: metadata,
+        manifest: manifest,
         publishedBy: 'system',
       })
 
