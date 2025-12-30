@@ -155,9 +155,10 @@ function isDesignRequest(content: string): boolean {
 }
 
 /**
- * Format Google Maps search_places response into a readable list
+ * Format Google Maps response into a readable format
+ * Handles search_places, lookup_weather, and compute_routes
  */
-function formatGoogleMapsResponse(responseText: string): string {
+function formatGoogleMapsResponse(responseText: string, toolName?: string): string {
   try {
     // Try to parse JSON from the response
     let data: any
@@ -174,75 +175,137 @@ function formatGoogleMapsResponse(responseText: string): string {
       }
     }
 
-    if (!data.places || !Array.isArray(data.places)) {
-      return responseText
-    }
-
-    let formatted = `Found ${data.places.length} coffee shop${data.places.length === 1 ? '' : 's'} in Des Moines:\n\n`
-
-    // Extract place names from summary (format: **Name** [0])
-    const placeNames: string[] = []
-    if (data.summary) {
-      const nameMatches = data.summary.matchAll(/\*\*([^*]+)\*\*.*?\[(\d+)\]/g)
-      for (const match of nameMatches) {
-        const name = match[1].trim()
-        const idx = parseInt(match[2])
-        placeNames[idx] = name
-      }
-    }
-
-    data.places.forEach((place: any, index: number) => {
-      const lat = place.location?.latitude
-      const lng = place.location?.longitude
-
-      formatted += `${index + 1}. `
+    // Handle weather responses
+    if (toolName === 'lookup_weather' || data.weather || data.currentConditions) {
+      let formatted = '## Weather Information\n\n'
       
-      // Use extracted name or fallback
-      const placeName = placeNames[index] || `Place ${index + 1}`
-      formatted += `**${placeName}**\n`
+      if (data.currentConditions) {
+        const conditions = data.currentConditions
+        if (conditions.temperature) {
+          formatted += `**Temperature:** ${conditions.temperature}${conditions.temperatureUnit || '°F'}\n`
+        }
+        if (conditions.condition) {
+          formatted += `**Condition:** ${conditions.condition}\n`
+        }
+        if (conditions.humidity) {
+          formatted += `**Humidity:** ${conditions.humidity}%\n`
+        }
+        if (conditions.windSpeed) {
+          formatted += `**Wind Speed:** ${conditions.windSpeed} ${conditions.windSpeedUnit || 'mph'}\n`
+        }
+      }
+      
+      if (data.forecast) {
+        formatted += `\n**Forecast:** ${data.forecast}\n`
+      }
+      
+      if (data.location) {
+        formatted += `\n**Location:** ${data.location}\n`
+      }
+      
+      return formatted
+    }
 
-      // Add coordinates
-      if (lat && lng) {
-        formatted += `   📍 Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`
-        
-        // Use place ID if available for better business name display, otherwise use coordinates
-        const placeId = place.id || place.place?.replace('places/', '')
-        let mapsUrl: string
-        let directionsUrl: string
-        
-        if (placeId) {
-          // Use place ID for better business name display
-          mapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`
-          directionsUrl = `https://www.google.com/maps/dir/?api=1&destination_place_id=${placeId}`
-        } else {
-          // Fallback to coordinates
-          mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`
-          directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+    // Handle route responses
+    if (toolName === 'compute_routes' || data.routes || data.route) {
+      let formatted = '## Route Information\n\n'
+      
+      const route = data.routes?.[0] || data.route
+      if (route) {
+        if (route.distance) {
+          formatted += `**Distance:** ${route.distance}\n`
         }
-        
-        formatted += `   🔗 [View on Google Maps](${mapsUrl})\n`
-        formatted += `   🧭 [Get Directions](${directionsUrl})\n`
-      } else {
-        // Fallback to provided links if coordinates not available
-        const placeUrl = place.googleMapsLinks?.placeUrl
-        const directionsUrl = place.googleMapsLinks?.directionsUrl
-        if (placeUrl) {
-          formatted += `   🔗 [View on Google Maps](${placeUrl})\n`
+        if (route.duration) {
+          formatted += `**Duration:** ${route.duration}\n`
         }
-        if (directionsUrl) {
-          formatted += `   🧭 [Get Directions](${directionsUrl})\n`
+        if (route.summary) {
+          formatted += `\n${route.summary}\n`
+        }
+        if (route.polyline) {
+          formatted += `\n[View Route on Google Maps](https://www.google.com/maps/dir/?api=1&waypoints=enc:${route.polyline})\n`
+        }
+      }
+      
+      return formatted
+    }
+
+    // Handle search_places responses (original logic)
+    if (data.places && Array.isArray(data.places)) {
+      let formatted = `Found ${data.places.length} place${data.places.length === 1 ? '' : 's'}:\n\n`
+
+      // Extract place names from summary (format: **Name** [0])
+      const placeNames: string[] = []
+      if (data.summary) {
+        const nameMatches = data.summary.matchAll(/\*\*([^*]+)\*\*.*?\[(\d+)\]/g)
+        for (const match of nameMatches) {
+          const name = match[1].trim()
+          const idx = parseInt(match[2])
+          placeNames[idx] = name
         }
       }
 
-      formatted += `\n`
-    })
+      data.places.forEach((place: any, index: number) => {
+        const lat = place.location?.latitude
+        const lng = place.location?.longitude
 
-    // Add summary if available
-    if (data.summary) {
-      formatted += `\n---\n\n${data.summary}`
+        formatted += `${index + 1}. `
+        
+        // Use extracted name or fallback
+        const placeName = placeNames[index] || place.displayName?.text || place.name || `Place ${index + 1}`
+        formatted += `**${placeName}**\n`
+
+        // Add coordinates
+        if (lat && lng) {
+          formatted += `   📍 Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`
+          
+          // Use place ID if available for better business name display, otherwise use coordinates
+          const placeId = place.id || place.place?.replace('places/', '')
+          let mapsUrl: string
+          let directionsUrl: string
+          
+          if (placeId) {
+            // Use place ID for better business name display
+            mapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`
+            directionsUrl = `https://www.google.com/maps/dir/?api=1&destination_place_id=${placeId}`
+          } else {
+            // Fallback to coordinates
+            mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`
+            directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+          }
+          
+          formatted += `   🔗 [View on Google Maps](${mapsUrl})\n`
+          formatted += `   🧭 [Get Directions](${directionsUrl})\n`
+        } else {
+          // Fallback to provided links if coordinates not available
+          const placeUrl = place.googleMapsLinks?.placeUrl
+          const directionsUrl = place.googleMapsLinks?.directionsUrl
+          if (placeUrl) {
+            formatted += `   🔗 [View on Google Maps](${placeUrl})\n`
+          }
+          if (directionsUrl) {
+            formatted += `   🧭 [Get Directions](${directionsUrl})\n`
+          }
+        }
+
+        formatted += `\n`
+      })
+
+      // Add summary if available
+      if (data.summary) {
+        formatted += `\n---\n\n${data.summary}`
+      }
+
+      return formatted
     }
 
-    return formatted
+    // If we can't identify the response type, try to format it nicely
+    // Check if it's a valid JSON object that we can stringify nicely
+    if (typeof data === 'object' && data !== null) {
+      // Return formatted JSON as fallback
+      return `\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``
+    }
+
+    return responseText
   } catch (error) {
     console.error('[formatGoogleMapsResponse] Error formatting response:', error)
     return responseText
@@ -501,9 +564,13 @@ export default function ChatPage() {
                 
                 if (textContent) {
                   // Format Google Maps responses nicely
-                  const toolPath = orchestratorResult.toolPath || ''
-                  if ((toolPath.includes('maps-mcp') || toolPath.includes('google-maps')) && toolPath.includes('search_places')) {
-                    responseContent = formatGoogleMapsResponse(textContent)
+                  const tool = orchestratorResult.tool || ''
+                  const isGoogleMaps = (tool.includes('maps-mcp') || tool.includes('google-maps') || tool.includes('search_places') || tool.includes('lookup_weather') || tool.includes('compute_routes'))
+                  if (isGoogleMaps) {
+                    // Extract tool name from tool string (e.g., "maps-mcp/search_places" or just "search_places")
+                    const toolNameMatch = tool.match(/(?:search_places|lookup_weather|compute_routes)/)
+                    const detectedToolName = toolNameMatch ? toolNameMatch[0] : undefined
+                    responseContent = formatGoogleMapsResponse(textContent, detectedToolName)
                   } else {
                     responseContent = textContent
                   }
@@ -778,13 +845,13 @@ export default function ChatPage() {
           targetServer = availableServers.find(s => 
             s.serverId.includes('vision') || 
             s.tools?.some(t => t.name.includes('analyze') || t.name.includes('vision'))
-          ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server')
+          ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') || null
           agentName = "Vision Agent"
         } else if (attachment?.type === "document") {
           // Route to document analysis
           targetServer = availableServers.find(s => 
             s.tools?.some(t => t.name.includes('analyze') || t.name.includes('document'))
-          ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server')
+          ) || availableServers.find(s => s.serverId === 'com.langchain/agent-mcp-server') || null
           agentName = "Document Processing"
         } else {
           // Check for explicit tool requests first (e.g., "use playwright to check ticketmaster", "go to ticketmaster.com")
@@ -1003,6 +1070,7 @@ export default function ChatPage() {
                       agentName = "Playwright MCP Server"
                     } else {
                       targetServer = routing.primaryServer
+                      const toolContext = getServerToolContext(routing.primaryServer)
                       agentName = toolContext?.tool || routing.primaryServer.name
                     }
                   } else {
@@ -1019,7 +1087,7 @@ export default function ChatPage() {
                     // For concert queries, try Playwright first
                     targetServer = availableServers.find(s => 
                       s.serverId.includes('playwright') || s.name.toLowerCase().includes('playwright')
-                    )
+                    ) || null
                     agentName = targetServer ? "Playwright MCP Server" : undefined
                   }
                   
@@ -1314,33 +1382,48 @@ export default function ChatPage() {
               .map(item => item.text)
               .join('\n\n')
             
-            // Format response as natural language for better UX (especially for Playwright snapshots)
-            try {
-              const toolContext: ToolContext = {
-                tool: targetServer.serverId.includes('playwright') ? 'playwright' : 
-                      targetServer.serverId.includes('maps') ? 'google-maps' : 'unknown',
-                serverId: targetServer.serverId,
-                toolName: toolName || 'unknown',
-              }
-              
-              // Only format if we have significant content (not just short messages)
-              if (rawResponseContent.length > 200 || rawResponseContent.includes('```yaml') || rawResponseContent.includes('Page Snapshot')) {
-                console.log('[Chat] Calling formatToolResponse for Playwright response')
-                try {
-                  const formatted = await formatToolResponse(content, { content: result.content }, toolContext)
-                  console.log('[Chat] Formatter returned:', formatted.substring(0, 200))
-                  responseContent = formatted
-                } catch (formatErr) {
-                  console.error('[Chat] Format error:', formatErr)
-                  // If formatting fails, use guardrail fallback
-                  responseContent = finalGuardrail(rawResponseContent)
-                }
-              } else {
+            // Check if this is a Google Maps response that needs formatting
+            const isGoogleMaps = (targetServer.serverId?.includes('maps-mcp') || targetServer.serverId?.includes('google-maps')) &&
+                                 (toolName === 'search_places' || toolName === 'lookup_weather' || toolName === 'compute_routes')
+            
+            if (isGoogleMaps) {
+              // Format Google Maps responses nicely (handles JSON parsing)
+              try {
+                responseContent = formatGoogleMapsResponse(rawResponseContent, toolName)
+                console.log('[Chat] Formatted Google Maps response')
+              } catch (formatErr) {
+                console.error('[Chat] Error formatting Google Maps response:', formatErr)
                 responseContent = rawResponseContent
               }
-            } catch (formatError) {
-              console.warn('[Chat] Failed to format response, using raw:', formatError)
-              responseContent = rawResponseContent
+            } else {
+              // Format response as natural language for better UX (especially for Playwright snapshots)
+              try {
+                const toolContext: ToolContext = {
+                  tool: targetServer.serverId.includes('playwright') ? 'playwright' : 
+                        targetServer.serverId.includes('maps') ? 'google-maps' : 'unknown',
+                  serverId: targetServer.serverId,
+                  toolName: toolName || 'unknown',
+                }
+                
+                // Only format if we have significant content (not just short messages)
+                if (rawResponseContent.length > 200 || rawResponseContent.includes('```yaml') || rawResponseContent.includes('Page Snapshot')) {
+                  console.log('[Chat] Calling formatToolResponse for Playwright response')
+                  try {
+                    const formatted = await formatToolResponse(content, { content: result.content }, toolContext)
+                    console.log('[Chat] Formatter returned:', formatted.substring(0, 200))
+                    responseContent = formatted
+                  } catch (formatErr) {
+                    console.error('[Chat] Format error:', formatErr)
+                    // If formatting fails, use guardrail fallback
+                    responseContent = finalGuardrail(rawResponseContent)
+                  }
+                } else {
+                  responseContent = rawResponseContent
+                }
+              } catch (formatError) {
+                console.warn('[Chat] Failed to format response, using raw:', formatError)
+                responseContent = rawResponseContent
+              }
             }
           } else if (typeof result === 'string') {
             responseContent = result
@@ -1349,7 +1432,7 @@ export default function ChatPage() {
           }
           
           // Check if auto-search was attempted and verify results (applies to all response types)
-          const searchQuery = toolArgs?.search_query || toolArgs?.searchQuery
+          const searchQuery = (toolArgs?.search_query || toolArgs?.searchQuery) as string | undefined
           if (searchQuery && toolName?.includes('browser_navigate')) {
             const searchQueryLower = searchQuery.toLowerCase()
             const responseLower = responseContent.toLowerCase()
@@ -1674,8 +1757,10 @@ export default function ChatPage() {
               .join('\n\n')
             
             // Format Google Maps responses nicely
-            if (tool.name === 'search_places' && server.serverId?.includes('google-maps')) {
-              responseContent = formatGoogleMapsResponse(textContent)
+            const isGoogleMapsTool = (server.serverId?.includes('maps-mcp') || server.serverId?.includes('google-maps')) &&
+                                     (tool.name === 'search_places' || tool.name === 'lookup_weather' || tool.name === 'compute_routes')
+            if (isGoogleMapsTool) {
+              responseContent = formatGoogleMapsResponse(textContent, tool.name)
             } else {
               responseContent = textContent
             }
