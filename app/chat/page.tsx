@@ -502,7 +502,7 @@ export default function ChatPage() {
                 if (textContent) {
                   // Format Google Maps responses nicely
                   const toolPath = orchestratorResult.toolPath || ''
-                  if (toolPath.includes('google-maps') && toolPath.includes('search_places')) {
+                  if ((toolPath.includes('maps-mcp') || toolPath.includes('google-maps')) && toolPath.includes('search_places')) {
                     responseContent = formatGoogleMapsResponse(textContent)
                   } else {
                     responseContent = textContent
@@ -1563,7 +1563,7 @@ export default function ChatPage() {
           
           // Smart tool selection: detect weather queries and use lookup_weather
           let tool = server.tools[0] // Default to first tool
-          if (server.serverId?.includes('google-maps')) {
+          if (server.serverId?.includes('maps-mcp') || server.serverId?.includes('google-maps')) {
             const isWeatherQuery = /\b(what.*?temp|what.*?weather|whats.*?temp|whats.*?weather|temperature|temp|weather|forecast)\b/i.test(content)
             if (isWeatherQuery) {
               const weatherTool = server.tools.find(t => t.name === 'lookup_weather')
@@ -1582,11 +1582,11 @@ export default function ChatPage() {
           let toolArgs: Record<string, unknown> = {}
           if (tool.name === 'agent_executor') {
             toolArgs = { query: content, input: content }
-          } else if (tool.name === 'search_places' && server.serverId?.includes('google-maps')) {
+          } else if (tool.name === 'search_places' && (server.serverId?.includes('maps-mcp') || server.serverId?.includes('google-maps'))) {
             // Google Maps search_places requires textQuery (camelCase) as a single string
             // Format: "coffee shops in des moines"
             toolArgs = { textQuery: content }
-          } else if (tool.name === 'lookup_weather' && server.serverId?.includes('google-maps')) {
+          } else if (tool.name === 'lookup_weather' && (server.serverId?.includes('maps-mcp') || server.serverId?.includes('google-maps'))) {
             // Google Maps lookup_weather requires location object with address
             // Extract location from query: "what's the weather in Lake Forest CA" or "WHATS THE TEMP IN DES MOINES"
             const weatherMatch = content.match(/\b(what.*?temp|what.*?weather|whats.*?temp|whats.*?weather|temperature|temp|weather|forecast).*?(in|at|for|of)\s+(.+?)(?:\?|$)/i)
@@ -1611,6 +1611,33 @@ export default function ChatPage() {
                   location: {
                     address: content
                   }
+                }
+              }
+            }
+          } else if (tool.name === 'compute_routes' && (server.serverId?.includes('maps-mcp') || server.serverId?.includes('google-maps'))) {
+            // Google Maps compute_routes requires origin and destination objects with address
+            // Try to extract from query like "directions from X to Y" or "route from X to Y"
+            const routeMatch = content.match(/\b(?:directions|route|drive|walk)\s+(?:from|between)\s+(.+?)\s+(?:to|and)\s+(.+?)(?:\?|$)/i)
+            if (routeMatch) {
+              toolArgs = {
+                origin: { address: routeMatch[1].trim() },
+                destination: { address: routeMatch[2].trim() },
+                travelMode: 'DRIVE'
+              }
+            } else {
+              // Fallback: try to split on "to" or "and"
+              const splitMatch = content.match(/(.+?)\s+(?:to|and)\s+(.+)/i)
+              if (splitMatch) {
+                toolArgs = {
+                  origin: { address: splitMatch[1].trim() },
+                  destination: { address: splitMatch[2].trim() },
+                  travelMode: 'DRIVE'
+                }
+              } else {
+                // Last resort: use full query as destination, no origin
+                toolArgs = {
+                  destination: { address: content },
+                  travelMode: 'DRIVE'
                 }
               }
             }
