@@ -89,10 +89,12 @@ if ($hasEnvFile -and !$SkipBuild) {
             $key = $matches[1].Trim()
             $value = $matches[2].Trim().Trim('"').Trim("'")
             
-            # Skip DATABASE_URL if it's a file path (use Cloud SQL instead)
-            if ($key -eq "DATABASE_URL" -and $value.StartsWith("file:")) {
-                Write-Host "   Skipping local DATABASE_URL (file:). Use Cloud SQL connection string." -ForegroundColor Yellow
-                return
+            # Skip DATABASE_URL if it's a local path or localhost (use Cloud SQL instead)
+            if ($key -eq "DATABASE_URL") {
+                if ($value.StartsWith("file:") -or $value.Contains("localhost") -or $value.Contains("127.0.0.1") -or $value.Contains(":54322")) {
+                    Write-Host "   Skipping local DATABASE_URL ($value). Use Cloud SQL connection string in Cloud Run console." -ForegroundColor Yellow
+                    return
+                }
             }
             
             # Check if it's a secret reference (format: secret-name:latest)

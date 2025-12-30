@@ -59,6 +59,16 @@ interface ChatMessageProps {
 export function ChatMessageComponent({ message }: ChatMessageProps) {
   const isUser = message.role === "user"
   const [imageSrc, setImageSrc] = useState<string | null>(null)
+  const [formattedTime, setFormattedTime] = useState<string>("")
+
+  // Format timestamp on client side only to avoid hydration mismatches
+  useEffect(() => {
+    const formatted = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(message.timestamp)
+    setFormattedTime(formatted)
+  }, [message.timestamp])
 
   // Convert base64 image data to blob URL to avoid 414 errors
   useEffect(() => {
@@ -166,11 +176,13 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
         </div>
 
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs text-muted-foreground">
-            {new Intl.DateTimeFormat("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            }).format(message.timestamp)}
+          <span className="text-xs text-muted-foreground" suppressHydrationWarning>
+            {formattedTime || (
+              new Intl.DateTimeFormat("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              }).format(message.timestamp)
+            )}
           </span>
         </div>
       </div>

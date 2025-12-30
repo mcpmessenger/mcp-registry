@@ -46,10 +46,20 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 
 ### 🆕 Latest Upgrades (December 2024)
 
+#### Google Maps MCP Integration (NEW - December 2024)
+- **Places Search**: Find coffee shops, restaurants, record stores, and more with `search_places` tool
+- **Weather Data**: Get real-time weather, temperature, and forecasts with `lookup_weather` tool
+- **Route Planning**: Calculate directions and travel times with `compute_routes` tool
+- **Smart Parameter Formatting**: Automatically formats queries for Google Maps API (textQuery for places, location object for weather)
+- **Enhanced Map Links**: Uses place IDs for accurate business name display in Google Maps
+- **MCP Access Enabled**: Requires `gcloud beta services mcp enable mapstools.googleapis.com` for API access
+
 #### Kafka-First Orchestrator (NEW - December 2024)
-- **Intelligent Tool Routing**: Automatically routes high-signal queries (like "when is the next concert") directly to appropriate MCP tools without invoking Gemini
+- **Intelligent Tool Routing**: Automatically routes high-signal queries (like "when is the next concert", "what's the weather in...") directly to appropriate MCP tools without invoking Gemini
 - **Gemini Quota Protection**: Bypasses Gemini API for deterministic queries, saving quota for complex reasoning tasks
 - **Fast-Path Matching**: Keyword and semantic matching routes queries to tools in <50ms
+- **Weather Query Routing**: Routes temperature/weather queries to Google Maps `lookup_weather` tool
+- **Places Query Routing**: Routes location-based searches to Google Maps `search_places` tool
 - **Asynchronous Processing**: Kafka-based event-driven architecture for scalable orchestration
 - **SSE Support**: Handles Server-Sent Events (SSE) responses from MCP servers like Exa
 - **Shared Result Consumer**: Always-ready consumer eliminates timeout issues
@@ -329,6 +339,26 @@ The registry now supports both managed and automated map tools:
 - **Google Grounding Lite**: Access fresh, official geospatial data, real-time weather, and distance matrices. No hallucinations—just raw Google Maps data.
 - **Playwright-MCP Bridge**: Need to actually see the map or scrape specific business details? Use the Playwright bridge to automate the Google Maps UI.
 
+### Recent Updates (December 2024)
+
+**✅ Weather Query Routing Fixed**
+- Weather queries (e.g., "what's the temperature in Fort Worth Texas") now automatically route to Google Maps `lookup_weather` tool
+- Smart parameter extraction handles both natural language and all-caps queries
+- Returns comprehensive weather data: temperature, feels-like, humidity, wind, precipitation probability, and more
+- **Manual selection**: When manually selecting Google Maps agent, the system automatically detects weather queries and uses the correct tool
+
+**✅ Places Search Enhanced**
+- Place searches (e.g., "find coffee shops in des moines") route to `search_places` tool
+- Improved map links using place IDs for accurate business name display
+- Better response formatting with coordinates and direct Google Maps links
+
+**Setup Requirements:**
+1. Add `GOOGLE_MAPS_API_KEY` to `backend/.env`
+2. Enable "Maps Grounding Lite API" in Google Cloud Console
+3. Run `gcloud beta services mcp enable mapstools.googleapis.com --project=YOUR_PROJECT_ID`
+4. Update API key restrictions to allow "Maps Grounding Lite API"
+5. Restart backend after configuration changes
+
 ## 🔀 Workflow at a Glance
 
 ```mermaid
@@ -544,6 +574,7 @@ Here's how to use the image generation feature:
 - **Check status endpoint**: `curl http://localhost:3001/api/orchestrator/status` should show all services as `true`
 - **Timeout issues**: If queries timeout, check that Result Consumer is running (should see `[Server] ✓ Result Consumer started successfully`)
 - **SSE parsing errors**: Make sure backend has been restarted after the SSE parsing fix was applied
+- **Weather queries not routing**: After updating matcher patterns, restart the backend to pick up changes. Weather queries should route to Google Maps `lookup_weather` tool automatically
 
 ## 📞 Support
 
