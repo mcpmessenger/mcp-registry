@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getServers, publishServer, updateServer, deleteServer } from "@/lib/api"
+import { getServers, publishServer, updateServer, deleteServer, verifyServerIntegration } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPAgent } from "@/types/agent"
 import { AgentCard } from "@/components/agent-card"
@@ -26,6 +26,7 @@ export default function RegistryPage() {
   const [editingAgent, setEditingAgent] = useState<MCPAgent | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deletingAgent, setDeletingAgent] = useState<MCPAgent | null>(null)
+  const [testingAgentId, setTestingAgentId] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Fetch servers from backend API
@@ -334,6 +335,8 @@ export default function RegistryPage() {
         toolsCount: publishData.tools?.length || 0,
       })
 
+      let savedServerId = serverId
+      
       if (editingAgent) {
         // Update existing server
         await updateServer(editingAgent.id, publishData)
@@ -350,6 +353,43 @@ export default function RegistryPage() {
         })
       }
 
+      // For HTTP servers, automatically discover tools and verify integration
+      if (!isStdioServer) {
+        try {
+          toast({
+            title: "Verifying integration...",
+            description: "Discovering tools and checking server status...",
+          })
+          
+          // Automatically verify integration (discovers tools and updates status)
+          const verificationResult = await verifyServerIntegration(savedServerId, { discoverTools: true })
+          
+          if (verificationResult.status === 'active') {
+            toast({
+              title: "✅ Server is now Active!",
+              description: `Successfully discovered ${verificationResult.details.toolsCount} tool(s). Ready to use!`,
+            })
+          } else if (verificationResult.details.hasTools) {
+            toast({
+              title: "⚠️ Tools discovered",
+              description: `Found ${verificationResult.details.toolsCount} tool(s), but status is ${verificationResult.status}. ${verificationResult.reason}`,
+            })
+          } else {
+            toast({
+              title: "⚠️ Integration in progress",
+              description: verificationResult.reason || "Tools not yet discovered. You can verify again later.",
+            })
+          }
+        } catch (verifyError) {
+          console.error('Auto-verification failed:', verifyError)
+          // Don't show error toast - server is still saved, just needs manual verification
+          toast({
+            title: "Server saved",
+            description: "Server registered. You can verify integration manually to test it.",
+          })
+        }
+      }
+
       // Refresh agents list from backend
       const servers = await getServers()
       const transformedAgents = transformServersToAgents(servers)
@@ -362,6 +402,82 @@ export default function RegistryPage() {
         description: errorMessage,
         variant: "destructive",
       })
+    }
+  }
+
+  const handleTestAgent = async (agent: MCPAgent) => {
+    try {
+      setTestingAgentId(agent.id)
+      toast({
+        title: "Testing server...",
+        description: `Verifying integration for ${agent.name}...`,
+      })
+
+      const result = await verifyServerIntegration(agent.id, { discoverTools: true })
+
+      // Refresh agents list to get updated status
+      const servers = await getServers()
+      const transformedAgents = transformServersToAgents(servers)
+      setAgents(transformedAgents)
+
+      if (result.status === 'active') {
+        toast({
+          title: "✅ Server is now Active!",
+          description: `Successfully discovered ${result.details.toolsCount} tool(s). Ready to use!`,
+        })
+      } else if (result.details.hasTools) {
+        toast({
+          title: "⚠️ Tools discovered",
+          description: `Found ${result.details.toolsCount} tool(s), but status is ${result.status}. ${result.reason}`,
+        })
+      } else {
+        // Show more detailed error message based on server type and status
+        let errorDetails = result.reason || "Tools not yet discovered."
+        
+        // Provide specific guidance based on the reason
+        if (errorDetails.includes('package not found')) {
+          errorDetails += " The npm package may not exist yet or the package name is incorrect."
+        } else if (errorDetails.includes('discovery failed')) {
+          errorDetails += " This could be due to: missing environment variables, network issues, or server configuration problems."
+        } else if (result.details.toolsCount === 0) {
+          // Check if it's HTTP or STDIO based on server
+          const isHttpServer = !agent.endpoint?.startsWith('stdio://')
+          if (isHttpServer) {
+            errorDetails += " For HTTP servers: Check API keys, endpoint URL, or server configuration."
+          } else {
+            errorDetails += " For STDIO servers: Check npm package exists, environment variables are set, or try installing the package manually."
+          }
+        }
+        
+        toast({
+          title: "⚠️ Integration in progress",
+          description: errorDetails,
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to test server'
+      console.error('Error testing agent:', error)
+      
+      // Extract more helpful error message
+      let userMessage = errorMessage
+      if (errorMessage.includes('403') || errorMessage.includes('PERMISSION_DENIED')) {
+        userMessage = '403 Forbidden: API key may be missing or invalid. Check HTTP Headers in the Edit form.'
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        userMessage = '401 Unauthorized: Authentication required. Check API key configuration.'
+      } else if (errorMessage.includes('404')) {
+        userMessage = '404 Not Found: Endpoint may be incorrect. Check the endpoint URL.'
+      } else if (errorMessage.includes('API key')) {
+        userMessage = errorMessage // Already helpful
+      }
+      
+      toast({
+        title: "❌ Test failed",
+        description: userMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setTestingAgentId(null)
     }
   }
 
@@ -593,6 +709,8 @@ export default function RegistryPage() {
                 onViewDetails={handleViewDetails}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onTest={handleTestAgent}
+                isTesting={testingAgentId === agent.id}
               />
             ))}
           </div>
