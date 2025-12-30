@@ -8,7 +8,7 @@ import { ChatInput } from "@/components/chat-input"
 import { VoiceInputDialog } from "@/components/voice-input-dialog"
 import { FileUploadDialog } from "@/components/file-upload-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { getServers, generateSVG, getJobStatus, createJobProgressStream, queryOrchestrator, verifyServerIntegration } from "@/lib/api"
+import { getServers, generateSVG, getJobStatus, createJobProgressStream, queryOrchestrator, verifyServerIntegration, getOrchestratorStatus } from "@/lib/api"
 import { transformServersToAgents } from "@/lib/server-utils"
 import type { MCPServer } from "@/lib/api"
 import { invokeMCPTool } from "@/lib/api"
@@ -152,6 +152,101 @@ function isDesignRequest(content: string): boolean {
   ]
   
   return designKeywords.some(pattern => pattern.test(content))
+}
+
+/**
+ * Format Google Maps search_places response into a readable list
+ */
+function formatGoogleMapsResponse(responseText: string): string {
+  try {
+    // Try to parse JSON from the response
+    let data: any
+    try {
+      data = JSON.parse(responseText)
+    } catch {
+      // If not JSON, try to extract JSON from markdown code blocks
+      const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/)
+      if (jsonMatch) {
+        data = JSON.parse(jsonMatch[1])
+      } else {
+        // Return as-is if we can't parse
+        return responseText
+      }
+    }
+
+    if (!data.places || !Array.isArray(data.places)) {
+      return responseText
+    }
+
+    let formatted = `Found ${data.places.length} coffee shop${data.places.length === 1 ? '' : 's'} in Des Moines:\n\n`
+
+    // Extract place names from summary (format: **Name** [0])
+    const placeNames: string[] = []
+    if (data.summary) {
+      const nameMatches = data.summary.matchAll(/\*\*([^*]+)\*\*.*?\[(\d+)\]/g)
+      for (const match of nameMatches) {
+        const name = match[1].trim()
+        const idx = parseInt(match[2])
+        placeNames[idx] = name
+      }
+    }
+
+    data.places.forEach((place: any, index: number) => {
+      const lat = place.location?.latitude
+      const lng = place.location?.longitude
+
+      formatted += `${index + 1}. `
+      
+      // Use extracted name or fallback
+      const placeName = placeNames[index] || `Place ${index + 1}`
+      formatted += `**${placeName}**\n`
+
+      // Add coordinates
+      if (lat && lng) {
+        formatted += `   📍 Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`
+        
+        // Use place ID if available for better business name display, otherwise use coordinates
+        const placeId = place.id || place.place?.replace('places/', '')
+        let mapsUrl: string
+        let directionsUrl: string
+        
+        if (placeId) {
+          // Use place ID for better business name display
+          mapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`
+          directionsUrl = `https://www.google.com/maps/dir/?api=1&destination_place_id=${placeId}`
+        } else {
+          // Fallback to coordinates
+          mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`
+          directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+        }
+        
+        formatted += `   🔗 [View on Google Maps](${mapsUrl})\n`
+        formatted += `   🧭 [Get Directions](${directionsUrl})\n`
+      } else {
+        // Fallback to provided links if coordinates not available
+        const placeUrl = place.googleMapsLinks?.placeUrl
+        const directionsUrl = place.googleMapsLinks?.directionsUrl
+        if (placeUrl) {
+          formatted += `   🔗 [View on Google Maps](${placeUrl})\n`
+        }
+        if (directionsUrl) {
+          formatted += `   🧭 [Get Directions](${directionsUrl})\n`
+        }
+      }
+
+      formatted += `\n`
+    })
+
+    // Add summary if available
+    if (data.summary) {
+      formatted += `\n---\n\n${data.summary}`
+    }
+
+    return formatted
+  } catch (error) {
+    console.error('[formatGoogleMapsResponse] Error formatting response:', error)
+    return responseText
+  }
 }
 
 export default function ChatPage() {
@@ -405,7 +500,13 @@ export default function ChatPage() {
                   .join('\n\n')
                 
                 if (textContent) {
-                  responseContent = textContent
+                  // Format Google Maps responses nicely
+                  const toolPath = orchestratorResult.toolPath || ''
+                  if (toolPath.includes('google-maps') && toolPath.includes('search_places')) {
+                    responseContent = formatGoogleMapsResponse(textContent)
+                  } else {
+                    responseContent = textContent
+                  }
                   agentName = orchestratorResult.tool || "Orchestrator"
                   
                   // Create assistant message and return early
@@ -425,25 +526,58 @@ export default function ChatPage() {
             }
           } catch (orchestratorError) {
             // Orchestrator failed or unavailable, fall through to old routing
+            const errorMessage = orchestratorError instanceof Error ? orchestratorError.message : String(orchestratorError)
             console.warn('[Chat] Orchestrator failed, falling back to old routing:', orchestratorError)
             
             // Remove status message if it exists
             setMessages((prev) => prev.filter(m => !m.id?.startsWith('status-')))
             
-            // Show fallback message
-            const fallbackMessage: ChatMessage = {
-              id: `fallback-${Date.now()}`,
-              role: "assistant",
-              content: "⏱️ Orchestrator timed out, using fallback routing...",
-              timestamp: new Date(),
-              agentName: "System",
+            // Try to get orchestrator status for better diagnostics
+            let orchestratorStatusInfo = null
+            try {
+              orchestratorStatusInfo = await getOrchestratorStatus()
+            } catch (statusError) {
+              // Status check failed, continue with error message
             }
-            setMessages((prev) => [...prev, fallbackMessage])
             
-            // Remove fallback message after a short delay
-            setTimeout(() => {
-              setMessages((prev) => prev.filter(m => m.id !== fallbackMessage.id))
-            }, 2000)
+            // Determine error type and show appropriate message
+            let fallbackContent = "⏱️ Orchestrator unavailable, using fallback routing..."
+            if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+              fallbackContent = "⏱️ Orchestrator timed out (Kafka may be slow or unavailable), using fallback routing..."
+              if (orchestratorStatusInfo && !orchestratorStatusInfo.services.resultConsumer) {
+                fallbackContent += "\n\n💡 **Tip**: Result consumer is not running. Check backend logs."
+              }
+            } else if (errorMessage.includes('connect') || errorMessage.includes('ECONNREFUSED')) {
+              fallbackContent = "⚠️ Cannot connect to orchestrator, using fallback routing..."
+              if (!orchestratorStatusInfo) {
+                fallbackContent += "\n\n💡 **Tip**: Backend may not be running or Kafka not started. Check:"
+                fallbackContent += "\n- Backend is running on port 3001"
+                fallbackContent += "\n- Kafka is running: `docker compose -f docker-compose.kafka.yml up -d`"
+              } else if (!orchestratorStatusInfo.kafka.enabled) {
+                fallbackContent += "\n\n💡 **Tip**: Kafka is not enabled. Set `ENABLE_KAFKA=true` in backend `.env`"
+              }
+            } else if (errorMessage.includes('ENABLE_KAFKA') || errorMessage.includes('KAFKA_BROKERS')) {
+              fallbackContent = "⚠️ Orchestrator not configured (Kafka not enabled), using fallback routing..."
+              fallbackContent += "\n\n💡 **Tip**: To enable orchestrator, set `ENABLE_KAFKA=true` and `KAFKA_BROKERS=localhost:9092` in backend `.env`"
+            }
+            
+            // Show fallback message (only if we have servers to fall back to)
+            if (availableServers.length > 0) {
+              const fallbackMessage: ChatMessage = {
+                id: `fallback-${Date.now()}`,
+                role: "assistant",
+                content: fallbackContent,
+                timestamp: new Date(),
+                agentName: "System",
+              }
+              setMessages((prev) => [...prev, fallbackMessage])
+              
+              // Remove fallback message after a short delay
+              setTimeout(() => {
+                setMessages((prev) => prev.filter(m => m.id !== fallbackMessage.id))
+              }, 3000)
+            }
+            // If no servers available, the error will be shown below
           }
         }
         
@@ -1289,7 +1423,23 @@ export default function ChatPage() {
         
         if (!isDesignRequest(content) && !responseContent) {
           // Only show this error if it wasn't a design request (design requests are handled above)
-          responseContent = "I couldn't find an available MCP server to handle your request. Please try selecting a specific agent."
+          // Provide helpful diagnostics
+          let errorMessage = "I couldn't find an available MCP server to handle your request."
+          
+          if (availableServers.length === 0) {
+            errorMessage += "\n\n**Issue**: No MCP servers are currently registered or active."
+            errorMessage += "\n\n**Solution**: Register some servers first. You can:"
+            errorMessage += "\n- Use the Registry page to add servers"
+            errorMessage += "\n- Or run `cd backend && npm run register-top-20` to register popular servers"
+          } else {
+            errorMessage += `\n\n**Available servers**: ${availableServers.length} server(s) found, but none matched your query.`
+            errorMessage += "\n\n**Suggestions**:"
+            errorMessage += "\n- Try selecting a specific agent from the dropdown"
+            errorMessage += "\n- Rephrase your query to be more specific"
+            errorMessage += "\n- Check if the orchestrator is running (backend logs should show 'Kafka enabled')"
+          }
+          
+          responseContent = errorMessage
         }
       }
       
@@ -1410,11 +1560,60 @@ export default function ChatPage() {
           }
         } else if (server && server.tools && server.tools.length > 0) {
           agentName = selectedAgent?.name
-          const tool = server.tools[0] // Use first available tool
+          
+          // Smart tool selection: detect weather queries and use lookup_weather
+          let tool = server.tools[0] // Default to first tool
+          if (server.serverId?.includes('google-maps')) {
+            const isWeatherQuery = /\b(what.*?temp|what.*?weather|whats.*?temp|whats.*?weather|temperature|temp|weather|forecast)\b/i.test(content)
+            if (isWeatherQuery) {
+              const weatherTool = server.tools.find(t => t.name === 'lookup_weather')
+              if (weatherTool) {
+                tool = weatherTool
+              }
+            } else {
+              // For non-weather queries, prefer search_places
+              const placesTool = server.tools.find(t => t.name === 'search_places')
+              if (placesTool) {
+                tool = placesTool
+              }
+            }
+          }
           
           let toolArgs: Record<string, unknown> = {}
           if (tool.name === 'agent_executor') {
             toolArgs = { query: content, input: content }
+          } else if (tool.name === 'search_places' && server.serverId?.includes('google-maps')) {
+            // Google Maps search_places requires textQuery (camelCase) as a single string
+            // Format: "coffee shops in des moines"
+            toolArgs = { textQuery: content }
+          } else if (tool.name === 'lookup_weather' && server.serverId?.includes('google-maps')) {
+            // Google Maps lookup_weather requires location object with address
+            // Extract location from query: "what's the weather in Lake Forest CA" or "WHATS THE TEMP IN DES MOINES"
+            const weatherMatch = content.match(/\b(what.*?temp|what.*?weather|whats.*?temp|whats.*?weather|temperature|temp|weather|forecast).*?(in|at|for|of)\s+(.+?)(?:\?|$)/i)
+            if (weatherMatch) {
+              toolArgs = {
+                location: {
+                  address: weatherMatch[3].trim()
+                }
+              }
+            } else {
+              // Fallback: try to extract location from "in/at" pattern
+              const locationMatch = content.match(/\b(in|at|for)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)\b/i)
+              if (locationMatch) {
+                toolArgs = {
+                  location: {
+                    address: locationMatch[2].trim()
+                  }
+                }
+              } else {
+                // Last resort: use full query as address
+                toolArgs = {
+                  location: {
+                    address: content
+                  }
+                }
+              }
+            }
           } else {
             toolArgs = { query: content, text: content, input: content }
           }
@@ -1442,10 +1641,17 @@ export default function ChatPage() {
           }
 
           if (result.content && Array.isArray(result.content)) {
-            responseContent = result.content
+            const textContent = result.content
               .filter(item => item.type === 'text' && item.text)
               .map(item => item.text)
               .join('\n\n')
+            
+            // Format Google Maps responses nicely
+            if (tool.name === 'search_places' && server.serverId?.includes('google-maps')) {
+              responseContent = formatGoogleMapsResponse(textContent)
+            } else {
+              responseContent = textContent
+            }
           } else if (typeof result === 'string') {
             responseContent = result
           } else {

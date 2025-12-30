@@ -9,7 +9,7 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex items-center", className)}>
       <div
         className={cn("h-2 w-2 rounded-full", {
           "bg-success animate-pulse": status === "active",
@@ -17,9 +17,6 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
           "bg-destructive": status === "offline",
         })}
       />
-      <span className="text-sm font-medium capitalize">
-        {status === "pre-integration" ? "Pre-Integration" : status}
-      </span>
     </div>
   )
 }
