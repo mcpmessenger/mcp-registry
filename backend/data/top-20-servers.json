@@ -17,11 +17,30 @@
   },
   {
     "id": "google-maps",
-    "name": "Google Maps",
-    "description": "Location services and place details.",
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-google-maps"],
-    "env": ["GOOGLE_MAPS_API_KEY"]
+    "name": "Google Maps MCP (Grounding Lite)",
+    "description": "Google Maps Platform MCP server (Grounding Lite). Requires X-Goog-Api-Key header configured in HTTP Headers.",
+    "endpoint": "https://mapstools.googleapis.com/mcp",
+    "env": [],
+    "tools": [
+      {
+        "name": "search_places",
+        "description": "Search places by text query",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "text_query": {
+              "type": "string",
+              "description": "Primary search text (e.g., tacos in des moines)"
+            },
+            "location_bias": {
+              "type": "object",
+              "description": "Optional bias region (see Maps Grounding Lite docs)"
+            }
+          },
+          "required": ["text_query"]
+        }
+      }
+    ]
   },
   {
     "id": "postgres",
