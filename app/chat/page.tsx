@@ -178,6 +178,34 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
       }
     }
 
+    // Helper function to extract value from object or return primitive
+    const extractValue = (obj: any, unitKey?: string): { value: string | number, unit?: string } => {
+      if (obj === null || obj === undefined) {
+        return { value: '' }
+      }
+      if (typeof obj === 'object') {
+        // Try common object structures
+        const value = obj.value !== undefined ? obj.value : 
+                     obj.amount !== undefined ? obj.amount :
+                     obj.number !== undefined ? obj.number :
+                     obj.text !== undefined ? obj.text :
+                     obj.name !== undefined ? obj.name :
+                     null
+        const unit = obj.unit || obj.unitText || obj.unitCode || unitKey || ''
+        return { value: value !== null ? value : JSON.stringify(obj), unit }
+      }
+      return { value: obj, unit: unitKey }
+    }
+    
+    // Helper function to format a value with unit
+    const formatValue = (obj: any, defaultUnit: string = ''): string => {
+      const extracted = extractValue(obj, defaultUnit)
+      if (extracted.unit) {
+        return `${extracted.value}${extracted.unit}`
+      }
+      return String(extracted.value)
+    }
+
     // Handle weather responses
     if (toolName === 'lookup_weather' || data.weather || data.currentConditions || data.temperature || data.condition) {
       let formatted = '## Weather Information\n\n'
@@ -187,57 +215,60 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
       const conditions = data.currentConditions || data.weather || data
       
       if (conditions.temperature !== undefined) {
-        formatted += `**Temperature:** ${conditions.temperature}${conditions.temperatureUnit || conditions.unit || '°F'}\n`
+        formatted += `**Temperature:** ${formatValue(conditions.temperature, conditions.temperatureUnit || conditions.unit || '°F')}\n`
         hasData = true
       }
       
       if (conditions.feelsLike !== undefined) {
-        formatted += `**Feels Like:** ${conditions.feelsLike}${conditions.temperatureUnit || conditions.unit || '°F'}\n`
+        formatted += `**Feels Like:** ${formatValue(conditions.feelsLike, conditions.temperatureUnit || conditions.unit || '°F')}\n`
         hasData = true
       }
       
-      if (conditions.condition) {
-        formatted += `**Condition:** ${conditions.condition}\n`
+      if (conditions.condition !== undefined) {
+        const conditionValue = extractValue(conditions.condition)
+        formatted += `**Condition:** ${conditionValue.value}\n`
         hasData = true
       }
       
-      if (conditions.weatherCondition) {
-        formatted += `**Condition:** ${conditions.weatherCondition}\n`
+      if (conditions.weatherCondition !== undefined) {
+        const conditionValue = extractValue(conditions.weatherCondition)
+        formatted += `**Condition:** ${conditionValue.value}\n`
         hasData = true
       }
       
       if (conditions.humidity !== undefined) {
-        formatted += `**Humidity:** ${conditions.humidity}%\n`
+        formatted += `**Humidity:** ${formatValue(conditions.humidity, '%')}\n`
         hasData = true
       }
       
       if (conditions.windSpeed !== undefined) {
-        formatted += `**Wind Speed:** ${conditions.windSpeed} ${conditions.windSpeedUnit || conditions.windUnit || 'mph'}\n`
+        formatted += `**Wind Speed:** ${formatValue(conditions.windSpeed, conditions.windSpeedUnit || conditions.windUnit || ' mph')}\n`
         hasData = true
       }
       
-      if (conditions.windDirection) {
-        formatted += `**Wind Direction:** ${conditions.windDirection}\n`
+      if (conditions.windDirection !== undefined) {
+        const windDirValue = extractValue(conditions.windDirection)
+        formatted += `**Wind Direction:** ${windDirValue.value}\n`
         hasData = true
       }
       
       if (conditions.airPressure !== undefined) {
-        formatted += `**Air Pressure:** ${conditions.airPressure} ${conditions.pressureUnit || 'hPa'}\n`
+        formatted += `**Air Pressure:** ${formatValue(conditions.airPressure, conditions.pressureUnit || ' hPa')}\n`
         hasData = true
       }
       
       if (conditions.uvIndex !== undefined) {
-        formatted += `**UV Index:** ${conditions.uvIndex}\n`
+        formatted += `**UV Index:** ${formatValue(conditions.uvIndex)}\n`
         hasData = true
       }
       
       if (conditions.precipitationProbability !== undefined) {
-        formatted += `**Precipitation Probability:** ${conditions.precipitationProbability}%\n`
+        formatted += `**Precipitation Probability:** ${formatValue(conditions.precipitationProbability, '%')}\n`
         hasData = true
       }
       
       if (conditions.cloudCover !== undefined) {
-        formatted += `**Cloud Cover:** ${conditions.cloudCover}%\n`
+        formatted += `**Cloud Cover:** ${formatValue(conditions.cloudCover, '%')}\n`
         hasData = true
       }
       
