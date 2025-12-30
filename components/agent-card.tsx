@@ -4,7 +4,7 @@ import type { MCPAgent } from "@/types/agent"
 import { StatusBadge } from "@/components/status-badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Eye, Edit, Trash2, Activity } from "lucide-react"
+import { Eye, Edit, Trash2, Activity, Play, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { InstallButton } from "@/components/install-button"
 import { transformAgentToServer } from "@/lib/server-utils"
@@ -17,9 +17,11 @@ interface AgentCardProps {
   onViewDetails: (agent: MCPAgent) => void
   onEdit: (agent: MCPAgent) => void
   onDelete: (agent: MCPAgent) => void
+  onTest?: (agent: MCPAgent) => void
+  isTesting?: boolean
 }
 
-export function AgentCard({ agent, onViewDetails, onEdit, onDelete }: AgentCardProps) {
+export function AgentCard({ agent, onViewDetails, onEdit, onDelete, onTest, isTesting = false }: AgentCardProps) {
   const formatLastActive = (date: Date) => {
     const now = new Date()
     const diff = now.getTime() - date.getTime()
@@ -133,11 +135,32 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete }: AgentCardP
         )}
 
         <div className="flex gap-2 pt-2">
-          <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={() => onViewDetails(agent)}>
+          {onTest && (
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="flex-1 bg-primary hover:bg-primary/90" 
+              onClick={() => onTest(agent)}
+              disabled={isTesting}
+            >
+              {isTesting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                <>
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  Test
+                </>
+              )}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className={onTest ? "flex-1 bg-transparent" : "flex-1 bg-transparent"} onClick={() => onViewDetails(agent)}>
             <Eye className="h-3.5 w-3.5 mr-1.5" />
             Details
           </Button>
-          <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={() => onEdit(agent)}>
+          <Button variant="outline" size="sm" className={onTest ? "flex-1 bg-transparent" : "flex-1 bg-transparent"} onClick={() => onEdit(agent)}>
             <Edit className="h-3.5 w-3.5 mr-1.5" />
             Edit
           </Button>
