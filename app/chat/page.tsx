@@ -184,12 +184,19 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
         return { value: '' }
       }
       if (typeof obj === 'object') {
+        // Handle localizedText objects (Google Maps API format)
+        if (obj.localizedText && typeof obj.localizedText === 'object') {
+          const text = obj.localizedText.text || obj.localizedText
+          return { value: text !== undefined ? text : JSON.stringify(obj), unit: unitKey || '' }
+        }
         // Try common object structures
         const value = obj.value !== undefined ? obj.value : 
                      obj.amount !== undefined ? obj.amount :
                      obj.number !== undefined ? obj.number :
                      obj.text !== undefined ? obj.text :
                      obj.name !== undefined ? obj.name :
+                     obj.degrees !== undefined ? obj.degrees :
+                     obj.meanSeaLevelMillibars !== undefined ? obj.meanSeaLevelMillibars :
                      null
         const unit = obj.unit || obj.unitText || obj.unitCode || unitKey || ''
         return { value: value !== null ? value : JSON.stringify(obj), unit }
@@ -215,24 +222,82 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
       const conditions = data.currentConditions || data.weather || data
       
       if (conditions.temperature !== undefined) {
-        formatted += `**Temperature:** ${formatValue(conditions.temperature, conditions.temperatureUnit || conditions.unit || '°F')}\n`
+        // Handle nested temperature object (Google Maps API format: {degrees: number, unit: string})
+        let tempValue = ''
+        let tempUnit = ''
+        if (typeof conditions.temperature === 'number') {
+          tempValue = String(conditions.temperature)
+          tempUnit = conditions.temperatureUnit || conditions.unit || '°F'
+        } else if (conditions.temperature.degrees !== undefined) {
+          tempValue = String(conditions.temperature.degrees)
+          tempUnit = conditions.temperature.unit || conditions.temperatureUnit || conditions.unit || '°C'
+        } else {
+          const extracted = extractValue(conditions.temperature)
+          tempValue = String(extracted.value)
+          tempUnit = extracted.unit || conditions.temperatureUnit || conditions.unit || '°F'
+        }
+        formatted += `**Temperature:** ${tempValue}${tempUnit}\n`
         hasData = true
       }
       
       if (conditions.feelsLike !== undefined) {
-        formatted += `**Feels Like:** ${formatValue(conditions.feelsLike, conditions.temperatureUnit || conditions.unit || '°F')}\n`
+        // Handle nested feelsLike object
+        let feelsLikeValue = ''
+        let feelsLikeUnit = ''
+        if (typeof conditions.feelsLike === 'number') {
+          feelsLikeValue = String(conditions.feelsLike)
+          feelsLikeUnit = conditions.temperatureUnit || conditions.unit || '°F'
+        } else if (conditions.feelsLike.degrees !== undefined) {
+          feelsLikeValue = String(conditions.feelsLike.degrees)
+          feelsLikeUnit = conditions.feelsLike.unit || conditions.temperatureUnit || conditions.unit || '°C'
+        } else {
+          const extracted = extractValue(conditions.feelsLike)
+          feelsLikeValue = String(extracted.value)
+          feelsLikeUnit = extracted.unit || conditions.temperatureUnit || conditions.unit || '°F'
+        }
+        formatted += `**Feels Like:** ${feelsLikeValue}${feelsLikeUnit}\n`
         hasData = true
       }
       
       if (conditions.condition !== undefined) {
-        const conditionValue = extractValue(conditions.condition)
-        formatted += `**Condition:** ${conditionValue.value}\n`
+        // Handle nested condition object (Google Maps API format)
+        let conditionText = ''
+        if (typeof conditions.condition === 'string') {
+          conditionText = conditions.condition
+        } else if (conditions.condition.text) {
+          conditionText = conditions.condition.text
+        } else if (conditions.condition.localizedText) {
+          conditionText = conditions.condition.localizedText.text || conditions.condition.localizedText
+        } else if (conditions.condition.description) {
+          conditionText = conditions.condition.description
+        } else {
+          conditionText = JSON.stringify(conditions.condition)
+        }
+        
+        // Format condition with optional icon link (if iconBaseUri exists)
+        if (conditions.condition.iconBaseUri) {
+          const iconUrl = conditions.condition.iconBaseUri
+          // Ensure URL doesn't break across lines by keeping it on one line
+          formatted += `**Condition:** ${conditionText} ![Weather Icon](${iconUrl})\n`
+        } else {
+          formatted += `**Condition:** ${conditionText}\n`
+        }
         hasData = true
       }
       
       if (conditions.weatherCondition !== undefined) {
-        const conditionValue = extractValue(conditions.weatherCondition)
-        formatted += `**Condition:** ${conditionValue.value}\n`
+        // Handle nested weatherCondition object
+        let conditionText = ''
+        if (typeof conditions.weatherCondition === 'string') {
+          conditionText = conditions.weatherCondition
+        } else if (conditions.weatherCondition.text) {
+          conditionText = conditions.weatherCondition.text
+        } else if (conditions.weatherCondition.localizedText) {
+          conditionText = conditions.weatherCondition.localizedText.text || conditions.weatherCondition.localizedText
+        } else {
+          conditionText = JSON.stringify(conditions.weatherCondition)
+        }
+        formatted += `**Condition:** ${conditionText}\n`
         hasData = true
       }
       
@@ -253,7 +318,17 @@ function formatGoogleMapsResponse(responseText: string, toolName?: string): stri
       }
       
       if (conditions.airPressure !== undefined) {
-        formatted += `**Air Pressure:** ${formatValue(conditions.airPressure, conditions.pressureUnit || ' hPa')}\n`
+        // Handle nested airPressure object (Google Maps API format: {meanSeaLevelMillibars: number})
+        let pressureValue = ''
+        if (typeof conditions.airPressure === 'number') {
+          pressureValue = String(conditions.airPressure)
+        } else if (conditions.airPressure.meanSeaLevelMillibars !== undefined) {
+          pressureValue = String(conditions.airPressure.meanSeaLevelMillibars)
+        } else {
+          const extracted = extractValue(conditions.airPressure)
+          pressureValue = String(extracted.value)
+        }
+        formatted += `**Air Pressure:** ${pressureValue} hPa\n`
         hasData = true
       }
       
