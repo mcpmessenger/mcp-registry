@@ -62,8 +62,16 @@ export async function getIntegrationStatus(server: MCPServer): Promise<Integrati
     const endpoint = getHttpEndpoint(server)
     if (endpoint) {
       try {
-        const healthCheckPassed = await checkHttpHealth(endpoint)
-        details.healthCheckPassed = healthCheckPassed
+        // For Google Maps, skip health check (it doesn't have a /health endpoint)
+        // Instead, we'll rely on tool discovery to verify it's working
+        if (endpoint.includes('mapstools.googleapis.com')) {
+          // Google Maps doesn't have a health endpoint, so we'll mark as undefined
+          // and let tool discovery determine if it's working
+          details.healthCheckPassed = undefined
+        } else {
+          const healthCheckPassed = await checkHttpHealth(endpoint)
+          details.healthCheckPassed = healthCheckPassed
+        }
       } catch (error) {
         details.healthCheckPassed = false
       }
@@ -110,8 +118,15 @@ export async function getIntegrationStatus(server: MCPServer): Promise<Integrati
         reason = 'Tools not yet discovered (package may exist but discovery failed)'
       }
     } else {
-      status = 'pre-integration'
-      reason = 'Tools not yet discovered'
+      // HTTP server without tools
+      const endpoint = getHttpEndpoint(server)
+      if (endpoint && endpoint.includes('mapstools.googleapis.com')) {
+        status = 'pre-integration'
+        reason = 'Tools not yet discovered. Google Maps requires X-Goog-Api-Key header. Add it in HTTP Headers field when editing the server.'
+      } else {
+        status = 'pre-integration'
+        reason = 'Tools not yet discovered'
+      }
     }
   }
 

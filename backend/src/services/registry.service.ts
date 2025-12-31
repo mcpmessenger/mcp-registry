@@ -475,6 +475,55 @@ export class RegistryService {
           }
           // Continue even if tool discovery fails - server is still registered
         }
+      } else if (serverData.metadata && typeof serverData.metadata === 'object') {
+        // For HTTP servers, attempt tool discovery if endpoint is configured
+        const metadata = serverData.metadata as Record<string, unknown>
+        if (metadata.endpoint && typeof metadata.endpoint === 'string') {
+          try {
+            console.log(`[Registry] Discovering tools for HTTP server: ${serverData.serverId}`)
+            // Get the saved server to pass to discoverHttpTools
+            const savedServer = await prisma.mcpServer.findUnique({
+              where: { serverId: serverData.serverId },
+            })
+            if (savedServer) {
+              const discoveredTools = await this.discoverHttpTools(savedServer)
+              if (discoveredTools && discoveredTools.length > 0) {
+                console.log(`[Registry] Discovered ${discoveredTools.length} tools for HTTP server ${serverData.serverId}`)
+                // Return updated server with tools (already updated by discoverHttpTools)
+                const updatedServer = await prisma.mcpServer.findUnique({
+                  where: { serverId: serverData.serverId },
+                })
+                if (updatedServer) {
+                  return this.transformToMCPFormat(updatedServer)
+                }
+              }
+            }
+          } catch (error: any) {
+            const errorMessage = error?.message || String(error) || ''
+            const fullError = errorMessage.toLowerCase()
+            
+            // Expected errors for HTTP servers
+            const isExpectedError = 
+              fullError.includes('403') ||
+              fullError.includes('401') ||
+              fullError.includes('permission denied') ||
+              fullError.includes('api key') ||
+              fullError.includes('authentication') ||
+              fullError.includes('endpoint') ||
+              fullError.includes('timeout')
+            
+            if (isExpectedError) {
+              if (fullError.includes('api key') || fullError.includes('403') || fullError.includes('401')) {
+                console.log(`[Registry] Tool discovery skipped for ${serverData.serverId}: requires API key/authentication (tools will be discovered when API key is configured)`)
+              } else {
+                console.log(`[Registry] Tool discovery skipped for ${serverData.serverId}: ${errorMessage.substring(0, 100)}`)
+              }
+            } else {
+              console.error(`[Registry] Failed to discover tools for HTTP server ${serverData.serverId}:`, error)
+            }
+            // Continue even if tool discovery fails - server is still registered
+          }
+        }
       }
 
       // Return the created server (transformed to MCP format)
@@ -483,7 +532,7 @@ export class RegistryService {
   }
 
   /**
-   * Manually discover tools for an existing STDIO server
+   * Manually discover tools for an existing server (STDIO or HTTP)
    */
   async discoverToolsForServer(serverId: string): Promise<MCPTool[]> {
     const server = await prisma.mcpServer.findUnique({
@@ -494,8 +543,10 @@ export class RegistryService {
       throw new Error(`Server ${serverId} not found`)
     }
 
+    // Check if it's an HTTP server
     if (!server.command || !server.args) {
-      throw new Error(`Server ${serverId} is not a STDIO server (no command/args)`)
+      // HTTP server - discover tools via HTTP endpoint
+      return this.discoverHttpTools(server)
     }
 
     const serverData: PublishServerData = {
@@ -521,6 +572,205 @@ export class RegistryService {
     }
 
     return discoveredTools
+  }
+
+  /**
+   * Discover tools from an HTTP MCP server by calling tools/list via HTTP
+   */
+  private async discoverHttpTools(server: any): Promise<MCPTool[]> {
+    // Get endpoint from metadata or manifest
+    let endpoint: string | null = null
+    
+    if (server.metadata) {
+      try {
+        const metadata = JSON.parse(server.metadata)
+        if (metadata.endpoint && typeof metadata.endpoint === 'string') {
+          endpoint = metadata.endpoint
+        }
+      } catch (e) {
+        // Metadata parse failed
+      }
+    }
+    
+    if (!endpoint && server.manifest) {
+      try {
+        const manifest = JSON.parse(server.manifest)
+        if (manifest.endpoint && typeof manifest.endpoint === 'string') {
+          endpoint = manifest.endpoint
+        }
+      } catch (e) {
+        // Manifest parse failed
+      }
+    }
+    
+    if (!endpoint) {
+      throw new Error(`HTTP server ${server.serverId} has no endpoint configured`)
+    }
+
+    // Get HTTP headers from metadata
+    let httpHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    
+    if (server.metadata) {
+      try {
+        const metadata = JSON.parse(server.metadata)
+        if (metadata.httpHeaders && typeof metadata.httpHeaders === 'object') {
+          Object.assign(httpHeaders, metadata.httpHeaders)
+        }
+      } catch (e) {
+        // Metadata parse failed
+      }
+    }
+
+    try {
+      console.log(`[Tool Discovery] Discovering tools for HTTP server: ${server.serverId} at ${endpoint}`)
+      console.log(`[Tool Discovery] HTTP Headers:`, Object.keys(httpHeaders).join(', '))
+      if (httpHeaders['X-Goog-Api-Key']) {
+        console.log(`[Tool Discovery] Google Maps API key present: ${httpHeaders['X-Goog-Api-Key'].substring(0, 10)}...`)
+      }
+      
+      // For Google Maps and similar servers, try tools/list directly (they may not need initialize)
+      // Try tools/list first (simpler, works for most HTTP MCP servers)
+      let toolsResponse: Response
+      let toolsData: any
+      
+      try {
+        toolsResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: httpHeaders,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/list',
+            params: {},
+          }),
+        })
+
+        if (!toolsResponse.ok) {
+          const errorText = await toolsResponse.text()
+          console.error(`[Tool Discovery] HTTP ${toolsResponse.status} error:`, errorText.substring(0, 200))
+          
+          // Provide helpful error messages
+          if (toolsResponse.status === 403) {
+            throw new Error(`403 Forbidden: API key may be missing or invalid. Check HTTP Headers configuration in registry.`)
+          } else if (toolsResponse.status === 401) {
+            throw new Error(`401 Unauthorized: Authentication required. Check API key configuration.`)
+          } else if (toolsResponse.status === 404) {
+            throw new Error(`404 Not Found: Endpoint may be incorrect: ${endpoint}`)
+          } else {
+            throw new Error(`HTTP ${toolsResponse.status}: ${toolsResponse.statusText}. ${errorText.substring(0, 100)}`)
+          }
+        }
+
+        toolsData = await toolsResponse.json()
+        
+        if (toolsData.error) {
+          const errorMsg = toolsData.error.message || JSON.stringify(toolsData.error)
+          console.error(`[Tool Discovery] MCP error:`, errorMsg)
+          
+          // Provide helpful error messages for common MCP errors
+          if (errorMsg.includes('PERMISSION_DENIED') || errorMsg.includes('403')) {
+            throw new Error(`Permission denied: API key may be missing or invalid. Check HTTP Headers: {"X-Goog-Api-Key": "YOUR_KEY"}`)
+          } else if (errorMsg.includes('API key')) {
+            throw new Error(`API key error: ${errorMsg}`)
+          } else {
+            throw new Error(`MCP error: ${errorMsg}`)
+          }
+        }
+
+        const tools = toolsData.result?.tools || []
+        console.log(`[Tool Discovery] Discovered ${tools.length} tools for HTTP server ${server.serverId}`)
+        
+        if (tools.length === 0) {
+          console.warn(`[Tool Discovery] No tools found for ${server.serverId}. Server may not be fully configured.`)
+        }
+        
+        // Update server with discovered tools
+        await prisma.mcpServer.update({
+          where: { serverId: server.serverId },
+          data: {
+            tools: JSON.stringify(tools),
+          },
+        })
+        
+        return tools
+      } catch (directError: any) {
+        // If direct tools/list fails, try initialize first (for servers that require it)
+        console.log(`[Tool Discovery] Direct tools/list failed, trying initialize first...`)
+        
+        const initResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: httpHeaders,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: {
+              protocolVersion: '2024-11-05',
+              capabilities: {},
+              clientInfo: {
+                name: 'mcp-registry',
+                version: '1.0.0',
+              },
+            },
+          }),
+        })
+
+        if (!initResponse.ok) {
+          const errorText = await initResponse.text()
+          throw new Error(`Initialize failed (HTTP ${initResponse.status}): ${errorText.substring(0, 200)}. Original error: ${directError.message}`)
+        }
+
+        const initData = await initResponse.json() as { error?: { message?: string } }
+        if (initData.error) {
+          throw new Error(`Initialize error: ${initData.error.message || JSON.stringify(initData.error)}. Original error: ${directError.message}`)
+        }
+
+        // Now try tools/list after initialize
+        toolsResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: httpHeaders,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'tools/list',
+            params: {},
+          }),
+        })
+
+        if (!toolsResponse.ok) {
+          const errorText = await toolsResponse.text()
+          throw new Error(`tools/list failed after initialize (HTTP ${toolsResponse.status}): ${errorText.substring(0, 200)}`)
+        }
+
+        toolsData = await toolsResponse.json()
+        if (toolsData.error) {
+          throw new Error(`tools/list error: ${toolsData.error.message || JSON.stringify(toolsData.error)}`)
+        }
+
+        const tools = toolsData.result?.tools || []
+        console.log(`[Tool Discovery] Discovered ${tools.length} tools for HTTP server ${server.serverId} (after initialize)`)
+        
+        // Update server with discovered tools
+        await prisma.mcpServer.update({
+          where: { serverId: server.serverId },
+          data: {
+            tools: JSON.stringify(tools),
+          },
+        })
+        
+        return tools
+      }
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error) || 'Unknown error'
+      console.error(`[Tool Discovery] Failed to discover tools for HTTP server ${server.serverId}:`, errorMessage)
+      console.error(`[Tool Discovery] Endpoint: ${endpoint}`)
+      console.error(`[Tool Discovery] Headers configured:`, Object.keys(httpHeaders).join(', '))
+      
+      // Re-throw with more context
+      throw new Error(`HTTP tool discovery failed for ${server.serverId}: ${errorMessage}`)
+    }
   }
 
   /**

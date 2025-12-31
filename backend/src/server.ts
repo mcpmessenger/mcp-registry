@@ -6,12 +6,16 @@ import { env } from './config/env'
 // Load environment variables
 dotenv.config()
 
+console.log('DB URL', env.database.url)
+
 // Import routes
 import v0ServersRouter from './routes/v0/servers'
 import debugRouter from './routes/v0/debug'
 import mcpToolsRouter from './routes/mcp/tools'
 import documentsRouter from './routes/documents/analyze'
 import orchestratorRouter from './routes/orchestrator/query'
+import unifiedOrchestratorRouter from './routes/orchestrator/unified'
+import orchestratorJobsRouter from './routes/orchestrator/jobs'
 import { registryService } from './services/registry.service'
 
 const app = express()
@@ -152,6 +156,8 @@ let orchestratorStatus = {
   matcherRunning: false,
   coordinatorRunning: false,
   resultConsumerRunning: false,
+  jobResultUpdaterRunning: false,
+  retryWorkerRunning: false,
   kafkaEnabled: false,
   kafkaBrokers: [] as string[],
 }
@@ -166,12 +172,16 @@ app.get('/api/orchestrator/status', (req: Request, res: Response) => {
       matcher: orchestratorStatus.matcherRunning,
       coordinator: orchestratorStatus.coordinatorRunning,
       resultConsumer: orchestratorStatus.resultConsumerRunning,
+      jobResultUpdater: orchestratorStatus.jobResultUpdaterRunning,
+      retryWorker: orchestratorStatus.retryWorkerRunning,
     },
     topics: env.kafka.topics,
   })
 })
 
 app.use('/api/orchestrator', orchestratorRouter)
+app.use('/api/orchestrator/unified', unifiedOrchestratorRouter)
+app.use('/api/orchestrator/jobs', orchestratorJobsRouter)
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -202,6 +212,8 @@ const PORT: number = parseInt(process.env.PORT || String(env.server.port || 8080
 let orchestratorShutdown: (() => Promise<void>) | null = null
 let matcherShutdown: (() => Promise<void>) | null = null
 let resultConsumerShutdown: (() => Promise<void>) | null = null
+let jobResultUpdaterShutdown: (() => Promise<void>) | null = null
+let retryWorkerShutdown: (() => Promise<void>) | null = null
 
 // Initialize Kafka producer for discovery events (if available)
 if (process.env.KAFKA_BROKERS || process.env.ENABLE_KAFKA === 'true') {
@@ -267,6 +279,38 @@ if (process.env.KAFKA_BROKERS || process.env.ENABLE_KAFKA === 'true') {
       console.warn('[Server] ✗ Unable to load Result Consumer:', error)
       orchestratorStatus.resultConsumerRunning = false
     })
+
+    // Start Job Result Updater (persists orchestrator-results into OrchestratorJob rows)
+    import('./services/orchestrator/job-result-updater').then(async ({ startJobResultUpdater }) => {
+      try {
+        console.log('[Server] Starting Job Result Updater...')
+        jobResultUpdaterShutdown = await startJobResultUpdater()
+        orchestratorStatus.jobResultUpdaterRunning = true
+        console.log('[Server] ✓ Job Result Updater started successfully')
+      } catch (error) {
+        console.error('[Server] ✗ Failed to start Job Result Updater:', error)
+        orchestratorStatus.jobResultUpdaterRunning = false
+      }
+    }).catch(error => {
+      console.warn('[Server] ✗ Unable to load Job Result Updater:', error)
+      orchestratorStatus.jobResultUpdaterRunning = false
+    })
+
+    // Start Retry Worker (delayed tool retries via retry topics)
+    import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
+      try {
+        console.log('[Server] Starting Retry Worker...')
+        retryWorkerShutdown = await startRetryWorker()
+        orchestratorStatus.retryWorkerRunning = true
+        console.log('[Server] ✓ Retry Worker started successfully')
+      } catch (error) {
+        console.error('[Server] ✗ Failed to start Retry Worker:', error)
+        orchestratorStatus.retryWorkerRunning = false
+      }
+    }).catch(error => {
+      console.warn('[Server] ✗ Unable to load Retry Worker:', error)
+      orchestratorStatus.retryWorkerRunning = false
+    })
   } else {
     console.log('[Server] Kafka not enabled (ENABLE_KAFKA not set to "true" and KAFKA_BROKERS not set)')
   }
@@ -295,6 +339,14 @@ process.on('SIGTERM', async () => {
     await resultConsumerShutdown()
     resultConsumerShutdown = null
   }
+  if (jobResultUpdaterShutdown) {
+    await jobResultUpdaterShutdown()
+    jobResultUpdaterShutdown = null
+  }
+  if (retryWorkerShutdown) {
+    await retryWorkerShutdown()
+    retryWorkerShutdown = null
+  }
   server.close(() => {
     console.log('Server closed')
     process.exit(0)
@@ -314,6 +366,14 @@ process.on('SIGINT', async () => {
   if (resultConsumerShutdown) {
     await resultConsumerShutdown()
     resultConsumerShutdown = null
+  }
+  if (jobResultUpdaterShutdown) {
+    await jobResultUpdaterShutdown()
+    jobResultUpdaterShutdown = null
+  }
+  if (retryWorkerShutdown) {
+    await retryWorkerShutdown()
+    retryWorkerShutdown = null
   }
   server.close(() => {
     console.log('Server closed')
