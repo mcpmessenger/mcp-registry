@@ -7,6 +7,7 @@ import {
   OrchestratorResultEvent,
 } from './events'
 import { MCPInvokeService } from '../mcp-invoke.service'
+import { decideRetry, publishDlq, publishRetry } from './retry'
 import type { Consumer, Producer } from 'kafkajs'
 
 type ResolutionReason = 'tool' | 'plan'
@@ -20,9 +21,13 @@ const resolveTTL = 5 * 60 * 1000
 const resolutionCache = new Map<string, RequestResolution>()
 
 function claimRequest(requestId: string, reason: ResolutionReason): boolean {
-  if (resolutionCache.has(requestId)) {
-    return false
+  const existing = resolutionCache.get(requestId)
+  if (existing) {
+    // Allow re-processing for the same reason (enables retries),
+    // but prevent cross-reason resolution (tool vs plan).
+    return existing.reason === reason
   }
+
   const cleanup = setTimeout(() => resolutionCache.delete(requestId), resolveTTL)
   resolutionCache.set(requestId, { reason, cleanup })
   return true
@@ -71,7 +76,13 @@ async function handleToolSignal(
     return
   }
 
-  logTopic(env.kafka.topics.toolSignals, signal.requestId, `invoking ${signal.toolId}`)
+  const attempt = signal.attempt ?? 0
+  const maxAttempts = signal.maxAttempts ?? 3
+  logTopic(
+    env.kafka.topics.toolSignals,
+    signal.requestId,
+    `invoking ${signal.toolId} (attempt ${attempt + 1}/${maxAttempts})`
+  )
 
   try {
     const response = await invoker.invokeTool({
@@ -92,6 +103,23 @@ async function handleToolSignal(
     )
   } catch (error) {
     console.error('[Orchestrator Coordinator] Tool invocation failed', error)
+
+    const decision = decideRetry(signal, error)
+    if (decision.type === 'retry') {
+      console.warn(
+        `[Orchestrator Coordinator] Scheduling retry for request ${signal.requestId} via topic ${decision.topic}`
+      )
+      await publishRetry(producer, signal, decision, error)
+      return
+    }
+
+    if (decision.type === 'dlq') {
+      console.error(
+        `[Orchestrator Coordinator] Exhausted retries for request ${signal.requestId}; sending to DLQ`
+      )
+      await publishDlq(producer, signal, error)
+    }
+
     await publishResult(
       producer,
       createOrchestratorResultEvent({

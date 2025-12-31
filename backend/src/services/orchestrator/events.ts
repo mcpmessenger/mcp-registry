@@ -20,6 +20,13 @@ export interface ToolSignalEvent {
   params?: Record<string, unknown>
   confidence: number
   status: ToolSignalStatus
+  /**
+   * Retry metadata (optional for backwards compatibility).
+   * attempt is 0-based: first attempt is attempt=0.
+   */
+  attempt?: number
+  maxAttempts?: number
+  lastError?: string
   timestamp: string
 }
 

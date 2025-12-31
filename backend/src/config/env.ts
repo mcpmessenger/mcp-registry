@@ -40,6 +40,9 @@ export const env = {
     topics: {
       userRequests: process.env.KAFKA_TOPIC_USER_REQUESTS || 'user-requests',
       toolSignals: process.env.KAFKA_TOPIC_TOOL_SIGNALS || 'tool-signals',
+      toolSignalsRetry5s: process.env.KAFKA_TOPIC_TOOL_SIGNALS_RETRY_5S || 'tool-signals-retry-5s',
+      toolSignalsRetry30s: process.env.KAFKA_TOPIC_TOOL_SIGNALS_RETRY_30S || 'tool-signals-retry-30s',
+      toolSignalsDlq: process.env.KAFKA_TOPIC_TOOL_SIGNALS_DLQ || 'tool-signals-dlq',
       orchestratorPlans: process.env.KAFKA_TOPIC_ORCHESTRATOR_PLANS || 'orchestrator-plans',
       orchestratorResults: process.env.KAFKA_TOPIC_ORCHESTRATOR_RESULTS || 'orchestrator-results',
     },

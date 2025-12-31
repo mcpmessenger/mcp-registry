@@ -12,6 +12,7 @@ enum JobStatus {
   PROCESSING
   COMPLETED
   FAILED
+  CANCELLED
 }
 
 model Service {
@@ -118,6 +119,24 @@ model DurableTask {
   @@index([status])
   @@index([taskId])
   @@index([createdAt])
+}
+
+model OrchestratorJob {
+  id           String     @id
+  requestId     String     @unique
+  query         String
+  sessionId     String?
+  status        JobStatus  @default(PENDING)
+  resultJson    String?
+  errorMessage  String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  completedAt   DateTime?
+
+  @@index([requestId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([sessionId])
 }
 
 model Asset {

@@ -41,9 +41,10 @@ export function normalizeQuery(query: string): string {
 export async function publishUserRequest(
   query: string,
   sessionId?: string,
-  contextSnapshot?: Record<string, unknown>
+  contextSnapshot?: Record<string, unknown>,
+  requestIdOverride?: string
 ): Promise<string> {
-  const requestId = randomUUID()
+  const requestId = requestIdOverride || randomUUID()
   const normalizedQuery = normalizeQuery(query)
   
   const event: UserRequestEvent = {
