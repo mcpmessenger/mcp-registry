@@ -25,6 +25,8 @@
     "register-valuation": "ts-node src/scripts/register-valuation-server.ts",
     "restore-stock-servers": "ts-node src/scripts/seed-mcp-server.ts",
     "update-playwright-http": "ts-node src/scripts/update-playwright-to-http.ts",
+    "fix-google-maps-http": "ts-node src/scripts/fix-google-maps-http.ts",
+    "update-google-maps-key": "ts-node src/scripts/update-google-maps-api-key.ts",
     "test-mcp-invoke-headers": "ts-node src/scripts/test-mcp-invoke-headers.ts",
     "test-generate-guard": "ts-node src/scripts/test-generate-guard.ts"
   },

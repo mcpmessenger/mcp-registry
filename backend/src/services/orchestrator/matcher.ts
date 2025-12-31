@@ -31,6 +31,13 @@ const KEYWORD_PATTERNS: Array<{ pattern: RegExp; toolId: string; serverId: strin
     serverId: 'modelcontextprotocol/google-maps',
     confidence: 0.95,
   },
+  // Directions / routes
+  {
+    pattern: /\b(directions|route|routes|navigate|navigation|how do i get|how to get|get from|drive from|walk from|bike from|transit from)\b.*\bfrom\b.*\bto\b/i,
+    toolId: 'compute_routes',
+    serverId: 'modelcontextprotocol/google-maps',
+    confidence: 0.92,
+  },
   // Concert/event searches
   {
     pattern: /\b(when|where|find|search|look for).*?(concert|playing|show|ticket|event|tour)\b/i,
@@ -73,6 +80,25 @@ const KEYWORD_PATTERNS: Array<{ pattern: RegExp; toolId: string; serverId: strin
 function extractSearchParams(query: string): Record<string, unknown> {
   const params: Record<string, unknown> = {}
   
+  // Extract directions/routes queries - format for Google Maps compute_routes
+  // Example: "directions from Chicago to Milwaukee" or "route from A to B"
+  const directionsMatch = query.match(/\bfrom\s+(.+?)\s+to\s+(.+?)(?:\s*$|\s+by\b|\s+via\b)/i)
+  if (directionsMatch && /\b(directions|route|routes|navigate|navigation|get from|how do i get|how to get)\b/i.test(query)) {
+    const origin = directionsMatch[1].trim()
+    const destination = directionsMatch[2].trim()
+
+    // Map travel mode keywords to API enum
+    let travelMode: 'DRIVE' | 'WALK' | 'BICYCLE' | 'TRANSIT' = 'DRIVE'
+    if (/\bwalk|walking\b/i.test(query)) travelMode = 'WALK'
+    else if (/\bbike|bicycle|cycling\b/i.test(query)) travelMode = 'BICYCLE'
+    else if (/\btransit|bus|train|subway\b/i.test(query)) travelMode = 'TRANSIT'
+
+    params.origin = { address: origin }
+    params.destination = { address: destination }
+    params.travelMode = travelMode
+    return params
+  }
+
   // Extract weather/temperature queries - format for Google Maps lookup_weather
   // Handle both "what's the temp" and "WHATS THE TEMP" (all caps)
   const weatherMatch = query.match(/\b(what.*?temp|what.*?weather|whats.*?temp|whats.*?weather|temperature|temp|weather|forecast).*?(in|at|for|of)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)\b/i)

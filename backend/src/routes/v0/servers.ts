@@ -574,10 +574,19 @@ router.post('/invoke', async (req, res, next) => {
  * POST /v0.1/servers/:serverId/verify-integration
  * Verify and update integration status for a server
  * Runs the full integration pipeline: package/health check → tool discovery → status update
+ * 
+ * Note: Uses regex pattern to handle serverIds with slashes (e.g., com.google/maps-mcp)
  */
-router.post('/servers/:serverId/verify-integration', async (req, res, next) => {
+router.post(/^\/servers\/(.+)\/verify-integration$/, async (req, res, next) => {
   try {
-    const { serverId } = req.params
+    // Extract serverId from regex match (req.params[0] contains the first capture group)
+    const serverId = req.params[0]
+    if (!serverId) {
+      return res.status(400).json({
+        success: false,
+        error: 'ServerId is required',
+      })
+    }
     const decodedServerId = decodeURIComponent(serverId)
     const { discoverTools = false } = req.body || {}
 
