@@ -45,6 +45,112 @@ router.get('/servers', async (req, res, next) => {
   }
 })
 
+/**
+ * POST /v0.1/search
+ * Semantic search for MCP servers using vector embeddings
+ * Returns servers ranked by semantic similarity to the query
+ * 
+ * Request body:
+ * - query: Search query string
+ * - limit: Maximum number of results (default: 20)
+ * - minConfidence: Minimum confidence score (default: 0.5)
+ * - useVectorSearch: Whether to use vector search (default: true, falls back to keyword if false)
+ */
+console.log('[Servers Router] Registering POST /search route')
+router.post('/search', async (req, res, next) => {
+  console.log('[Search] POST /v0.1/search called with query:', req.body?.query)
+  try {
+    const { query, limit, minConfidence, useVectorSearch } = req.body
+
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Query is required and must be a string',
+      })
+    }
+
+    const searchLimit = typeof limit === 'number' ? Math.min(limit, 50) : 20
+    const minConf = typeof minConfidence === 'number' ? minConfidence : 0.2
+    const useVector = useVectorSearch !== false // Default to true
+
+    // Try vector search if enabled
+    if (useVector) {
+      try {
+        const { getSemanticSearchService } = await import('../../services/orchestrator/semantic-search.service')
+        const semanticSearch = getSemanticSearchService()
+        
+        // Initialize if needed
+        await semanticSearch.initialize()
+        
+        // Perform semantic search
+        const matches = await semanticSearch.search(query, {
+          limit: searchLimit,
+          minConfidence: minConf,
+        })
+
+        // Get full server details for matched tools
+        const serverIds = new Set(matches.map(m => m.tool.serverId))
+        const servers = await Promise.all(
+          Array.from(serverIds).map(id => registryService.getServerById(id))
+        )
+
+        // Filter out nulls and transform to include match metadata
+        const validServers = servers
+          .filter((s): s is MCPServer => s !== null)
+          .map(server => {
+            // Find the best match for this server
+            const serverMatches = matches.filter(m => m.tool.serverId === server.serverId)
+            const bestMatch = serverMatches.sort((a, b) => b.confidence - a.confidence)[0]
+
+            return {
+              ...server,
+              _searchMetadata: {
+                confidence: bestMatch?.confidence || 0,
+                matchType: bestMatch?.matchType || 'keyword',
+                reasoning: bestMatch?.reasoning,
+                similarityScore: bestMatch?.similarityScore || 0,
+                matchedTools: serverMatches.map(m => ({
+                  toolName: m.tool.toolName,
+                  confidence: m.confidence,
+                })),
+              },
+            }
+          })
+          .sort((a, b) => {
+            const aConf = (a as any)._searchMetadata?.confidence || 0
+            const bConf = (b as any)._searchMetadata?.confidence || 0
+            return bConf - aConf
+          })
+
+        return res.json({
+          success: true,
+          results: validServers,
+          total: validServers.length,
+          query,
+          searchType: 'semantic',
+        })
+      } catch (vectorError) {
+        console.warn('[Search] Vector search failed, falling back to keyword search:', vectorError)
+        // Fall through to keyword search
+      }
+    }
+
+    // Fallback to keyword search
+    const servers = await registryService.getServers({ search: query })
+    const limitedServers = servers.slice(0, searchLimit)
+
+    res.json({
+      success: true,
+      results: limitedServers,
+      total: limitedServers.length,
+      query,
+      searchType: 'keyword',
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 // Debug endpoint - simple and direct
 // Use regex to match serverId with dots and slashes (e.g., com.google/maps-mcp)
 router.get(/^\/debug\/server\/(.+)$/, async (req, res, next) => {
