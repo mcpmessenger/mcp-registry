@@ -275,6 +275,84 @@ export async function getServers(options?: {
 }
 
 /**
+ * Search MCP servers using semantic/vector search
+ * Returns servers ranked by semantic similarity to the query
+ */
+export async function searchServers(options: {
+  query: string
+  limit?: number
+  minConfidence?: number
+  useVectorSearch?: boolean
+  retries?: number
+}): Promise<{
+  success: boolean
+  results: MCPServer[]
+  total: number
+  query: string
+  searchType: 'semantic' | 'keyword'
+}> {
+  const url = `${API_BASE_URL}/v0.1/search`
+  const maxRetries = options?.retries ?? 1
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 5000)
+      console.log(`[API] Retrying search (attempt ${attempt + 1}/${maxRetries + 1}) after ${delay}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+
+    const controller = new AbortController()
+    const timeoutMs = 15000 // Longer timeout for vector search
+    const timeoutId = setTimeout(() => {
+      console.warn(`[API] Search timeout after ${timeoutMs / 1000} seconds`)
+      controller.abort()
+    }, timeoutMs)
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: options.query,
+          limit: options.limit || 20,
+          minConfidence: options.minConfidence || 0.5,
+          useVectorSearch: options.useVectorSearch !== false,
+        }),
+        cache: 'no-cache',
+        mode: 'cors',
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'No error details')
+        throw new Error(`Search failed: ${response.status} ${response.statusText} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      clearTimeout(timeoutId)
+      console.error(`[API] Search error (attempt ${attempt + 1}):`, error)
+      lastError = error as Error
+
+      if (attempt === maxRetries) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`Search timeout: Backend at ${API_BASE_URL} is not responding.`)
+        }
+        throw error
+      }
+    }
+  }
+
+  throw lastError || new Error('Unknown error searching servers')
+}
+
+/**
  * Fetch a specific server by ID
  */
 export async function getServer(serverId: string): Promise<MCPServer> {
