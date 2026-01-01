@@ -2099,10 +2099,13 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-background via-background to-background/95">
-      <div className="relative">
-        {/* Subtle background glow */}
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 via-transparent to-green-500/5 pointer-events-none" />
-        <AgentSelector agents={agentOptions} selectedAgentId={selectedAgentId} onAgentChange={setSelectedAgentId} />
+      <div className="px-4 sm:px-6 pt-8 pb-6">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
+          MCP Chat
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground/80">
+          Talk to your MCP agents, route queries, and get context-aware replies instantly.
+        </p>
       </div>
 
       <ScrollArea className="flex-1 px-2 sm:px-6 pb-8 overflow-y-auto" ref={scrollAreaRef}>
