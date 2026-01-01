@@ -103,7 +103,7 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete, onTest, isTe
           <StatusBadge status={agent.status} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 px-5 pb-5">
+      <CardContent className="space-y-4 px-5 pb-7">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Activity className="h-4 w-4" />
           <span>Last active: {formatLastActive(agent.lastActive)}</span>
@@ -134,7 +134,7 @@ export function AgentCard({ agent, onViewDetails, onEdit, onDelete, onTest, isTe
           </div>
         )}
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-2 pb-2">
           {onTest && (
             <Button 
               variant="default" 
