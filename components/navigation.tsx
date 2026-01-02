@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { LayoutDashboard, MessageSquare, Settings } from "lucide-react"
+import { LayoutDashboard, MessageSquare } from "lucide-react"
 import Image from "next/image"
 
 const navItems = [
@@ -17,11 +17,6 @@ const navItems = [
     title: "Registry",
     href: "/registry",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Settings",
-    href: "/settings",
-    icon: Settings,
   },
 ]
 
