@@ -2,9 +2,9 @@
   {
     "id": "playwright",
     "name": "Playwright",
-    "description": "Browser automation and web scraping.",
+    "description": "Browser automation and web scraping. Official Microsoft Playwright MCP server for browser automation.",
     "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-playwright"],
+    "args": ["-y", "@playwright/mcp@latest"],
     "env": []
   },
   {
@@ -59,20 +59,11 @@
     "env": ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]
   },
   {
-    "id": "filesystem",
-    "name": "Filesystem",
-    "description": "Local file system access.",
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-filesystem"],
-    "env": [],
-    "requires_args": true
-  },
-  {
     "id": "brave-search",
     "name": "Brave Search",
     "description": "Web search via Brave API.",
     "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+    "args": ["-y", "@brave/brave-search-mcp-server"],
     "env": ["BRAVE_API_KEY"]
   },
   {
@@ -86,9 +77,9 @@
   {
     "id": "exa",
     "name": "Exa Search",
-    "description": "Neural search engine integration.",
+    "description": "Neural search engine integration with web search, code search, crawling and research tools via Exa AI.",
     "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-exa"],
+    "args": ["-y", "exa-mcp-server"],
     "env": ["EXA_API_KEY"]
   },
   {
