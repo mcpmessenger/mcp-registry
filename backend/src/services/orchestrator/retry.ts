@@ -64,12 +64,24 @@ export async function publishRetry(
   }
 
   if (isPulsarEnabled()) {
+    // Use Pulsar's native delayed delivery instead of separate retry topics
     const pulsarProducer = producer as PulsarProducer
-    await sendPulsarMessage(pulsarProducer, payload, {
-      requestId: payload.requestId,
-      attempt: String(payload.attempt ?? 0),
+    const toolSignalsTopic = 'persistent://mcp-core/orchestrator/tool-signals'
+
+    console.log(`[Retry] Scheduling retry for ${payload.requestId} with ${decision.delayMs}ms delay (attempt ${decision.nextAttempt})`)
+
+    // Send message with deliverAfter delay
+    await pulsarProducer.send({
+      data: Buffer.from(JSON.stringify(payload)),
+      deliverAfter: decision.delayMs, // Native Pulsar delayed delivery!
+      properties: {
+        requestId: payload.requestId,
+        attempt: String(payload.attempt ?? 0),
+        retryDelay: String(decision.delayMs),
+      },
     })
   } else {
+    // Kafka fallback - use separate retry topics
     const kafkaProducer = producer as Producer
     await kafkaProducer.send({
       topic: decision.topic,
@@ -101,7 +113,7 @@ export async function publishDlq(
     timestamp: new Date().toISOString(),
   }
 
-  const dlqTopic = getTopic('toolSignalsDlq')
+  const dlqTopic = 'persistent://mcp-core/orchestrator/dlq'
 
   if (isPulsarEnabled()) {
     const pulsarProducer = producer as PulsarProducer
@@ -110,6 +122,7 @@ export async function publishDlq(
       attempt: String(payload.attempt ?? 0),
       dlq: 'true',
     })
+    console.log(`[DLQ] Message sent to ${dlqTopic} for request ${payload.requestId}`)
   } else {
     const kafkaProducer = producer as Producer
     await kafkaProducer.send({
