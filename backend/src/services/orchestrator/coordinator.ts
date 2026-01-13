@@ -53,9 +53,9 @@ async function publishResult(
   producer: PulsarProducer | any, // Support both Pulsar and Kafka
   payload: OrchestratorResultEvent
 ): Promise<void> {
-  const topic = getTopic('orchestratorResults')
+  const topic = 'persistent://mcp-core/orchestrator/results'
   console.log(`[Orchestrator Coordinator] Publishing result for request ${payload.requestId} to topic ${topic}`)
-  
+
   if (isPulsarEnabled()) {
     const pulsarProducer = producer as PulsarProducer
     await sendPulsarMessage(pulsarProducer, payload, { requestId: payload.requestId })
@@ -79,7 +79,7 @@ async function handleToolSignal(
   producer: PulsarProducer | any, // Support both Pulsar and Kafka
   invoker: MCPInvokeService
 ): Promise<void> {
-  const toolSignalsTopic = getTopic('toolSignals')
+  const toolSignalsTopic = 'persistent://mcp-core/orchestrator/tool-signals'
   if (signal.status !== 'TOOL_READY') {
     logTopic(toolSignalsTopic, signal.requestId, 'skipped (not ready)')
     return
@@ -151,7 +151,7 @@ async function handleOrchestratorPlan(
   plan: OrchestratorPlanEvent,
   producer: PulsarProducer | any // Support both Pulsar and Kafka
 ): Promise<void> {
-  const orchestratorPlansTopic = getTopic('orchestratorPlans')
+  const orchestratorPlansTopic = 'persistent://mcp-core/orchestrator/plans'
   if (!claimRequest(plan.requestId, 'plan')) {
     logTopic(orchestratorPlansTopic, plan.requestId, 'ignored (already resolved)')
     return
@@ -180,25 +180,26 @@ export async function startExecutionCoordinator(): Promise<() => Promise<void>> 
   }
 
   const invoker = new MCPInvokeService()
-  const toolSignalsTopic = getTopic('toolSignals')
-  const orchestratorPlansTopic = getTopic('orchestratorPlans')
-  const orchestratorResultsTopic = getTopic('orchestratorResults')
+  // Use orchestrator namespace topics
+  const toolSignalsTopic = 'persistent://mcp-core/orchestrator/tool-signals'
+  const orchestratorPlansTopic = 'persistent://mcp-core/orchestrator/plans'
+  const orchestratorResultsTopic = 'persistent://mcp-core/orchestrator/results'
 
   if (isPulsarEnabled()) {
     // Pulsar implementation
     const resultProducer = await createPulsarProducer(orchestratorResultsTopic)
     const toolSignalsConsumer = await createPulsarConsumer(toolSignalsTopic, env.kafka.groupId)
     const plansConsumer = await createPulsarConsumer(orchestratorPlansTopic, env.kafka.groupId)
-    
+
     isRunning = true
-    
+
     // Process tool signals
     const processToolSignals = async () => {
       while (isRunning) {
         try {
           const msg = await receivePulsarMessage(toolSignalsConsumer, 1000)
           if (!msg) continue
-          
+
           try {
             const value = msg.getData().toString()
             const parsed = JSON.parse(value) as ToolSignalEvent
@@ -215,14 +216,14 @@ export async function startExecutionCoordinator(): Promise<() => Promise<void>> 
         }
       }
     }
-    
+
     // Process orchestrator plans
     const processPlans = async () => {
       while (isRunning) {
         try {
           const msg = await receivePulsarMessage(plansConsumer, 1000)
           if (!msg) continue
-          
+
           try {
             const value = msg.getData().toString()
             const parsed = JSON.parse(value) as OrchestratorPlanEvent
@@ -239,18 +240,18 @@ export async function startExecutionCoordinator(): Promise<() => Promise<void>> 
         }
       }
     }
-    
+
     processToolSignals().catch(error => {
       console.error('[Orchestrator Coordinator] Tool signals loop crashed', error)
     })
-    
+
     processPlans().catch(error => {
       console.error('[Orchestrator Coordinator] Plans loop crashed', error)
     })
-    
+
     consumerInstance = { toolSignals: toolSignalsConsumer, plans: plansConsumer }
     producerInstance = resultProducer
-    
+
     shutdownHandler = async (): Promise<void> => {
       isRunning = false
       if (consumerInstance) {
@@ -270,7 +271,7 @@ export async function startExecutionCoordinator(): Promise<() => Promise<void>> 
     const { createKafkaConsumer, createKafkaProducer } = await import('./kafka')
     const resultProducer = await createKafkaProducer()
     const consumer = createKafkaConsumer(env.kafka.groupId)
-    
+
     await consumer.connect()
     await consumer.subscribe({ topic: toolSignalsTopic })
     await consumer.subscribe({ topic: orchestratorPlansTopic })
