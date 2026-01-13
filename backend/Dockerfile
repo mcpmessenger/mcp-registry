@@ -12,16 +12,16 @@ COPY . .
 
 # Create minimal Prisma schema if it doesn't exist (needed for postinstall script)
 RUN mkdir -p ./prisma && \
-    if [ ! -f ./prisma/schema.prisma ]; then \
-      echo 'generator client {' > ./prisma/schema.prisma && \
-      echo '  provider = "prisma-client-js"' >> ./prisma/schema.prisma && \
-      echo '}' >> ./prisma/schema.prisma && \
-      echo '' >> ./prisma/schema.prisma && \
-      echo 'datasource db {' >> ./prisma/schema.prisma && \
-      echo '  provider = "sqlite"' >> ./prisma/schema.prisma && \
-      echo '  url      = env("DATABASE_URL")' >> ./prisma/schema.prisma && \
-      echo '}' >> ./prisma/schema.prisma; \
-    fi
+  if [ ! -f ./prisma/schema.prisma ]; then \
+  echo 'generator client {' > ./prisma/schema.prisma && \
+  echo '  provider = "prisma-client-js"' >> ./prisma/schema.prisma && \
+  echo '}' >> ./prisma/schema.prisma && \
+  echo '' >> ./prisma/schema.prisma && \
+  echo 'datasource db {' >> ./prisma/schema.prisma && \
+  echo '  provider = "sqlite"' >> ./prisma/schema.prisma && \
+  echo '  url      = env("DATABASE_URL")' >> ./prisma/schema.prisma && \
+  echo '}' >> ./prisma/schema.prisma; \
+  fi
 
 # Install dependencies (including dev dependencies for build)
 # Skip postinstall to avoid permission issues, we'll run it manually
@@ -34,8 +34,7 @@ RUN chmod +x node_modules/.bin/* 2>/dev/null || true
 # Use the direct binary path to avoid npx permission issues
 RUN ./node_modules/.bin/prisma generate || npm run prisma:generate || echo "Warning: Prisma generate failed, continuing..."
 
-# Build TypeScript
-RUN npm run build
+# No build step needed as we will use ts-node directly in the runner stage
 
 # Production image
 FROM node:18 AS runner
@@ -46,49 +45,49 @@ ENV NODE_ENV=production
 
 # Install Google Chrome and dependencies for Playwright
 RUN apt-get update && \
-    apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libc6 \
-    libcairo2 \
-    libcups2 \
-    libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgbm1 \
-    libgcc1 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libstdc++6 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxi6 \
-    libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    lsb-release \
-    xdg-utils && \
-    wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
-    apt-get update && \
-    apt-get install -y google-chrome-stable && \
-    rm -rf /var/lib/apt/lists/*
+  apt-get install -y \
+  wget \
+  gnupg \
+  ca-certificates \
+  fonts-liberation \
+  libasound2 \
+  libatk-bridge2.0-0 \
+  libatk1.0-0 \
+  libc6 \
+  libcairo2 \
+  libcups2 \
+  libdbus-1-3 \
+  libexpat1 \
+  libfontconfig1 \
+  libgbm1 \
+  libgcc1 \
+  libglib2.0-0 \
+  libgtk-3-0 \
+  libnspr4 \
+  libnss3 \
+  libpango-1.0-0 \
+  libpangocairo-1.0-0 \
+  libstdc++6 \
+  libx11-6 \
+  libx11-xcb1 \
+  libxcb1 \
+  libxcomposite1 \
+  libxcursor1 \
+  libxdamage1 \
+  libxext6 \
+  libxfixes3 \
+  libxi6 \
+  libxrandr2 \
+  libxrender1 \
+  libxss1 \
+  libxtst6 \
+  lsb-release \
+  xdg-utils && \
+  wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+  sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
+  apt-get update && \
+  apt-get install -y google-chrome-stable && \
+  rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
@@ -123,7 +122,7 @@ RUN groupadd -r nodejs && useradd -r -g nodejs -m -d /home/nodejs nodejs
 
 # Create npm cache directory and set permissions
 RUN mkdir -p /home/nodejs/.npm && \
-    chown -R nodejs:nodejs /home/nodejs
+  chown -R nodejs:nodejs /home/nodejs
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
