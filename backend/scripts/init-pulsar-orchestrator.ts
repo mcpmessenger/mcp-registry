@@ -68,21 +68,22 @@ async function initOrchestratorNamespace() {
             process.exit(1)
         }
 
-        // Create topics
+        // Create topics (non-partitioned)
         for (const topic of TOPICS) {
             console.log(`📝 Creating topic: ${topic.name}`)
             const topicName = `persistent://${TENANT}/${NAMESPACE}/${topic.name}`
 
+            // Create non-partitioned topic by directly creating it (not using /partitions endpoint)
+            // We'll create it by publishing a message to it, or use the lookup endpoint
             const topicResponse = await fetch(
-                `${PULSAR_HTTP_URL}/admin/v2/persistent/${TENANT}/${NAMESPACE}/${topic.name}/partitions`,
+                `${PULSAR_HTTP_URL}/admin/v2/persistent/${TENANT}/${NAMESPACE}/${topic.name}`,
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(1), // Non-partitioned
                 }
             )
 
-            if (topicResponse.ok || topicResponse.status === 409) {
+            if (topicResponse.ok || topicResponse.status === 409 || topicResponse.status === 307) {
                 console.log(`   ✅ Topic created`)
 
                 // Set retention policy

@@ -100,7 +100,11 @@ export async function createPulsarConsumer(
   subscriptionType: 'Exclusive' | 'Shared' | 'KeyShared' | 'Failover' = 'KeyShared'
 ): Promise<Pulsar.Consumer> {
   const client = await createPulsarClient()
-  const fullTopicName = `persistent://${env.pulsar.namespace}/${topic}`
+
+  // Check if topic is already a full topic name (starts with persistent://)
+  const fullTopicName = topic.startsWith('persistent://')
+    ? topic
+    : `persistent://${env.pulsar.namespace}/${topic}`
 
   const consumer = await client.subscribe({
     topic: fullTopicName,
