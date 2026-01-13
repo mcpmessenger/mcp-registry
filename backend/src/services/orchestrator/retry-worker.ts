@@ -48,27 +48,27 @@ export async function startRetryWorker(): Promise<() => Promise<void>> {
     const producer = await createPulsarProducer(toolSignalsTopic)
     const consumer5s = await createPulsarConsumer(retry5sTopic, 'orchestrator-retry-worker')
     const consumer30s = await createPulsarConsumer(retry30sTopic, 'orchestrator-retry-worker')
-    
+
     console.log('[Retry Worker] Started (Pulsar), listening for retry signals...')
-    
+
     // Process 5s retry topic
     const process5s = async () => {
       while (isRunning) {
         try {
           const msg = await receivePulsarMessage(consumer5s, 1000)
           if (!msg) continue
-          
+
           try {
             const signal: ToolSignalEvent = JSON.parse(msg.getData().toString())
             const waitMs = topicDelayMs(retry5sTopic)
-            
+
             if (waitMs > 0) {
               console.log(
                 `[Retry Worker] Delaying retry for request ${signal.requestId} by ${waitMs}ms (attempt=${signal.attempt ?? 0})`
               )
               await delay(waitMs)
             }
-            
+
             // Republish to the main tool-signals topic
             await sendPulsarMessage(producer, {
               ...signal,
@@ -77,38 +77,38 @@ export async function startRetryWorker(): Promise<() => Promise<void>> {
               requestId: signal.requestId,
               attempt: String(signal.attempt ?? 0),
             })
-            
+
             consumer5s.acknowledge(msg)
-          } catch (error) {
+          } catch (error: unknown) {
             console.error('[Retry Worker] Failed to process retry signal', error)
             consumer5s.negativeAcknowledge(msg)
           }
-        } catch (error) {
+        } catch (error: unknown) {
           if (error instanceof Error && !error.message.includes('timeout')) {
             console.error('[Retry Worker] Error in 5s retry loop:', error)
           }
         }
       }
     }
-    
+
     // Process 30s retry topic
     const process30s = async () => {
       while (isRunning) {
         try {
           const msg = await receivePulsarMessage(consumer30s, 1000)
           if (!msg) continue
-          
+
           try {
             const signal: ToolSignalEvent = JSON.parse(msg.getData().toString())
             const waitMs = topicDelayMs(retry30sTopic)
-            
+
             if (waitMs > 0) {
               console.log(
                 `[Retry Worker] Delaying retry for request ${signal.requestId} by ${waitMs}ms (attempt=${signal.attempt ?? 0})`
               )
               await delay(waitMs)
             }
-            
+
             // Republish to the main tool-signals topic
             await sendPulsarMessage(producer, {
               ...signal,
@@ -117,7 +117,7 @@ export async function startRetryWorker(): Promise<() => Promise<void>> {
               requestId: signal.requestId,
               attempt: String(signal.attempt ?? 0),
             })
-            
+
             consumer30s.acknowledge(msg)
           } catch (error) {
             console.error('[Retry Worker] Failed to process retry signal', error)
@@ -130,19 +130,19 @@ export async function startRetryWorker(): Promise<() => Promise<void>> {
         }
       }
     }
-    
+
     process5s().catch(error => {
       console.error('[Retry Worker] 5s retry loop crashed', error)
     })
-    
+
     process30s().catch(error => {
       console.error('[Retry Worker] 30s retry loop crashed', error)
     })
-    
+
     consumerInstance5s = consumer5s
     consumerInstance30s = consumer30s
     producerInstance = producer
-    
+
     shutdownHandler = async (): Promise<void> => {
       isRunning = false
       if (consumerInstance5s) {
