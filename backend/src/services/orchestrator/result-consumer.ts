@@ -44,21 +44,22 @@ export async function startResultConsumer(): Promise<() => Promise<void>> {
     }
   }
 
-  const topic = getTopic('orchestratorResults')
+  // Use orchestrator namespace topic
+  const topic = 'persistent://mcp-core/orchestrator/results'
   isRunning = true
 
   if (isPulsarEnabled()) {
     // Pulsar implementation
     const consumer = await createPulsarConsumer(topic, 'orchestrator-result-consumer')
-    
+
     console.log('[Result Consumer] Started (Pulsar), listening for orchestrator results...')
-    
+
     processingLoop = (async () => {
       while (isRunning) {
         try {
           const msg = await receivePulsarMessage(consumer, 1000)
           if (!msg) continue
-          
+
           try {
             const event: OrchestratorResultEvent = JSON.parse(msg.getData().toString())
             const { requestId } = event
@@ -84,11 +85,11 @@ export async function startResultConsumer(): Promise<() => Promise<void>> {
         }
       }
     })()
-    
+
     processingLoop.catch(error => {
       console.error('[Result Consumer] Processing loop crashed', error)
     })
-    
+
     sharedConsumer = consumer
   } else {
     // Kafka implementation (legacy)
