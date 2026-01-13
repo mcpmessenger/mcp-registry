@@ -319,21 +319,21 @@ if (useKafka) {
     orchestratorStatus.jobResultUpdaterRunning = false
   })
 
-  // Start Retry Worker (delayed tool retries via retry topics)
-  import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
-    try {
-      console.log('[Server] Starting Retry Worker...')
-      retryWorkerShutdown = await startRetryWorker()
-      orchestratorStatus.retryWorkerRunning = true
-      console.log('[Server] ✓ Retry Worker started successfully')
-    } catch (error) {
-      console.error('[Server] ✗ Failed to start Retry Worker:', error)
-      orchestratorStatus.retryWorkerRunning = false
-    }
-  }).catch(error => {
-    console.warn('[Server] ✗ Unable to load Retry Worker:', error)
-    orchestratorStatus.retryWorkerRunning = false
-  })
+  // NOTE: Retry Worker disabled - now using Pulsar's native deliverAfter for retries
+  // import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
+  //   try {
+  //     console.log('[Server] Starting Retry Worker...')
+  //     retryWorkerShutdown = await startRetryWorker()
+  //     orchestratorStatus.retryWorkerRunning = true
+  //     console.log('[Server] ✓ Retry Worker started successfully')
+  //   } catch (error) {
+  //     console.error('[Server] ✗ Failed to start Retry Worker:', error)
+  //     orchestratorStatus.retryWorkerRunning = false
+  //   }
+  // }).catch(error => {
+  //   console.warn('[Server] ✗ Unable to load Retry Worker:', error)
+  //   orchestratorStatus.retryWorkerRunning = false
+  // })
 } else if (usePulsar) {
   // Start orchestrator services with Pulsar
   console.log('[Server] Pulsar enabled - starting orchestrator services with Pulsar')
@@ -402,21 +402,21 @@ if (useKafka) {
     orchestratorStatus.jobResultUpdaterRunning = false
   })
 
-  // Start Retry Worker (delayed tool retries via retry topics)
-  import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
-    try {
-      console.log('[Server] Starting Retry Worker...')
-      retryWorkerShutdown = await startRetryWorker()
-      orchestratorStatus.retryWorkerRunning = true
-      console.log('[Server] ✓ Retry Worker started successfully')
-    } catch (error) {
-      console.error('[Server] ✗ Failed to start Retry Worker:', error)
-      orchestratorStatus.retryWorkerRunning = false
-    }
-  }).catch(error => {
-    console.warn('[Server] ✗ Unable to load Retry Worker:', error)
-    orchestratorStatus.retryWorkerRunning = false
-  })
+  // NOTE: Retry Worker disabled - now using Pulsar's native deliverAfter for retries
+  // import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
+  //   try {
+  //     console.log('[Server] Starting Retry Worker...')
+  //     retryWorkerShutdown = await startRetryWorker()
+  //     orchestratorStatus.retryWorkerRunning = true
+  //     console.log('[Server] ✓ Retry Worker started successfully')
+  //   } catch (error) {
+  //     console.error('[Server] ✗ Failed to start Retry Worker:', error)
+  //     orchestratorStatus.retryWorkerRunning = false
+  //   }
+  // }).catch(error => {
+  //   console.warn('[Server] ✗ Unable to load Retry Worker:', error)
+  //   orchestratorStatus.retryWorkerRunning = false
+  // })
 } else {
   console.log('[Server] Neither Kafka nor Pulsar configured (set ENABLE_KAFKA=true or ENABLE_PULSAR=true to enable orchestrator)')
 }
