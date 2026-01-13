@@ -53,15 +53,17 @@ export async function createPulsarClient(): Promise<Pulsar.Client> {
  * Implements the "Producer Cache" pattern to prevent creating multiple producers
  * for the same topic, which would exhaust TCP connections and broker resources.
  * 
- * @param topic - Topic name (without namespace prefix)
+ * @param topic - Topic name (can be full persistent://... or short name)
  * @param namespace - Optional namespace override (for multi-tenant routing)
  */
 export async function createPulsarProducer(
   topic: string,
   namespace?: string
 ): Promise<Pulsar.Producer> {
-  const ns = namespace || env.pulsar.namespace
-  const fullTopicName = `persistent://${ns}/${topic}`
+  // Check if topic is already a full topic name
+  const fullTopicName = topic.startsWith('persistent://')
+    ? topic
+    : `persistent://${namespace || env.pulsar.namespace}/${topic}`
 
   // Check cache first
   const cached = producerCache.get(fullTopicName)
