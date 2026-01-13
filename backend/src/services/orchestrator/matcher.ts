@@ -85,7 +85,7 @@ const KEYWORD_PATTERNS: Array<{ pattern: RegExp; toolId: string; serverId: strin
  */
 function extractSearchParams(query: string): Record<string, unknown> {
   const params: Record<string, unknown> = {}
-  
+
   // Extract directions/routes queries - format for Google Maps compute_routes
   // Example: "directions from Chicago to Milwaukee" or "route from A to B"
   const directionsMatch = query.match(/\bfrom\s+(.+?)\s+to\s+(.+?)(?:\s*$|\s+by\b|\s+via\b)/i)
@@ -116,7 +116,7 @@ function extractSearchParams(query: string): Record<string, unknown> {
     }
     return params
   }
-  
+
   // Extract places queries (record store, coffee shop, etc.) - format for Google Maps textQuery (camelCase)
   const placesMatch = query.match(/\b(find|search|look for|where)\s+(.+?)\s+(in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/i)
   if (placesMatch) {
@@ -124,7 +124,7 @@ function extractSearchParams(query: string): Record<string, unknown> {
     params.textQuery = `${placesMatch[2].trim()} in ${placesMatch[4].trim()}`
     return params
   }
-  
+
   // Fallback: match "coffee shops in des moines" without "find/search"
   // BUT exclude weather queries
   if (!/\b(what.*?temp|what.*?weather|whats.*?temp|whats.*?weather|temperature|weather|forecast)\b/i.test(query)) {
@@ -134,7 +134,7 @@ function extractSearchParams(query: string): Record<string, unknown> {
       return params
     }
   }
-  
+
   // Extract search query
   const searchMatch = query.match(/(?:when|where|find|search|look for)\s+(.+?)(?:\s+in|\s+at|$)/i)
   if (searchMatch) {
@@ -143,13 +143,13 @@ function extractSearchParams(query: string): Record<string, unknown> {
     // Use full query as search term
     params.query = query
   }
-  
+
   // Extract location if present
   const locationMatch = query.match(/\b(in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/i)
   if (locationMatch) {
     params.location = locationMatch[2].trim()
   }
-  
+
   return params
 }
 
@@ -170,47 +170,48 @@ function matchKeywordPattern(query: string): { toolId: string; serverId: string;
  * Start MCP Matcher consumer
  */
 export async function startMCPMatcher(): Promise<() => Promise<void>> {
-  const userRequestsTopic = getTopic('userRequests')
-  const toolSignalsTopic = getTopic('toolSignals')
-  
+  // Use orchestrator namespace topics
+  const userRequestsTopic = 'persistent://mcp-core/orchestrator/user-requests'
+  const toolSignalsTopic = 'persistent://mcp-core/orchestrator/tool-signals'
+
   // Load and process all MCP servers for semantic search
   console.log('[MCP Matcher] Loading MCP servers from registry...')
   const servers = await registryService.getServers()
   console.log(`[MCP Matcher] Found ${servers.length} servers`)
-  
+
   // Initialize Semantic Search Engine (Pillar 1)
   const semanticSearch = getSemanticSearchService()
   await semanticSearch.initialize()
-  
+
   // Also keep legacy keyword-based embeddings for fallback
   console.log('[MCP Matcher] Processing tools for keyword fallback...')
   const toolEmbeddings = await processMCPTools(servers)
   console.log(`[MCP Matcher] Processed ${toolEmbeddings.length} tools with embeddings/keywords`)
-  
+
   let isRunning = true
-  
+
   if (isPulsarEnabled()) {
     // Pulsar implementation
     const producer = await createPulsarProducer(toolSignalsTopic)
     const consumer = await createPulsarConsumer(userRequestsTopic, 'mcp-matcher')
-    
+
     console.log('[MCP Matcher] Started (Pulsar), listening for user requests...')
-    
+
     // Start message processing loop
     const processLoop = async () => {
       while (isRunning) {
         try {
           const msg = await receivePulsarMessage(consumer, 1000) // 1s timeout
           if (!msg) continue
-          
+
           try {
             const event: UserRequestEvent = JSON.parse(msg.getData().toString())
             const { requestId, normalizedQuery } = event
-            
+
             console.log(`[MCP Matcher] Processing request ${requestId}: "${normalizedQuery.substring(0, 50)}..."`)
-            
+
             let match: { toolId: string; serverId: string; confidence: number; params: Record<string, unknown> } | null = null
-            
+
             // Try keyword pattern matching first (fastest)
             const keywordMatch = matchKeywordPattern(normalizedQuery)
             if (keywordMatch && keywordMatch.confidence >= CONFIDENCE_THRESHOLD) {
@@ -224,7 +225,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
                 limit: 1,
                 minConfidence: CONFIDENCE_THRESHOLD,
               })
-              
+
               if (semanticMatches.length > 0) {
                 const semanticMatch = semanticMatches[0]
                 match = {
@@ -238,7 +239,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
                 // Fallback to legacy keyword-based search
                 console.log(`[MCP Matcher] Trying legacy keyword search...`)
                 const legacyMatch = await findBestToolMatch(normalizedQuery, toolEmbeddings)
-                
+
                 if (legacyMatch && legacyMatch.confidence >= CONFIDENCE_THRESHOLD) {
                   match = {
                     toolId: legacyMatch.tool.toolId,
@@ -250,7 +251,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
                 }
               }
             }
-            
+
             if (match && match.confidence >= CONFIDENCE_THRESHOLD) {
               // Verify server exists in registry
               const server = await registryService.getServerById(match.serverId)
@@ -259,7 +260,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
                 consumer.acknowledge(msg)
                 continue
               }
-              
+
               // Verify tool exists
               const tool = server.tools?.find(t => t.name === match.toolId)
               if (!tool) {
@@ -267,7 +268,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
                 consumer.acknowledge(msg)
                 continue
               }
-              
+
               // Emit TOOL_READY signal
               const toolSignal: ToolSignalEvent = {
                 requestId,
@@ -278,17 +279,17 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
                 status: 'TOOL_READY',
                 timestamp: new Date().toISOString(),
               }
-              
+
               await sendPulsarMessage(producer, toolSignal, {
                 requestId,
                 status: 'TOOL_READY',
               })
-              
+
               console.log(`[MCP Matcher] Emitted TOOL_READY for ${requestId}: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
             } else {
               console.log(`[MCP Matcher] No high-confidence match for ${requestId} (keyword: ${keywordMatch?.confidence || 0}, semantic: N/A)`)
             }
-            
+
             consumer.acknowledge(msg)
           } catch (error) {
             console.error('[MCP Matcher] Error processing message:', error)
@@ -302,11 +303,11 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
         }
       }
     }
-    
+
     processLoop().catch(error => {
       console.error('[MCP Matcher] Processing loop crashed', error)
     })
-    
+
     return async () => {
       isRunning = false
       await consumer.close()
@@ -318,24 +319,24 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
     const { createKafkaProducer, createKafkaConsumer } = await import('./kafka')
     const producer = await createKafkaProducer()
     const consumer = createKafkaConsumer('mcp-matcher')
-    
+
     await consumer.connect()
     await consumer.subscribe({ topic: userRequestsTopic, fromBeginning: false })
-    
+
     console.log('[MCP Matcher] Started (Kafka), listening for user requests...')
-    
+
     await consumer.run({
       eachMessage: async ({ message }) => {
         try {
           if (!message.value) return
-          
+
           const event: UserRequestEvent = JSON.parse(message.value.toString())
           const { requestId, normalizedQuery } = event
-          
+
           console.log(`[MCP Matcher] Processing request ${requestId}: "${normalizedQuery.substring(0, 50)}..."`)
-          
+
           let match: { toolId: string; serverId: string; confidence: number; params: Record<string, unknown> } | null = null
-          
+
           // Try keyword pattern matching first (fastest)
           const keywordMatch = matchKeywordPattern(normalizedQuery)
           if (keywordMatch && keywordMatch.confidence >= CONFIDENCE_THRESHOLD) {
@@ -349,7 +350,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
               limit: 1,
               minConfidence: CONFIDENCE_THRESHOLD,
             })
-            
+
             if (semanticMatches.length > 0) {
               const semanticMatch = semanticMatches[0]
               match = {
@@ -363,7 +364,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
               // Fallback to legacy keyword-based search
               console.log(`[MCP Matcher] Trying legacy keyword search...`)
               const legacyMatch = await findBestToolMatch(normalizedQuery, toolEmbeddings)
-              
+
               if (legacyMatch && legacyMatch.confidence >= CONFIDENCE_THRESHOLD) {
                 match = {
                   toolId: legacyMatch.tool.toolId,
@@ -375,7 +376,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
               }
             }
           }
-          
+
           if (match && match.confidence >= CONFIDENCE_THRESHOLD) {
             // Verify server exists in registry
             const server = await registryService.getServerById(match.serverId)
@@ -383,14 +384,14 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
               console.warn(`[MCP Matcher] Server ${match.serverId} not found in registry, skipping match`)
               return
             }
-            
+
             // Verify tool exists
             const tool = server.tools?.find(t => t.name === match.toolId)
             if (!tool) {
               console.warn(`[MCP Matcher] Tool ${match.toolId} not found on server ${match.serverId}, skipping match`)
               return
             }
-            
+
             // Emit TOOL_READY signal
             const toolSignal: ToolSignalEvent = {
               requestId,
@@ -401,7 +402,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
               status: 'TOOL_READY',
               timestamp: new Date().toISOString(),
             }
-            
+
             await producer.send({
               topic: toolSignalsTopic,
               messages: [{
@@ -413,7 +414,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
                 },
               }],
             })
-            
+
             console.log(`[MCP Matcher] Emitted TOOL_READY for ${requestId}: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
           } else {
             console.log(`[MCP Matcher] No high-confidence match for ${requestId} (keyword: ${keywordMatch?.confidence || 0}, semantic: N/A)`)
@@ -423,7 +424,7 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
         }
       },
     })
-    
+
     return async () => {
       await consumer.disconnect()
       await producer.disconnect()
