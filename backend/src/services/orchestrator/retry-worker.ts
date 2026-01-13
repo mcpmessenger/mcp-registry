@@ -119,11 +119,11 @@ export async function startRetryWorker(): Promise<() => Promise<void>> {
             })
 
             consumer30s.acknowledge(msg)
-          } catch (error) {
+          } catch (error: unknown) {
             console.error('[Retry Worker] Failed to process retry signal', error)
             consumer30s.negativeAcknowledge(msg)
           }
-        } catch (error) {
+        } catch (error: unknown) {
           if (error instanceof Error && !error.message.includes('timeout')) {
             console.error('[Retry Worker] Error in 30s retry loop:', error)
           }
@@ -131,11 +131,11 @@ export async function startRetryWorker(): Promise<() => Promise<void>> {
       }
     }
 
-    process5s().catch(error => {
+    process5s().catch((error: unknown) => {
       console.error('[Retry Worker] 5s retry loop crashed', error)
     })
 
-    process30s().catch(error => {
+    process30s().catch((error: unknown) => {
       console.error('[Retry Worker] 30s retry loop crashed', error)
     })
 
@@ -220,10 +220,10 @@ export async function startRetryWorker(): Promise<() => Promise<void>> {
 
     shutdownHandler = async (): Promise<void> => {
       if (consumerInstance5s) {
-        await consumerInstance5s.stop().catch(error => {
+        await consumerInstance5s.stop().catch((error: unknown) => {
           console.error('[Retry Worker] Consumer stop failed', error)
         })
-        await consumerInstance5s.disconnect().catch(error => {
+        await consumerInstance5s.disconnect().catch((error: unknown) => {
           console.error('[Retry Worker] Consumer disconnect failed', error)
         })
         consumerInstance5s = null
