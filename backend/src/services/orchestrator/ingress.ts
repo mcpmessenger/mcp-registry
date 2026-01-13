@@ -22,13 +22,13 @@ function getNamespace(contextSnapshot?: Record<string, unknown>): string {
   if (userId) {
     return `tenant/${userId}/orchestrator`
   }
-  
+
   // Check for agent ID in context
   const agentId = contextSnapshot?.agentId as string | undefined
   if (agentId) {
     return `tenant/${agentId}/execution`
   }
-  
+
   // Check for user_id in metadata
   const metadata = contextSnapshot?.metadata
   const metadataUserId =
@@ -38,7 +38,7 @@ function getNamespace(contextSnapshot?: Record<string, unknown>): string {
   if (metadataUserId) {
     return `tenant/${metadataUserId}/orchestrator`
   }
-  
+
   // Default to configured namespace or public/default
   return env.pulsar.namespace || 'public/default'
 }
@@ -51,21 +51,21 @@ function getNamespace(contextSnapshot?: Record<string, unknown>): string {
  */
 export function normalizeQuery(query: string): string {
   let normalized = query.trim()
-  
+
   // Remove greeting phrases
   normalized = normalized.replace(/^(hey|hi|hello)\s+(gemini|assistant|ai|bot)[,:\s]*/i, '')
-  
+
   // Resolve common contractions
   normalized = normalized.replace(/\bwhen's\b/gi, 'when is')
   normalized = normalized.replace(/\bwhere's\b/gi, 'where is')
   normalized = normalized.replace(/\bwhat's\b/gi, 'what is')
   normalized = normalized.replace(/\bwho's\b/gi, 'who is')
   normalized = normalized.replace(/\bhow's\b/gi, 'how is')
-  
+
   // Remove design context markers if present
   normalized = normalized.replace(/\[design[^\]]*\]/gi, '')
   normalized = normalized.replace(/\(design[^)]*\)/gi, '')
-  
+
   return normalized.trim()
 }
 
@@ -80,7 +80,7 @@ export async function publishUserRequest(
 ): Promise<string> {
   const requestId = requestIdOverride || randomUUID()
   const normalizedQuery = normalizeQuery(query)
-  
+
   const event: UserRequestEvent = {
     requestId,
     normalizedQuery,
@@ -88,37 +88,27 @@ export async function publishUserRequest(
     contextSnapshot,
     timestamp: new Date().toISOString(),
   }
-  
+
   try {
     let topic: string
     let namespace: string | undefined
-    
+
     if (isPulsarEnabled()) {
-      // Phase III: Multi-tenant namespace routing
-      namespace = getNamespace(contextSnapshot)
-      topic = env.pulsar.topics.userRequests
-      
-      // Use native Pulsar client (Phase II/III)
-      const fullTopicName = namespace 
-        ? `persistent://${namespace}/${topic}`
-        : `persistent://${env.pulsar.namespace}/${topic}`
-      
+      // Use orchestrator namespace topic
+      const topic = 'persistent://mcp-core/orchestrator/user-requests'
+
       const producer = await createPulsarProducer(topic)
-      // Note: For namespace routing, we need to create producer with full topic name
-      // This is a simplified version - in production, createProducer should accept full topic name
       await sendPulsarMessage(producer, event, {
         requestId,
         sessionId: sessionId || '',
-        namespace: namespace || env.pulsar.namespace,
       })
       await producer.close()
-      
-      const brokerType = namespace ? 'Pulsar (multi-tenant)' : 'Pulsar'
-      console.log(`[Ingress] Published user request ${requestId} to ${brokerType} namespace ${namespace}: "${normalizedQuery.substring(0, 50)}..."`)
+
+      console.log(`[Ingress] Published user request ${requestId} to Pulsar orchestrator: "${normalizedQuery.substring(0, 50)}..."`)
     } else {
       // Phase I: Kafka or KoP (no namespace routing)
       topic = env.kafka.topics.userRequests
-      
+
       // Use Kafka client (Phase I: KoP or native Kafka) - lazy import to avoid loading when Pulsar is enabled
       const { createKafkaProducer } = await import('./kafka')
       const producer = await createKafkaProducer()
@@ -133,10 +123,10 @@ export async function publishUserRequest(
           },
         }],
       })
-      
+
       console.log(`[Ingress] Published user request ${requestId} to Kafka: "${normalizedQuery.substring(0, 50)}..."`)
     }
-    
+
     return requestId
   } catch (error) {
     console.error('[Ingress] Failed to publish user request:', error)
