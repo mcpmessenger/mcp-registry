@@ -91,19 +91,19 @@ RUN apt-get update && \
 
 # Copy package files
 COPY package*.json ./
+COPY tsconfig.json ./
 
 # Copy Prisma schema from builder (needed for postinstall script)
 COPY --from=builder /app/prisma ./prisma
 
-# Install production dependencies only
-# Skip postinstall to avoid permission issues, we'll run it manually
-RUN npm install --only=production --ignore-scripts
+# Install ALL dependencies (need devDependencies for ts-node and TypeScript)
+RUN npm install --ignore-scripts
 
 # Ensure node_modules/.bin has execute permissions
 RUN chmod +x node_modules/.bin/* 2>/dev/null || true
 
-# Copy built application
-COPY --from=builder /app/dist ./dist
+# Copy source code (instead of built dist)
+COPY --from=builder /app/src ./src
 
 # Install Playwright (browsers are skipped since we're using system Chrome)
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -140,11 +140,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
 
-# Start server (Cloud Run sets PORT automatically)
-CMD ["node", "dist/server.js"]
-
-
-
-
-
-
+# Start server with ts-node (Cloud Run sets PORT automatically)
+CMD ["npx", "ts-node", "src/server.ts"]
