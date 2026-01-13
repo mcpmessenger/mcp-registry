@@ -133,6 +133,18 @@ export function createDiscoveryEvent(
 let kafkaProducer: any = null
 
 export async function initializeKafkaProducer() {
+  // Don't initialize Kafka if Pulsar is enabled
+  if (process.env.ENABLE_PULSAR === 'true' || process.env.USE_PULSAR_KOP === 'true') {
+    console.log('[MCP Discovery] Skipping Kafka initialization (Pulsar enabled)')
+    return
+  }
+  
+  // Don't initialize if Kafka is explicitly disabled
+  if (process.env.ENABLE_KAFKA === 'false') {
+    console.log('[MCP Discovery] Skipping Kafka initialization (ENABLE_KAFKA=false)')
+    return
+  }
+  
   try {
     // Try to import kafkajs if available
     const { Kafka } = await import('kafkajs')

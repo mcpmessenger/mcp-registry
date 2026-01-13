@@ -39,7 +39,8 @@
     "remove-filesystem": "ts-node src/scripts/remove-filesystem-server.ts",
     "set-slack-github-pre-integration": "ts-node src/scripts/set-slack-github-pre-integration.ts",
     "test-mcp-invoke-headers": "ts-node src/scripts/test-mcp-invoke-headers.ts",
-    "test-generate-guard": "ts-node src/scripts/test-generate-guard.ts"
+    "test-generate-guard": "ts-node src/scripts/test-generate-guard.ts",
+    "init-pulsar": "ts-node scripts/init-pulsar.ts"
   },
   "keywords": [],
   "author": "",
@@ -57,6 +58,7 @@
     "multer": "^1.4.5-lts.1",
     "openai": "^4.28.0",
     "prisma": "^6.0.0",
+    "pulsar-client": "^1.16.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
@@ -73,5 +75,3 @@
     "typescript": "^5.9.3"
   }
 }
-
-

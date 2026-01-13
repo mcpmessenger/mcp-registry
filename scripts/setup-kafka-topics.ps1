@@ -1,5 +1,7 @@
 # Setup Kafka topics for the orchestrator
 # Requires: Docker with Kafka running (via docker-compose.kafka.yml)
+# 
+# Note: If using Pulsar with KoP, use setup-pulsar-topics.ps1 instead
 
 $KAFKA_CONTAINER = "kafka"
 $BROKER = "localhost:9092"
@@ -7,6 +9,9 @@ $BROKER = "localhost:9092"
 $topics = @(
     "user-requests",
     "tool-signals",
+    "tool-signals-retry-5s",
+    "tool-signals-retry-30s",
+    "tool-signals-dlq",
     "orchestrator-plans",
     "orchestrator-results"
 )
@@ -32,4 +37,6 @@ docker exec $KAFKA_CONTAINER kafka-topics --list --bootstrap-server localhost:90
 
 Write-Host ""
 Write-Host "Kafka topics setup complete!" -ForegroundColor Green
+Write-Host ""
+Write-Host "Note: For Pulsar with KoP, use: .\scripts\setup-pulsar-topics.ps1" -ForegroundColor Cyan
 

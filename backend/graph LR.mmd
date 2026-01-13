@@ -1,0 +1,34 @@
+graph LR
+    subgraph Core["Core Orchestration"]
+        SSE["1. Semantic Search<br/>🔍 Vector Embeddings"]
+        WP["2. Workflow Planner<br/>📋 Task Decomposition"]
+        EE["3. Execution Engine<br/>⚙️ Tool Invocation"]
+    end
+
+    subgraph Support["Support Services"]
+        ETM["4. Tool Matcher<br/>🎯 Fast Routing"]
+        CM["5. Context Manager<br/>💾 State Tracking"]
+        DS["6. Documentation<br/>📚 RAG System"]
+    end
+
+    SSE -->|"Tool Discovery"| WP
+    WP -->|"Execution Plan"| EE
+    EE -->|"Results"| CM
+    CM -->|"Context"| WP
+    
+    ETM -->|"Fast Match"| SSE
+    SSE -->|"Enhanced Match"| ETM
+    
+    DS -->|"Tool Understanding"| SSE
+    DS -->|"Usage Patterns"| WP
+    DS -->|"Best Practices"| EE
+    
+    CM -->|"State"| EE
+    EE -->|"Usage Stats"| SSE
+
+    style SSE fill:#e1f5ff
+    style WP fill:#fff4e1
+    style EE fill:#ffe1f5
+    style ETM fill:#e1ffe1
+    style CM fill:#f5e1ff
+    style DS fill:#ffe1e1

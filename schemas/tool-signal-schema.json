@@ -1,0 +1,58 @@
+{
+  "type": "record",
+  "name": "ToolSignalEvent",
+  "namespace": "com.mcp.orchestrator.events",
+  "fields": [
+    {
+      "name": "requestId",
+      "type": "string"
+    },
+    {
+      "name": "toolId",
+      "type": "string"
+    },
+    {
+      "name": "serverId",
+      "type": "string"
+    },
+    {
+      "name": "params",
+      "type": ["null", {
+        "type": "map",
+        "values": "string"
+      }],
+      "default": null
+    },
+    {
+      "name": "confidence",
+      "type": "double"
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "ToolSignalStatus",
+        "symbols": ["TOOL_READY"]
+      }
+    },
+    {
+      "name": "attempt",
+      "type": ["null", "int"],
+      "default": null
+    },
+    {
+      "name": "maxAttempts",
+      "type": ["null", "int"],
+      "default": null
+    },
+    {
+      "name": "lastError",
+      "type": ["null", "string"],
+      "default": null
+    },
+    {
+      "name": "timestamp",
+      "type": "string"
+    }
+  ]
+}

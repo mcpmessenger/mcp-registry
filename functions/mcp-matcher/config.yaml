@@ -1,0 +1,39 @@
+# Pulsar Function Configuration for MCP Matcher
+# This function consumes from user-requests and publishes to tool-signals
+
+name: mcp-matcher
+tenant: public
+namespace: default
+className: function.MCPMatcherFunction
+jar: null
+py: function.py
+go: null
+topicsPattern: null
+inputs:
+  - persistent://public/default/user-requests
+output: persistent://public/default/tool-signals
+outputSerdeClassName: null
+logTopic: persistent://public/default/mcp-matcher-logs
+processingGuarantees: ATLEAST_ONCE
+retainOrdering: false
+retainKeyOrdering: false
+batchBuilder: DEFAULT
+forwardSourceMessageProperty: true
+userConfig:
+  REGISTRY_API_URL: "http://localhost:3001"
+  CONFIDENCE_THRESHOLD: "0.7"
+runtime: PYTHON
+autoAck: true
+parallelism: 1
+resources:
+  cpu: 1.0
+  ram: 1073741824  # 1GB
+windowConfig:
+  windowLengthCount: null
+  windowLengthDurationMs: null
+  maxLagMs: null
+  earlyTrigger: null
+timeoutMs: null
+cleanupSubscription: true
+retainKeyOrdering: false
+batchBuilder: DEFAULT

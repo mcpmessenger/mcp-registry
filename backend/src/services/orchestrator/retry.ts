@@ -1,6 +1,13 @@
 import type { Producer } from 'kafkajs'
+import { sendPulsarMessage, type PulsarProducer } from './pulsar'
+import { isPulsarEnabled } from './messaging'
 import { env } from '../../config/env'
 import type { ToolSignalEvent } from './events'
+
+// Helper to get topic name (works for both Kafka and Pulsar)
+function getTopic(topicKey: keyof typeof env.pulsar.topics): string {
+  return isPulsarEnabled() ? env.pulsar.topics[topicKey] : env.kafka.topics[topicKey]
+}
 
 export type RetryDecision =
   | { type: 'retry'; topic: string; delayMs: number; nextAttempt: number }
@@ -31,18 +38,18 @@ export function decideRetry(signal: ToolSignalEvent, error: unknown): RetryDecis
 
   const nextAttempt = attempt + 1
   if (nextAttempt >= maxAttempts) {
-    return { type: 'dlq', topic: env.kafka.topics.toolSignalsDlq }
+    return { type: 'dlq', topic: getTopic('toolSignalsDlq') }
   }
 
   // Tiered backoff by attempt number
   if (nextAttempt === 1) {
-    return { type: 'retry', topic: env.kafka.topics.toolSignalsRetry5s, delayMs: 5000, nextAttempt }
+    return { type: 'retry', topic: getTopic('toolSignalsRetry5s'), delayMs: 5000, nextAttempt }
   }
-  return { type: 'retry', topic: env.kafka.topics.toolSignalsRetry30s, delayMs: 30000, nextAttempt }
+  return { type: 'retry', topic: getTopic('toolSignalsRetry30s'), delayMs: 30000, nextAttempt }
 }
 
 export async function publishRetry(
-  producer: Producer,
+  producer: Producer | PulsarProducer,
   original: ToolSignalEvent,
   decision: Extract<RetryDecision, { type: 'retry' }>,
   error: unknown
@@ -56,23 +63,32 @@ export async function publishRetry(
     timestamp: new Date().toISOString(),
   }
 
-  await producer.send({
-    topic: decision.topic,
-    messages: [
-      {
-        key: payload.requestId,
-        value: JSON.stringify(payload),
-        headers: {
-          requestId: payload.requestId,
-          attempt: String(payload.attempt ?? 0),
+  if (isPulsarEnabled()) {
+    const pulsarProducer = producer as PulsarProducer
+    await sendPulsarMessage(pulsarProducer, payload, {
+      requestId: payload.requestId,
+      attempt: String(payload.attempt ?? 0),
+    })
+  } else {
+    const kafkaProducer = producer as Producer
+    await kafkaProducer.send({
+      topic: decision.topic,
+      messages: [
+        {
+          key: payload.requestId,
+          value: JSON.stringify(payload),
+          headers: {
+            requestId: payload.requestId,
+            attempt: String(payload.attempt ?? 0),
+          },
         },
-      },
-    ],
-  })
+      ],
+    })
+  }
 }
 
 export async function publishDlq(
-  producer: Producer,
+  producer: Producer | PulsarProducer,
   original: ToolSignalEvent,
   error: unknown
 ): Promise<void> {
@@ -85,19 +101,31 @@ export async function publishDlq(
     timestamp: new Date().toISOString(),
   }
 
-  await producer.send({
-    topic: env.kafka.topics.toolSignalsDlq,
-    messages: [
-      {
-        key: payload.requestId,
-        value: JSON.stringify(payload),
-        headers: {
-          requestId: payload.requestId,
-          attempt: String(payload.attempt ?? 0),
-          dlq: 'true',
+  const dlqTopic = getTopic('toolSignalsDlq')
+
+  if (isPulsarEnabled()) {
+    const pulsarProducer = producer as PulsarProducer
+    await sendPulsarMessage(pulsarProducer, payload, {
+      requestId: payload.requestId,
+      attempt: String(payload.attempt ?? 0),
+      dlq: 'true',
+    })
+  } else {
+    const kafkaProducer = producer as Producer
+    await kafkaProducer.send({
+      topic: dlqTopic,
+      messages: [
+        {
+          key: payload.requestId,
+          value: JSON.stringify(payload),
+          headers: {
+            requestId: payload.requestId,
+            attempt: String(payload.attempt ?? 0),
+            dlq: 'true',
+          },
         },
-      },
-    ],
-  })
+      ],
+    })
+  }
 }
 

@@ -1,0 +1,40 @@
+{
+  "type": "record",
+  "name": "UserRequestEvent",
+  "namespace": "com.mcp.orchestrator.events",
+  "fields": [
+    {
+      "name": "requestId",
+      "type": "string"
+    },
+    {
+      "name": "normalizedQuery",
+      "type": "string"
+    },
+    {
+      "name": "sessionId",
+      "type": ["null", "string"],
+      "default": null
+    },
+    {
+      "name": "contextSnapshot",
+      "type": ["null", {
+        "type": "map",
+        "values": "string"
+      }],
+      "default": null
+    },
+    {
+      "name": "metadata",
+      "type": ["null", {
+        "type": "map",
+        "values": "string"
+      }],
+      "default": null
+    },
+    {
+      "name": "timestamp",
+      "type": "string"
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+services:
+  zookeeper:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: pulsar-zookeeper
+    restart: on-failure
+    volumes:
+      - ./data/pulsar/zookeeper:/pulsar/data/zookeeper
+    environment:
+      - metadataStoreUrl=zk:zookeeper:2181
+      - PULSAR_MEM=-Xms256m -Xmx256m -XX:MaxDirectMemorySize=256m
+    command:
+      - bash
+      - -c
+      - |
+        bin/apply-config-from-env.py conf/zookeeper.conf && \
+        bin/generate-zookeeper-config.sh conf/zookeeper.conf && \
+        exec bin/pulsar zookeeper
+    healthcheck:
+      test: ["CMD", "bin/pulsar-zookeeper-ruok.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "2181:2181"
+
+  pulsar-init:
+    container_name: pulsar-init
+    hostname: pulsar-init
+    image: apachepulsar/pulsar:3.2.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    command:
+      - bash
+      - -c
+      - |
+        # Try to initialize, but don't fail if already initialized
+        bin/pulsar initialize-cluster-metadata \
+          --cluster cluster-a \
+          --zookeeper zookeeper:2181 \
+          --configuration-store zookeeper:2181 \
+          --web-service-url http://broker:8080 \
+          --broker-service-url pulsar://broker:6650 || true
+
+  bookie:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: pulsar-bookie
+    restart: on-failure
+    environment:
+      - clusterName=cluster-a
+      - zkServers=zookeeper:2181
+      - metadataServiceUri=metadata-store:zk:zookeeper:2181
+      - advertisedAddress=bookie
+      - BOOKIE_MEM=-Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+      - PULSAR_PREFIX_bookkeeperDiskUsageThreshold=0.99
+      - PULSAR_PREFIX_bookkeeperDiskUsageWarnThreshold=0.98
+      - PULSAR_PREFIX_bookkeeperDiskCheckIntervalSeconds=30
+      - PULSAR_PREFIX_diskUsageThreshold=0.99
+      - PULSAR_PREFIX_diskUsageWarnThreshold=0.98
+      - PULSAR_PREFIX_diskCheckIntervalSeconds=30
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      pulsar-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./data/pulsar/bookkeeper:/pulsar/data/bookkeeper
+    command:
+      - bash
+      - -c
+      - |
+        bin/apply-config-from-env.py conf/bookkeeper.conf && \
+        exec bin/pulsar bookie
+    ports:
+      - "3181:3181"
+
+  broker:
+    image: apachepulsar/pulsar:3.2.0
+    # Note: KoP protocol handler must be installed manually
+    # See docs/PULSAR_KOP_INSTALLATION.md for instructions
+    container_name: pulsar-broker
+    hostname: broker
+    restart: on-failure
+    environment:
+      - metadataStoreUrl=zk:zookeeper:2181
+      - zookeeperServers=zookeeper:2181
+      - clusterName=cluster-a
+      - managedLedgerDefaultEnsembleSize=1
+      - managedLedgerDefaultWriteQuorum=1
+      - managedLedgerDefaultAckQuorum=1
+      - advertisedAddress=broker
+      - advertisedListeners=external:pulsar://127.0.0.1:6650
+      - PULSAR_MEM=-Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+      # KoP (Kafka-on-Pulsar) - Optional, only needed for Phase I migration
+      # Uncomment these if you want to use KoP:
+      # - PULSAR_PREFIX_protocolHandlerDirectory=./protocols
+      # - PULSAR_PREFIX_messagingProtocols=kafka
+      # - PULSAR_PREFIX_kopListeners=PLAINTEXT://0.0.0.0:9092
+      # - PULSAR_PREFIX_kopAdvertisedListeners=PLAINTEXT://localhost:9092
+      # Tiered Storage Configuration (Phase III)
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      bookie:
+        condition: service_started
+      pulsar-init:
+        condition: service_completed_successfully
+    ports:
+      - "6650:6650"  # Pulsar native protocol
+      - "8080:8080"  # Pulsar admin/HTTP API
+      # Port 9092 only needed if using KoP (Phase I)
+      # - "9092:9092"  # KoP (Kafka protocol)
+    volumes:
+      - ./data/pulsar/broker:/pulsar/data/broker
+    command:
+      - bash
+      - -c
+      - |
+        bin/apply-config-from-env.py conf/broker.conf && \
+        exec bin/pulsar broker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/admin/v2/brokers/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30

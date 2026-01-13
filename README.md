@@ -72,7 +72,7 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 4. Execution Coordinator invokes the matched tool
 5. Results published to `orchestrator-results` and returned to client
 
-**Setup:**
+**Setup (Kafka):**
 ```bash
 # Start Kafka (Docker)
 docker-compose -f docker-compose.kafka.yml up -d
@@ -85,7 +85,20 @@ ENABLE_KAFKA=true
 KAFKA_BROKERS=localhost:9092
 ```
 
-See [Kafka Setup Guide](docs/KAFKA_SETUP.md) and [Orchestrator Architecture](docs/KAFKA_ORCHESTRATOR.md) for details.
+**Setup (Pulsar with KoP - Phase I Migration):**
+```bash
+# Start Pulsar with KoP (Docker)
+docker compose -f docker-compose.pulsar.yml up -d
+
+# Create topics
+.\scripts\setup-pulsar-topics.ps1
+
+# Enable in backend .env
+USE_PULSAR_KOP=true
+KAFKA_BROKERS=localhost:9092  # KoP listens on port 9092
+```
+
+See [Kafka Setup Guide](docs/KAFKA_SETUP.md), [Pulsar Setup Guide](docs/PULSAR_SETUP.md), and [Orchestrator Architecture](docs/KAFKA_ORCHESTRATOR.md) for details.
 
 #### One-Click Installation
 - **Cursor Deep-Link Support**: Install STDIO servers directly to Cursor with automatic deep-link navigation

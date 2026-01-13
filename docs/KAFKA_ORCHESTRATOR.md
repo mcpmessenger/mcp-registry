@@ -105,3 +105,13 @@ KAFKA_BROKERS=localhost:9092
 
 See [Kafka Setup Guide](../docs/KAFKA_SETUP.md) for detailed setup instructions.
 
+## Pulsar Migration Notes
+
+**Phase I: KoP Bridge** - The orchestrator can now run on Apache Pulsar with KoP (Kafka-on-Pulsar) protocol handler. This enables zero-code-change migration from Kafka to Pulsar:
+
+- Set `USE_PULSAR_KOP=true` in backend `.env`
+- Point `KAFKA_BROKERS` to Pulsar KoP endpoint (localhost:9092)
+- Existing Kafka client code works without modifications
+
+See [Pulsar Setup Guide](../docs/PULSAR_SETUP.md) for Pulsar deployment instructions.
+

@@ -17,6 +17,7 @@ import orchestratorRouter from './routes/orchestrator/query'
 import unifiedOrchestratorRouter from './routes/orchestrator/unified'
 import orchestratorJobsRouter from './routes/orchestrator/jobs'
 import { registryService } from './services/registry.service'
+import mcpRouter from './routes/mcp'
 
 const app = express()
 
@@ -29,7 +30,7 @@ const corsOptions = {
     if (!origin) {
       return callback(null, true)
     }
-    
+
     // In development, allow localhost and IP addresses
     if (env.server.nodeEnv === 'development') {
       if (
@@ -41,19 +42,19 @@ const corsOptions = {
         return callback(null, true)
       }
     }
-    
+
     // Use configured CORS origin or allow all if not set
     const allowedOrigin = env.server.corsOrigin || '*'
     if (allowedOrigin === '*') {
       return callback(null, true)
     }
-    
+
     // Support comma-separated list of allowed origins
     const allowedOrigins = allowedOrigin.split(',').map(o => o.trim())
     if (allowedOrigins.includes(origin)) {
       return callback(null, true)
     }
-    
+
     // Deny request (cors will handle 403 response)
     callback(null, false)
   },
@@ -102,7 +103,7 @@ app.get(/^\/v0\.1\/debug\/server\/(.+)$/, async (req, res, next) => {
     const serverId = req.params[0] || req.path.replace('/v0.1/debug/server/', '')
     console.log('[Server] Extracted serverId:', serverId)
     const server = await registryService.getServerById(serverId)
-    
+
     if (!server) {
       return res.status(404).json({
         success: false,
@@ -122,15 +123,15 @@ app.get(/^\/v0\.1\/debug\/server\/(.+)$/, async (req, res, next) => {
         hasMetadata: !!metadata,
         hasHttpHeaders: !!httpHeaders,
         httpHeaders: httpHeaders ? Object.keys(httpHeaders) : [],
-        httpHeadersPreview: httpHeaders 
+        httpHeadersPreview: httpHeaders
           ? Object.fromEntries(
-              Object.entries(httpHeaders).map(([key, value]) => [
-                key,
-                typeof value === 'string' && key.toLowerCase().includes('key')
-                  ? `${String(value).substring(0, 10)}...` 
-                  : value
-              ])
-            )
+            Object.entries(httpHeaders).map(([key, value]) => [
+              key,
+              typeof value === 'string' && key.toLowerCase().includes('key')
+                ? `${String(value).substring(0, 10)}...`
+                : value
+            ])
+          )
           : null,
         metadataKeys: metadata ? Object.keys(metadata) : [],
       },
@@ -150,6 +151,10 @@ console.log('[Server] Registering v0 servers router at /v0.1')
 app.use('/v0.1', v0ServersRouter)
 app.use('/api/mcp/tools', mcpToolsRouter)
 app.use('/api/documents', documentsRouter)
+
+// Unified MCP Streamable HTTP endpoint
+app.use('/mcp', mcpRouter)
+console.log('[Server] Registered unified MCP endpoint at /mcp')
 
 // Orchestrator status endpoint (must be before router to avoid 404)
 let orchestratorStatus = {
@@ -215,12 +220,23 @@ let resultConsumerShutdown: (() => Promise<void>) | null = null
 let jobResultUpdaterShutdown: (() => Promise<void>) | null = null
 let retryWorkerShutdown: (() => Promise<void>) | null = null
 
-// Initialize Kafka producer for discovery events (if available)
-if (process.env.KAFKA_BROKERS || process.env.ENABLE_KAFKA === 'true') {
+// Check if Pulsar is enabled (takes precedence over Kafka)
+const usePulsar = env.pulsar.enabled
+const useKafka = env.kafka.enabled && !usePulsar
+
+// Debug logging
+console.log('[Server] Messaging configuration:')
+console.log(`[Server]   Pulsar enabled: ${usePulsar} (ENABLE_PULSAR=${process.env.ENABLE_PULSAR}, USE_PULSAR_KOP=${process.env.USE_PULSAR_KOP})`)
+console.log(`[Server]   Kafka enabled: ${env.kafka.enabled} (ENABLE_KAFKA=${process.env.ENABLE_KAFKA})`)
+console.log(`[Server]   Will use Kafka: ${useKafka}`)
+console.log(`[Server]   Will use Pulsar: ${usePulsar}`)
+
+// Initialize Kafka producer for discovery events (if available and not using Pulsar)
+if (useKafka) {
   orchestratorStatus.kafkaEnabled = true
   orchestratorStatus.kafkaBrokers = env.kafka.brokers
   console.log('[Server] Kafka enabled, brokers:', env.kafka.brokers.join(', '))
-  
+
   import('./services/mcp-discovery.service').then(async ({ initializeKafkaProducer }) => {
     try {
       await initializeKafkaProducer()
@@ -230,92 +246,179 @@ if (process.env.KAFKA_BROKERS || process.env.ENABLE_KAFKA === 'true') {
   }).catch(() => {
     // Kafka optional, continue without it
   })
+} else if (usePulsar) {
+  orchestratorStatus.kafkaEnabled = false
+  orchestratorStatus.kafkaBrokers = []
+  console.log('[Server] Pulsar enabled, service URL:', env.pulsar.serviceUrl)
+}
 
-  if (env.kafka.enabled || process.env.KAFKA_BROKERS) {
-    // Start MCP Matcher (fast-path tool matching)
-    import('./services/orchestrator/matcher').then(async ({ startMCPMatcher }) => {
-      try {
-        console.log('[Server] Starting MCP Matcher...')
-        matcherShutdown = await startMCPMatcher()
-        orchestratorStatus.matcherRunning = true
-        console.log('[Server] ✓ MCP Matcher started successfully')
-      } catch (error) {
-        console.error('[Server] ✗ Failed to start MCP Matcher:', error)
-        orchestratorStatus.matcherRunning = false
-      }
-    }).catch(error => {
-      console.warn('[Server] ✗ Unable to load MCP Matcher:', error)
+// Start orchestrator services (Kafka or Pulsar based on configuration)
+// Only start Kafka services if Kafka is explicitly enabled AND Pulsar is NOT enabled
+if (useKafka) {
+  // Start MCP Matcher (fast-path tool matching)
+  import('./services/orchestrator/matcher').then(async ({ startMCPMatcher }) => {
+    try {
+      console.log('[Server] Starting MCP Matcher...')
+      matcherShutdown = await startMCPMatcher()
+      orchestratorStatus.matcherRunning = true
+      console.log('[Server] ✓ MCP Matcher started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start MCP Matcher:', error)
       orchestratorStatus.matcherRunning = false
-    })
-    
-    // Start Execution Coordinator
-    import('./services/orchestrator/coordinator').then(async ({ startExecutionCoordinator }) => {
-      try {
-        console.log('[Server] Starting Execution Coordinator...')
-        orchestratorShutdown = await startExecutionCoordinator()
-        orchestratorStatus.coordinatorRunning = true
-        console.log('[Server] ✓ Execution Coordinator started successfully')
-      } catch (error) {
-        console.error('[Server] ✗ Failed to start Execution Coordinator:', error)
-        orchestratorStatus.coordinatorRunning = false
-      }
-    }).catch(error => {
-      console.warn('[Server] ✗ Unable to load Execution Coordinator:', error)
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load MCP Matcher:', error)
+    orchestratorStatus.matcherRunning = false
+  })
+
+  // Start Execution Coordinator
+  import('./services/orchestrator/coordinator').then(async ({ startExecutionCoordinator }) => {
+    try {
+      console.log('[Server] Starting Execution Coordinator...')
+      orchestratorShutdown = await startExecutionCoordinator()
+      orchestratorStatus.coordinatorRunning = true
+      console.log('[Server] ✓ Execution Coordinator started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Execution Coordinator:', error)
       orchestratorStatus.coordinatorRunning = false
-    })
-    
-    // Start Result Consumer (shared consumer for query route)
-    import('./services/orchestrator/result-consumer').then(async ({ startResultConsumer }) => {
-      try {
-        console.log('[Server] Starting Result Consumer...')
-        resultConsumerShutdown = await startResultConsumer()
-        orchestratorStatus.resultConsumerRunning = true
-        console.log('[Server] ✓ Result Consumer started successfully')
-      } catch (error) {
-        console.error('[Server] ✗ Failed to start Result Consumer:', error)
-        orchestratorStatus.resultConsumerRunning = false
-      }
-    }).catch(error => {
-      console.warn('[Server] ✗ Unable to load Result Consumer:', error)
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Execution Coordinator:', error)
+    orchestratorStatus.coordinatorRunning = false
+  })
+
+  // Start Result Consumer (shared consumer for query route)
+  import('./services/orchestrator/result-consumer').then(async ({ startResultConsumer }) => {
+    try {
+      console.log('[Server] Starting Result Consumer...')
+      resultConsumerShutdown = await startResultConsumer()
+      orchestratorStatus.resultConsumerRunning = true
+      console.log('[Server] ✓ Result Consumer started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Result Consumer:', error)
       orchestratorStatus.resultConsumerRunning = false
-    })
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Result Consumer:', error)
+    orchestratorStatus.resultConsumerRunning = false
+  })
 
-    // Start Job Result Updater (persists orchestrator-results into OrchestratorJob rows)
-    import('./services/orchestrator/job-result-updater').then(async ({ startJobResultUpdater }) => {
-      try {
-        console.log('[Server] Starting Job Result Updater...')
-        jobResultUpdaterShutdown = await startJobResultUpdater()
-        orchestratorStatus.jobResultUpdaterRunning = true
-        console.log('[Server] ✓ Job Result Updater started successfully')
-      } catch (error) {
-        console.error('[Server] ✗ Failed to start Job Result Updater:', error)
-        orchestratorStatus.jobResultUpdaterRunning = false
-      }
-    }).catch(error => {
-      console.warn('[Server] ✗ Unable to load Job Result Updater:', error)
+  // Start Job Result Updater (persists orchestrator-results into OrchestratorJob rows)
+  import('./services/orchestrator/job-result-updater').then(async ({ startJobResultUpdater }) => {
+    try {
+      console.log('[Server] Starting Job Result Updater...')
+      jobResultUpdaterShutdown = await startJobResultUpdater()
+      orchestratorStatus.jobResultUpdaterRunning = true
+      console.log('[Server] ✓ Job Result Updater started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Job Result Updater:', error)
       orchestratorStatus.jobResultUpdaterRunning = false
-    })
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Job Result Updater:', error)
+    orchestratorStatus.jobResultUpdaterRunning = false
+  })
 
-    // Start Retry Worker (delayed tool retries via retry topics)
-    import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
-      try {
-        console.log('[Server] Starting Retry Worker...')
-        retryWorkerShutdown = await startRetryWorker()
-        orchestratorStatus.retryWorkerRunning = true
-        console.log('[Server] ✓ Retry Worker started successfully')
-      } catch (error) {
-        console.error('[Server] ✗ Failed to start Retry Worker:', error)
-        orchestratorStatus.retryWorkerRunning = false
-      }
-    }).catch(error => {
-      console.warn('[Server] ✗ Unable to load Retry Worker:', error)
+  // Start Retry Worker (delayed tool retries via retry topics)
+  import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
+    try {
+      console.log('[Server] Starting Retry Worker...')
+      retryWorkerShutdown = await startRetryWorker()
+      orchestratorStatus.retryWorkerRunning = true
+      console.log('[Server] ✓ Retry Worker started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Retry Worker:', error)
       orchestratorStatus.retryWorkerRunning = false
-    })
-  } else {
-    console.log('[Server] Kafka not enabled (ENABLE_KAFKA not set to "true" and KAFKA_BROKERS not set)')
-  }
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Retry Worker:', error)
+    orchestratorStatus.retryWorkerRunning = false
+  })
+} else if (usePulsar) {
+  // Start orchestrator services with Pulsar
+  console.log('[Server] Pulsar enabled - starting orchestrator services with Pulsar')
+
+  // Start MCP Matcher (fast-path tool matching)
+  import('./services/orchestrator/matcher').then(async ({ startMCPMatcher }) => {
+    try {
+      console.log('[Server] Starting MCP Matcher...')
+      matcherShutdown = await startMCPMatcher()
+      orchestratorStatus.matcherRunning = true
+      console.log('[Server] ✓ MCP Matcher started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start MCP Matcher:', error)
+      orchestratorStatus.matcherRunning = false
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load MCP Matcher:', error)
+    orchestratorStatus.matcherRunning = false
+  })
+
+  // Start Execution Coordinator
+  import('./services/orchestrator/coordinator').then(async ({ startExecutionCoordinator }) => {
+    try {
+      console.log('[Server] Starting Execution Coordinator...')
+      orchestratorShutdown = await startExecutionCoordinator()
+      orchestratorStatus.coordinatorRunning = true
+      console.log('[Server] ✓ Execution Coordinator started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Execution Coordinator:', error)
+      orchestratorStatus.coordinatorRunning = false
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Execution Coordinator:', error)
+    orchestratorStatus.coordinatorRunning = false
+  })
+
+  // Start Result Consumer (shared consumer for query route)
+  import('./services/orchestrator/result-consumer').then(async ({ startResultConsumer }) => {
+    try {
+      console.log('[Server] Starting Result Consumer...')
+      resultConsumerShutdown = await startResultConsumer()
+      orchestratorStatus.resultConsumerRunning = true
+      console.log('[Server] ✓ Result Consumer started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Result Consumer:', error)
+      orchestratorStatus.resultConsumerRunning = false
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Result Consumer:', error)
+    orchestratorStatus.resultConsumerRunning = false
+  })
+
+  // Start Job Result Updater (persists orchestrator-results into OrchestratorJob rows)
+  import('./services/orchestrator/job-result-updater').then(async ({ startJobResultUpdater }) => {
+    try {
+      console.log('[Server] Starting Job Result Updater...')
+      jobResultUpdaterShutdown = await startJobResultUpdater()
+      orchestratorStatus.jobResultUpdaterRunning = true
+      console.log('[Server] ✓ Job Result Updater started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Job Result Updater:', error)
+      orchestratorStatus.jobResultUpdaterRunning = false
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Job Result Updater:', error)
+    orchestratorStatus.jobResultUpdaterRunning = false
+  })
+
+  // Start Retry Worker (delayed tool retries via retry topics)
+  import('./services/orchestrator/retry-worker').then(async ({ startRetryWorker }) => {
+    try {
+      console.log('[Server] Starting Retry Worker...')
+      retryWorkerShutdown = await startRetryWorker()
+      orchestratorStatus.retryWorkerRunning = true
+      console.log('[Server] ✓ Retry Worker started successfully')
+    } catch (error) {
+      console.error('[Server] ✗ Failed to start Retry Worker:', error)
+      orchestratorStatus.retryWorkerRunning = false
+    }
+  }).catch(error => {
+    console.warn('[Server] ✗ Unable to load Retry Worker:', error)
+    orchestratorStatus.retryWorkerRunning = false
+  })
 } else {
-  console.log('[Server] Kafka not configured (set ENABLE_KAFKA=true or KAFKA_BROKERS to enable orchestrator)')
+  console.log('[Server] Neither Kafka nor Pulsar configured (set ENABLE_KAFKA=true or ENABLE_PULSAR=true to enable orchestrator)')
 }
 
 const server = app.listen(PORT, '0.0.0.0', () => {

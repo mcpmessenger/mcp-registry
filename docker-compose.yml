@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  pulsar:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: mcp-registry-pulsar
+    hostname: pulsar-standalone
+    restart: unless-stopped
+    ports:
+      - "6650:6650" # Pulsar binary protocol
+      - "8080:8080" # HTTP Admin API
+    environment:
+      # Memory configuration for development
+      - PULSAR_MEM=-Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+    volumes:
+      - ./data/pulsar:/pulsar/data
+    command: bin/pulsar standalone
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/admin/v2/brokers/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge

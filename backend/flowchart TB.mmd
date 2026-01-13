@@ -1,0 +1,125 @@
+flowchart TB
+    subgraph User["👤 User"]
+        Query["User Query"]
+    end
+
+    subgraph Ingress["Ingress Layer"]
+        API["API Gateway<br/>/api/orchestrator/unified"]
+        Normalizer["Query Normalizer"]
+    end
+
+    subgraph Pillars["Six Pillars of Orchestration"]
+        direction TB
+        
+        subgraph P1["1️⃣ Semantic Search Engine"]
+            SSE["Vector Embeddings<br/>Hybrid Ranking<br/>Usage Tracking"]
+        end
+        
+        subgraph P2["2️⃣ Workflow Planner"]
+            WP["Task Decomposition<br/>Dependency Graph<br/>ReAct Patterns"]
+        end
+        
+        subgraph P3["3️⃣ Execution Engine"]
+            EE["MCP Tool Invocation<br/>STDIO/HTTP Protocol<br/>Error Handling"]
+        end
+        
+        subgraph P4["4️⃣ Enhanced Tool Matcher"]
+            ETM["Kafka Fast-Path<br/>Keyword Patterns<br/>Semantic Integration"]
+        end
+        
+        subgraph P5["5️⃣ Context Manager"]
+            CM["State Tracking<br/>Variable Management<br/>Conversation History"]
+        end
+        
+        subgraph P6["6️⃣ Documentation Search"]
+            DS["RAG System<br/>Tool Documentation<br/>Usage Patterns"]
+        end
+    end
+
+    subgraph Unified["Unified Orchestrator Service"]
+        UO["Orchestrator<br/>Coordinates All Pillars"]
+    end
+
+    subgraph Storage["Storage Layer"]
+        VectorDB[("Vector DB<br/>Tool Embeddings")]
+        ContextDB[("Context Store<br/>Conversation State")]
+        DocCache[("Documentation Cache<br/>Tool Docs")]
+    end
+
+    subgraph Execution["Execution Layer"]
+        MCP["MCP Servers<br/>STDIO & HTTP"]
+        Tools["Tools<br/>browser_navigate<br/>web_search_exa<br/>agent_executor"]
+    end
+
+    subgraph Kafka["Kafka Event Bus"]
+        UserReq["user-requests"]
+        ToolSig["tool-signals"]
+        Results["orchestrator-results"]
+    end
+
+    %% User Flow
+    Query --> API
+    API --> Normalizer
+    Normalizer --> UO
+
+    %% Unified Orchestrator coordinates pillars
+    UO --> P1
+    UO --> P2
+    UO --> P6
+    UO --> P5
+    UO --> P3
+
+    %% Pillar 1: Semantic Search
+    P1 --> VectorDB
+    VectorDB --> P1
+    P1 -.->|"Enhanced Matching"| P4
+
+    %% Pillar 2: Workflow Planner
+    P2 --> P5
+    P2 --> P3
+    P5 --> P2
+
+    %% Pillar 3: Execution Engine
+    P3 --> MCP
+    MCP --> Tools
+    Tools --> P3
+    P3 --> P5
+    P3 -.->|"Usage Stats"| P1
+
+    %% Pillar 4: Enhanced Tool Matcher
+    P4 --> Kafka
+    Kafka --> UserReq
+    Kafka --> ToolSig
+    P4 --> P1
+    P1 --> P4
+
+    %% Pillar 5: Context Manager
+    P5 --> ContextDB
+    ContextDB --> P5
+    P5 --> P3
+    P5 --> P2
+
+    %% Pillar 6: Documentation Search
+    P6 --> DocCache
+    DocCache --> P6
+    P6 -.->|"Enhance Steps"| P2
+    P6 -.->|"Tool Understanding"| P1
+
+    %% Kafka Flow
+    Normalizer --> UserReq
+    P4 --> ToolSig
+    P3 --> Results
+    Results --> API
+
+    %% Response Flow
+    P3 --> UO
+    UO --> API
+    API --> Query
+
+    style P1 fill:#e1f5ff
+    style P2 fill:#fff4e1
+    style P3 fill:#ffe1f5
+    style P4 fill:#e1ffe1
+    style P5 fill:#f5e1ff
+    style P6 fill:#ffe1e1
+    style UO fill:#ffffe1

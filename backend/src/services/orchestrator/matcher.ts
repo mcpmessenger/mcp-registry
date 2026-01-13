@@ -5,12 +5,18 @@
  * Emits TOOL_READY signals when high-confidence matches are found.
  */
 
-import { createKafkaProducer, createKafkaConsumer } from './kafka'
+import { createPulsarProducer, createPulsarConsumer, sendPulsarMessage, receivePulsarMessage, type PulsarProducer, type PulsarConsumer } from './pulsar'
+import { createProducer, createConsumer, sendMessage, isPulsarEnabled } from './messaging'
 import type { UserRequestEvent, ToolSignalEvent } from './events'
 import { env } from '../../config/env'
 import { registryService } from '../registry.service'
 import { processMCPTools, findBestToolMatch, type ToolEmbedding } from './embeddings'
 import { getSemanticSearchService } from './semantic-search.service'
+
+// Helper to get topic name (works for both Kafka and Pulsar)
+function getTopic(topicKey: keyof typeof env.pulsar.topics): string {
+  return isPulsarEnabled() ? env.pulsar.topics[topicKey] : env.kafka.topics[topicKey]
+}
 
 const CONFIDENCE_THRESHOLD = 0.7
 
@@ -164,8 +170,8 @@ function matchKeywordPattern(query: string): { toolId: string; serverId: string;
  * Start MCP Matcher consumer
  */
 export async function startMCPMatcher(): Promise<() => Promise<void>> {
-  const producer = await createKafkaProducer()
-  const consumer = await createKafkaConsumer('mcp-matcher')
+  const userRequestsTopic = getTopic('userRequests')
+  const toolSignalsTopic = getTopic('toolSignals')
   
   // Load and process all MCP servers for semantic search
   console.log('[MCP Matcher] Loading MCP servers from registry...')
@@ -181,115 +187,248 @@ export async function startMCPMatcher(): Promise<() => Promise<void>> {
   const toolEmbeddings = await processMCPTools(servers)
   console.log(`[MCP Matcher] Processed ${toolEmbeddings.length} tools with embeddings/keywords`)
   
-  await consumer.connect()
-  await consumer.subscribe({ topic: env.kafka.topics.userRequests, fromBeginning: false })
+  let isRunning = true
   
-  console.log('[MCP Matcher] Started, listening for user requests...')
-  
-  await consumer.run({
-    eachMessage: async ({ message }) => {
-      try {
-        if (!message.value) return
-        
-        const event: UserRequestEvent = JSON.parse(message.value.toString())
-        const { requestId, normalizedQuery } = event
-        
-        console.log(`[MCP Matcher] Processing request ${requestId}: "${normalizedQuery.substring(0, 50)}..."`)
-        
-        let match: { toolId: string; serverId: string; confidence: number; params: Record<string, unknown> } | null = null
-        
-        // Try keyword pattern matching first (fastest)
-        const keywordMatch = matchKeywordPattern(normalizedQuery)
-        if (keywordMatch && keywordMatch.confidence >= CONFIDENCE_THRESHOLD) {
-          match = keywordMatch
-          console.log(`[MCP Matcher] Keyword match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
-        } else {
-          // Try enhanced semantic search (Pillar 1) first
-          console.log(`[MCP Matcher] Trying enhanced semantic search...`)
-          const semanticSearch = getSemanticSearchService()
-          const semanticMatches = await semanticSearch.search(normalizedQuery, {
-            limit: 1,
-            minConfidence: CONFIDENCE_THRESHOLD,
-          })
+  if (isPulsarEnabled()) {
+    // Pulsar implementation
+    const producer = await createPulsarProducer(toolSignalsTopic)
+    const consumer = await createPulsarConsumer(userRequestsTopic, 'mcp-matcher')
+    
+    console.log('[MCP Matcher] Started (Pulsar), listening for user requests...')
+    
+    // Start message processing loop
+    const processLoop = async () => {
+      while (isRunning) {
+        try {
+          const msg = await receivePulsarMessage(consumer, 1000) // 1s timeout
+          if (!msg) continue
           
-          if (semanticMatches.length > 0) {
-            const semanticMatch = semanticMatches[0]
-            match = {
-              toolId: semanticMatch.tool.toolId,
-              serverId: semanticMatch.tool.serverId,
-              confidence: semanticMatch.confidence,
-              params: extractSearchParams(normalizedQuery),
-            }
-            console.log(`[MCP Matcher] Enhanced semantic match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence}, type: ${semanticMatch.matchType})`)
-          } else {
-            // Fallback to legacy keyword-based search
-            console.log(`[MCP Matcher] Trying legacy keyword search...`)
-            const legacyMatch = await findBestToolMatch(normalizedQuery, toolEmbeddings)
+          try {
+            const event: UserRequestEvent = JSON.parse(msg.getData().toString())
+            const { requestId, normalizedQuery } = event
             
-            if (legacyMatch && legacyMatch.confidence >= CONFIDENCE_THRESHOLD) {
-              match = {
-                toolId: legacyMatch.tool.toolId,
-                serverId: legacyMatch.tool.serverId,
-                confidence: legacyMatch.confidence,
-                params: extractSearchParams(normalizedQuery),
+            console.log(`[MCP Matcher] Processing request ${requestId}: "${normalizedQuery.substring(0, 50)}..."`)
+            
+            let match: { toolId: string; serverId: string; confidence: number; params: Record<string, unknown> } | null = null
+            
+            // Try keyword pattern matching first (fastest)
+            const keywordMatch = matchKeywordPattern(normalizedQuery)
+            if (keywordMatch && keywordMatch.confidence >= CONFIDENCE_THRESHOLD) {
+              match = keywordMatch
+              console.log(`[MCP Matcher] Keyword match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
+            } else {
+              // Try enhanced semantic search (Pillar 1) first
+              console.log(`[MCP Matcher] Trying enhanced semantic search...`)
+              const semanticSearch = getSemanticSearchService()
+              const semanticMatches = await semanticSearch.search(normalizedQuery, {
+                limit: 1,
+                minConfidence: CONFIDENCE_THRESHOLD,
+              })
+              
+              if (semanticMatches.length > 0) {
+                const semanticMatch = semanticMatches[0]
+                match = {
+                  toolId: semanticMatch.tool.toolId,
+                  serverId: semanticMatch.tool.serverId,
+                  confidence: semanticMatch.confidence,
+                  params: extractSearchParams(normalizedQuery),
+                }
+                console.log(`[MCP Matcher] Enhanced semantic match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence}, type: ${semanticMatch.matchType})`)
+              } else {
+                // Fallback to legacy keyword-based search
+                console.log(`[MCP Matcher] Trying legacy keyword search...`)
+                const legacyMatch = await findBestToolMatch(normalizedQuery, toolEmbeddings)
+                
+                if (legacyMatch && legacyMatch.confidence >= CONFIDENCE_THRESHOLD) {
+                  match = {
+                    toolId: legacyMatch.tool.toolId,
+                    serverId: legacyMatch.tool.serverId,
+                    confidence: legacyMatch.confidence,
+                    params: extractSearchParams(normalizedQuery),
+                  }
+                  console.log(`[MCP Matcher] Legacy keyword match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
+                }
               }
-              console.log(`[MCP Matcher] Legacy keyword match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
             }
-          }
-        }
-        
-        if (match && match.confidence >= CONFIDENCE_THRESHOLD) {
-          // Verify server exists in registry
-          const server = await registryService.getServerById(match.serverId)
-          if (!server) {
-            console.warn(`[MCP Matcher] Server ${match.serverId} not found in registry, skipping match`)
-            return
-          }
-          
-          // Verify tool exists
-          const tool = server.tools?.find(t => t.name === match.toolId)
-          if (!tool) {
-            console.warn(`[MCP Matcher] Tool ${match.toolId} not found on server ${match.serverId}, skipping match`)
-            return
-          }
-          
-          // Emit TOOL_READY signal
-          const toolSignal: ToolSignalEvent = {
-            requestId,
-            toolId: match.toolId,
-            serverId: match.serverId,
-            params: match.params,
-            confidence: match.confidence,
-            status: 'TOOL_READY',
-            timestamp: new Date().toISOString(),
-          }
-          
-          await producer.send({
-            topic: env.kafka.topics.toolSignals,
-            messages: [{
-              key: requestId,
-              value: JSON.stringify(toolSignal),
-              headers: {
+            
+            if (match && match.confidence >= CONFIDENCE_THRESHOLD) {
+              // Verify server exists in registry
+              const server = await registryService.getServerById(match.serverId)
+              if (!server) {
+                console.warn(`[MCP Matcher] Server ${match.serverId} not found in registry, skipping match`)
+                consumer.acknowledge(msg)
+                continue
+              }
+              
+              // Verify tool exists
+              const tool = server.tools?.find(t => t.name === match.toolId)
+              if (!tool) {
+                console.warn(`[MCP Matcher] Tool ${match.toolId} not found on server ${match.serverId}, skipping match`)
+                consumer.acknowledge(msg)
+                continue
+              }
+              
+              // Emit TOOL_READY signal
+              const toolSignal: ToolSignalEvent = {
+                requestId,
+                toolId: match.toolId,
+                serverId: match.serverId,
+                params: match.params,
+                confidence: match.confidence,
+                status: 'TOOL_READY',
+                timestamp: new Date().toISOString(),
+              }
+              
+              await sendPulsarMessage(producer, toolSignal, {
                 requestId,
                 status: 'TOOL_READY',
-              },
-            }],
-          })
-          
-          console.log(`[MCP Matcher] Emitted TOOL_READY for ${requestId}: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
-        } else {
-          console.log(`[MCP Matcher] No high-confidence match for ${requestId} (keyword: ${keywordMatch?.confidence || 0}, semantic: N/A)`)
+              })
+              
+              console.log(`[MCP Matcher] Emitted TOOL_READY for ${requestId}: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
+            } else {
+              console.log(`[MCP Matcher] No high-confidence match for ${requestId} (keyword: ${keywordMatch?.confidence || 0}, semantic: N/A)`)
+            }
+            
+            consumer.acknowledge(msg)
+          } catch (error) {
+            console.error('[MCP Matcher] Error processing message:', error)
+            consumer.negativeAcknowledge(msg)
+          }
+        } catch (error) {
+          // Timeout or other error, continue loop
+          if (error instanceof Error && !error.message.includes('timeout')) {
+            console.error('[MCP Matcher] Error in processing loop:', error)
+          }
         }
-      } catch (error) {
-        console.error('[MCP Matcher] Error processing message:', error)
       }
-    },
-  })
-  
-  return async () => {
-    await consumer.disconnect()
-    await producer.disconnect()
-    console.log('[MCP Matcher] Stopped')
+    }
+    
+    processLoop().catch(error => {
+      console.error('[MCP Matcher] Processing loop crashed', error)
+    })
+    
+    return async () => {
+      isRunning = false
+      await consumer.close()
+      await producer.close()
+      console.log('[MCP Matcher] Stopped')
+    }
+  } else {
+    // Kafka implementation (legacy)
+    const { createKafkaProducer, createKafkaConsumer } = await import('./kafka')
+    const producer = await createKafkaProducer()
+    const consumer = createKafkaConsumer('mcp-matcher')
+    
+    await consumer.connect()
+    await consumer.subscribe({ topic: userRequestsTopic, fromBeginning: false })
+    
+    console.log('[MCP Matcher] Started (Kafka), listening for user requests...')
+    
+    await consumer.run({
+      eachMessage: async ({ message }) => {
+        try {
+          if (!message.value) return
+          
+          const event: UserRequestEvent = JSON.parse(message.value.toString())
+          const { requestId, normalizedQuery } = event
+          
+          console.log(`[MCP Matcher] Processing request ${requestId}: "${normalizedQuery.substring(0, 50)}..."`)
+          
+          let match: { toolId: string; serverId: string; confidence: number; params: Record<string, unknown> } | null = null
+          
+          // Try keyword pattern matching first (fastest)
+          const keywordMatch = matchKeywordPattern(normalizedQuery)
+          if (keywordMatch && keywordMatch.confidence >= CONFIDENCE_THRESHOLD) {
+            match = keywordMatch
+            console.log(`[MCP Matcher] Keyword match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
+          } else {
+            // Try enhanced semantic search (Pillar 1) first
+            console.log(`[MCP Matcher] Trying enhanced semantic search...`)
+            const semanticSearch = getSemanticSearchService()
+            const semanticMatches = await semanticSearch.search(normalizedQuery, {
+              limit: 1,
+              minConfidence: CONFIDENCE_THRESHOLD,
+            })
+            
+            if (semanticMatches.length > 0) {
+              const semanticMatch = semanticMatches[0]
+              match = {
+                toolId: semanticMatch.tool.toolId,
+                serverId: semanticMatch.tool.serverId,
+                confidence: semanticMatch.confidence,
+                params: extractSearchParams(normalizedQuery),
+              }
+              console.log(`[MCP Matcher] Enhanced semantic match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence}, type: ${semanticMatch.matchType})`)
+            } else {
+              // Fallback to legacy keyword-based search
+              console.log(`[MCP Matcher] Trying legacy keyword search...`)
+              const legacyMatch = await findBestToolMatch(normalizedQuery, toolEmbeddings)
+              
+              if (legacyMatch && legacyMatch.confidence >= CONFIDENCE_THRESHOLD) {
+                match = {
+                  toolId: legacyMatch.tool.toolId,
+                  serverId: legacyMatch.tool.serverId,
+                  confidence: legacyMatch.confidence,
+                  params: extractSearchParams(normalizedQuery),
+                }
+                console.log(`[MCP Matcher] Legacy keyword match found: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
+              }
+            }
+          }
+          
+          if (match && match.confidence >= CONFIDENCE_THRESHOLD) {
+            // Verify server exists in registry
+            const server = await registryService.getServerById(match.serverId)
+            if (!server) {
+              console.warn(`[MCP Matcher] Server ${match.serverId} not found in registry, skipping match`)
+              return
+            }
+            
+            // Verify tool exists
+            const tool = server.tools?.find(t => t.name === match.toolId)
+            if (!tool) {
+              console.warn(`[MCP Matcher] Tool ${match.toolId} not found on server ${match.serverId}, skipping match`)
+              return
+            }
+            
+            // Emit TOOL_READY signal
+            const toolSignal: ToolSignalEvent = {
+              requestId,
+              toolId: match.toolId,
+              serverId: match.serverId,
+              params: match.params,
+              confidence: match.confidence,
+              status: 'TOOL_READY',
+              timestamp: new Date().toISOString(),
+            }
+            
+            await producer.send({
+              topic: toolSignalsTopic,
+              messages: [{
+                key: requestId,
+                value: JSON.stringify(toolSignal),
+                headers: {
+                  requestId,
+                  status: 'TOOL_READY',
+                },
+              }],
+            })
+            
+            console.log(`[MCP Matcher] Emitted TOOL_READY for ${requestId}: ${match.serverId}::${match.toolId} (confidence: ${match.confidence})`)
+          } else {
+            console.log(`[MCP Matcher] No high-confidence match for ${requestId} (keyword: ${keywordMatch?.confidence || 0}, semantic: N/A)`)
+          }
+        } catch (error) {
+          console.error('[MCP Matcher] Error processing message:', error)
+        }
+      },
+    })
+    
+    return async () => {
+      await consumer.disconnect()
+      await producer.disconnect()
+      console.log('[MCP Matcher] Stopped')
+    }
   }
 }
 

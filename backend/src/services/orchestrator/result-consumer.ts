@@ -5,10 +5,15 @@
  * Uses a Map to track pending requests and resolve them when results arrive.
  */
 
-import { createKafkaConsumer } from './kafka'
+import { createPulsarConsumer, receivePulsarMessage, type PulsarConsumer } from './pulsar'
+import { isPulsarEnabled } from './messaging'
 import { env } from '../../config/env'
 import type { OrchestratorResultEvent } from './events'
-import type { Consumer } from 'kafkajs'
+
+// Helper to get topic name (works for both Kafka and Pulsar)
+function getTopic(topicKey: keyof typeof env.pulsar.topics): string {
+  return isPulsarEnabled() ? env.pulsar.topics[topicKey] : env.kafka.topics[topicKey]
+}
 
 type ResultResolver = {
   resolve: (result: OrchestratorResultEvent) => void
@@ -16,8 +21,9 @@ type ResultResolver = {
   timeoutId: NodeJS.Timeout
 }
 
-let sharedConsumer: Consumer | null = null
+let sharedConsumer: PulsarConsumer | any | null = null
 let isRunning = false
+let processingLoop: Promise<void> | null = null
 const pendingRequests = new Map<string, ResultResolver>()
 
 /**
@@ -26,49 +32,108 @@ const pendingRequests = new Map<string, ResultResolver>()
 export async function startResultConsumer(): Promise<() => Promise<void>> {
   if (isRunning && sharedConsumer) {
     return async () => {
-      await sharedConsumer?.disconnect()
+      isRunning = false
+      if (isPulsarEnabled()) {
+        await sharedConsumer?.close()
+      } else {
+        await sharedConsumer?.disconnect()
+      }
       sharedConsumer = null
       isRunning = false
       pendingRequests.clear()
     }
   }
 
-  const consumer = createKafkaConsumer('orchestrator-result-consumer')
-  await consumer.connect()
-  await consumer.subscribe({ topic: env.kafka.topics.orchestratorResults, fromBeginning: false })
-
-  console.log('[Result Consumer] Started, listening for orchestrator results...')
-
-  consumer.run({
-    eachMessage: async ({ message }) => {
-      try {
-        if (!message.value) return
-
-        const event: OrchestratorResultEvent = JSON.parse(message.value.toString())
-        const { requestId } = event
-
-        const resolver = pendingRequests.get(requestId)
-        if (resolver) {
-          console.log(`[Result Consumer] Resolving request ${requestId}`)
-          clearTimeout(resolver.timeoutId)
-          pendingRequests.delete(requestId)
-          resolver.resolve(event)
-        } else {
-          console.log(`[Result Consumer] Received result for unknown request ${requestId}`)
-        }
-      } catch (error) {
-        console.error('[Result Consumer] Error processing result:', error)
-      }
-    },
-  }).catch(error => {
-    console.error('[Result Consumer] Consumer crashed', error)
-  })
-
-  sharedConsumer = consumer
+  const topic = getTopic('orchestratorResults')
   isRunning = true
 
+  if (isPulsarEnabled()) {
+    // Pulsar implementation
+    const consumer = await createPulsarConsumer(topic, 'orchestrator-result-consumer')
+    
+    console.log('[Result Consumer] Started (Pulsar), listening for orchestrator results...')
+    
+    processingLoop = (async () => {
+      while (isRunning) {
+        try {
+          const msg = await receivePulsarMessage(consumer, 1000)
+          if (!msg) continue
+          
+          try {
+            const event: OrchestratorResultEvent = JSON.parse(msg.getData().toString())
+            const { requestId } = event
+
+            const resolver = pendingRequests.get(requestId)
+            if (resolver) {
+              console.log(`[Result Consumer] Resolving request ${requestId}`)
+              clearTimeout(resolver.timeoutId)
+              pendingRequests.delete(requestId)
+              resolver.resolve(event)
+            } else {
+              console.log(`[Result Consumer] Received result for unknown request ${requestId}`)
+            }
+            consumer.acknowledge(msg)
+          } catch (error) {
+            console.error('[Result Consumer] Error processing result:', error)
+            consumer.negativeAcknowledge(msg)
+          }
+        } catch (error) {
+          if (error instanceof Error && !error.message.includes('timeout')) {
+            console.error('[Result Consumer] Error in processing loop:', error)
+          }
+        }
+      }
+    })()
+    
+    processingLoop.catch(error => {
+      console.error('[Result Consumer] Processing loop crashed', error)
+    })
+    
+    sharedConsumer = consumer
+  } else {
+    // Kafka implementation (legacy)
+    const { createKafkaConsumer } = await import('./kafka')
+    const consumer = createKafkaConsumer('orchestrator-result-consumer')
+    await consumer.connect()
+    await consumer.subscribe({ topic, fromBeginning: false })
+
+    console.log('[Result Consumer] Started (Kafka), listening for orchestrator results...')
+
+    consumer.run({
+      eachMessage: async ({ message }) => {
+        try {
+          if (!message.value) return
+
+          const event: OrchestratorResultEvent = JSON.parse(message.value.toString())
+          const { requestId } = event
+
+          const resolver = pendingRequests.get(requestId)
+          if (resolver) {
+            console.log(`[Result Consumer] Resolving request ${requestId}`)
+            clearTimeout(resolver.timeoutId)
+            pendingRequests.delete(requestId)
+            resolver.resolve(event)
+          } else {
+            console.log(`[Result Consumer] Received result for unknown request ${requestId}`)
+          }
+        } catch (error) {
+          console.error('[Result Consumer] Error processing result:', error)
+        }
+      },
+    }).catch(error => {
+      console.error('[Result Consumer] Consumer crashed', error)
+    })
+
+    sharedConsumer = consumer
+  }
+
   return async () => {
-    await consumer.disconnect()
+    isRunning = false
+    if (isPulsarEnabled()) {
+      await sharedConsumer?.close()
+    } else {
+      await sharedConsumer?.disconnect()
+    }
     sharedConsumer = null
     isRunning = false
     pendingRequests.clear()

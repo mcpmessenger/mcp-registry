@@ -45,4 +45,7 @@ export function createKafkaConsumer(groupId: string): Consumer {
   return kafkaInstance.consumer({ groupId })
 }
 
+export type KafkaProducer = Producer
+export type KafkaConsumer = Consumer
+
 
