@@ -38,7 +38,7 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 - **Image Display**: View generated images directly in chat with automatic blob URL conversion
 - **STDIO Server Support**: Full support for STDIO-based MCP servers (like Nano Banana MCP)
 - **HTTP Server Support**: Support for HTTP-based MCP servers with custom headers
-- **Kafka Orchestrator**: Intelligent tool routing that bypasses Gemini for high-signal queries
+- **Apache Pulsar Orchestrator**: Intelligent tool routing that bypasses Gemini for high-signal queries
 - **Auto Tool Discovery**: Automatic tool discovery for STDIO servers on registration
 - **Real-time Progress**: Server-Sent Events (SSE) for live job progress updates
 - **Multi-Tier Fallback**: Robust API fallback strategy for reliable AI generation
@@ -54,51 +54,42 @@ SlashMCP.com is a platform designed to help developers discover, register, and m
 - **Enhanced Map Links**: Uses place IDs for accurate business name display in Google Maps
 - **MCP Access Enabled**: Requires `gcloud beta services mcp enable mapstools.googleapis.com` for API access
 
-#### Kafka-First Orchestrator (NEW - December 2024)
+#### Apache Pulsar Orchestrator (Migrated from Kafka - January 2025)
 - **Intelligent Tool Routing**: Automatically routes high-signal queries (like "when is the next concert", "what's the weather in...") directly to appropriate MCP tools without invoking Gemini
 - **Gemini Quota Protection**: Bypasses Gemini API for deterministic queries, saving quota for complex reasoning tasks
 - **Fast-Path Matching**: Keyword and semantic matching routes queries to tools in <50ms
 - **Weather Query Routing**: Routes temperature/weather queries to Google Maps `lookup_weather` tool
 - **Places Query Routing**: Routes location-based searches to Google Maps `search_places` tool
-- **Asynchronous Processing**: Kafka-based event-driven architecture for scalable orchestration
+- **Asynchronous Processing**: Apache Pulsar-based event-driven architecture for scalable orchestration
 - **SSE Support**: Handles Server-Sent Events (SSE) responses from MCP servers like Exa
 - **Shared Result Consumer**: Always-ready consumer eliminates timeout issues
 - **Status Endpoint**: Check orchestrator health via `/api/orchestrator/status`
+- **Multi-Tenancy**: Pulsar's built-in namespace isolation for better resource management
+- **Geo-Replication Ready**: Native support for cross-region message replication
 
 **How it works:**
 1. User query enters via `/api/orchestrator/query`
-2. Ingress Gateway normalizes and publishes to `user-requests` topic
+2. Ingress Gateway normalizes and publishes to Pulsar topic
 3. MCP Matcher performs fast keyword/semantic matching
 4. Execution Coordinator invokes the matched tool
 5. Results published to `orchestrator-results` and returned to client
 
-**Setup (Kafka):**
+**Setup (Apache Pulsar 3.2.0):**
 ```bash
-# Start Kafka (Docker)
-docker-compose -f docker-compose.kafka.yml up -d
+# Start Pulsar (Docker)
+docker compose up -d pulsar
 
-# Create topics
-.\scripts\setup-kafka-topics.ps1
+# Initialize namespaces and topics
+npm run init-pulsar
 
 # Enable in backend .env
-ENABLE_KAFKA=true
-KAFKA_BROKERS=localhost:9092
+ENABLE_PULSAR=true
+PULSAR_SERVICE_URL=pulsar://localhost:6650
+PULSAR_HTTP_URL=http://localhost:8080
+PULSAR_NAMESPACE=mcp-core/default
 ```
 
-**Setup (Pulsar with KoP - Phase I Migration):**
-```bash
-# Start Pulsar with KoP (Docker)
-docker compose -f docker-compose.pulsar.yml up -d
-
-# Create topics
-.\scripts\setup-pulsar-topics.ps1
-
-# Enable in backend .env
-USE_PULSAR_KOP=true
-KAFKA_BROKERS=localhost:9092  # KoP listens on port 9092
-```
-
-See [Kafka Setup Guide](docs/KAFKA_SETUP.md), [Pulsar Setup Guide](docs/PULSAR_SETUP.md), and [Orchestrator Architecture](docs/KAFKA_ORCHESTRATOR.md) for details.
+See [Pulsar Setup Guide](docs/PULSAR_SETUP.md) and [Orchestrator Architecture](docs/KAFKA_ORCHESTRATOR.md) for details.
 
 #### One-Click Installation
 - **Cursor Deep-Link Support**: Install STDIO servers directly to Cursor with automatic deep-link navigation
@@ -241,20 +232,22 @@ mcp-registry/
 }
 ```
 
-### 3. Enable Kafka Orchestrator (Recommended)
+### 3. Enable Apache Pulsar Orchestrator (Recommended)
 
 The orchestrator intelligently routes queries to the right tools without using Gemini quota:
 
-1. **Start Kafka:**
+1. **Start Apache Pulsar:**
    ```powershell
-   docker-compose -f docker-compose.kafka.yml up -d
-   .\scripts\setup-kafka-topics.ps1
+   docker compose up -d pulsar
+   npm run init-pulsar
    ```
 
 2. **Enable in backend `.env`:**
    ```env
-   ENABLE_KAFKA=true
-   KAFKA_BROKERS=localhost:9092
+   ENABLE_PULSAR=true
+   PULSAR_SERVICE_URL=pulsar://localhost:6650
+   PULSAR_HTTP_URL=http://localhost:8080
+   PULSAR_NAMESPACE=mcp-core/default
    ```
 
 3. **Restart backend** - You'll see:
@@ -315,11 +308,11 @@ CORS_ORIGIN=http://localhost:3000
 GOOGLE_GEMINI_API_KEY=
 OPENAI_API_KEY=
 
-# Kafka Orchestrator (optional but recommended)
-ENABLE_KAFKA=true
-KAFKA_BROKERS=localhost:9092
-KAFKA_CLIENT_ID=mcp-orchestrator-coordinator
-KAFKA_GROUP_ID=mcp-orchestrator-coordinator
+# Apache Pulsar Orchestrator (optional but recommended)
+ENABLE_PULSAR=true
+PULSAR_SERVICE_URL=pulsar://localhost:6650
+PULSAR_HTTP_URL=http://localhost:8080
+PULSAR_NAMESPACE=mcp-core/default
 ```
 
 ## 🏗️ Ecosystem Architecture
@@ -411,16 +404,21 @@ The backend provides the following key endpoints:
 
 ### Event-Driven Architecture Components
 
-- **Kafka**: A local Kafka broker powers both the async design pipeline and the intelligent orchestrator. Start it with `docker compose -f docker-compose.kafka.yml up -d`, which spins up Zookeeper and Kafka. Shut it down with `docker compose -f docker-compose.kafka.yml down`.
+- **Apache Pulsar 3.2.0**: A cloud-native messaging system powers both the async design pipeline and the intelligent orchestrator. Start it with `docker compose up -d pulsar` and initialize with `npm run init-pulsar`. Shut it down with `docker compose down pulsar`.
 - **Orchestrator Topics**: 
   - `user-requests`: Normalized user queries from the Ingress Gateway
   - `tool-signals`: High-confidence tool matches from the MCP Matcher
+  - `tool-signals-retry-5s`, `tool-signals-retry-30s`: Retry topics with delay
+  - `tool-signals-dlq`: Dead letter queue for failed messages
   - `orchestrator-plans`: Gemini fallback plans (when matcher can't resolve)
   - `orchestrator-results`: Final tool execution results
-- **Design Pipeline Topics**: `design-requests` receives `DESIGN_REQUEST_RECEIVED` events; `design-ready` carries `DESIGN_READY`/`DESIGN_FAILED` results.
+- **Registry Topics**: 
+  - `sessions`: Session lifecycle events
+  - `registrations/global`: Server registration events
+  - `events/activity`: User activity tracking
 - **Orchestrator Flow**: 
   1. Frontend calls `POST /api/orchestrator/query` with user query
-  2. Ingress Gateway normalizes query and publishes to `user-requests`
+  2. Ingress Gateway normalizes query and publishes to Pulsar
   3. MCP Matcher performs fast keyword/semantic matching (<50ms)
   4. Execution Coordinator invokes matched tool and publishes result
   5. Query route receives result via shared result consumer
@@ -428,7 +426,7 @@ The backend provides the following key endpoints:
 - **Backend Flow**: `POST /api/mcp/tools/generate` queues a request (publishes `DESIGN_REQUEST_RECEIVED`), a multimodal worker consumes it, and the backend pushes progress/completions through its WebSocket (`ws://localhost:3001/ws`).
 - **WebSocket Testing**: You can watch jobs with `npx wscat -c ws://localhost:3001/ws` and send `{ "type": "subscribe", "jobId": "<id>" }` to receive `job_status` updates and the resulting SVG payload.
 
-By wiring Kafka to the Prisma-backed backend we now preserve a responsive frontend while heavy LLM work happens asynchronously in the background, and intelligent routing bypasses Gemini for high-signal queries.
+By wiring Apache Pulsar to the Prisma-backed backend we now preserve a responsive frontend while heavy LLM work happens asynchronously in the background, and intelligent routing bypasses Gemini for high-signal queries.
 
 ### Database & Memory
 
@@ -509,7 +507,7 @@ rm Dockerfile
 - **Google Gemini API** - AI-powered SVG generation and document analysis
 - **Google Vision API** - Image analysis capabilities
 - **OpenAI Whisper API** - Voice-to-text transcription
-- **Apache Kafka** - Event-driven architecture for async processing and intelligent orchestration
+- **Apache Pulsar 3.2.0** - Cloud-native event streaming for async processing and intelligent orchestration
 - **Server-Sent Events (SSE)** - Real-time progress streaming
 - **WebSocket** - Bidirectional communication
 - **ts-node** - TypeScript execution
@@ -580,14 +578,15 @@ Here's how to use the image generation feature:
 - Ensure `npx` is available in the container
 
 ### Orchestrator Not Working
-- **Check Kafka is running**: `docker ps` should show `zookeeper` and `kafka` containers
-- **Verify topics exist**: Run `.\scripts\setup-kafka-topics.ps1` if topics are missing
+- **Check Pulsar is running**: `docker ps` should show `pulsar` container in healthy state
+- **Verify namespaces and topics exist**: Run `npm run init-pulsar` from the backend directory
 - **Check backend logs**: Look for `[Server] ✓ MCP Matcher started successfully` and `[Server] ✓ Execution Coordinator started successfully`
-- **Verify environment variables**: Ensure `ENABLE_KAFKA=true` and `KAFKA_BROKERS=localhost:9092` in `backend/.env`
+- **Verify environment variables**: Ensure `ENABLE_PULSAR=true` and `PULSAR_SERVICE_URL=pulsar://localhost:6650` in `backend/.env`
 - **Check status endpoint**: `curl http://localhost:3001/api/orchestrator/status` should show all services as `true`
 - **Timeout issues**: If queries timeout, check that Result Consumer is running (should see `[Server] ✓ Result Consumer started successfully`)
 - **SSE parsing errors**: Make sure backend has been restarted after the SSE parsing fix was applied
 - **Weather queries not routing**: After updating matcher patterns, restart the backend to pick up changes. Weather queries should route to Google Maps `lookup_weather` tool automatically
+- **Producer errors**: Check Pulsar Admin UI at `http://localhost:8080` for topic status and namespace configuration
 
 ## 📞 Support
 
